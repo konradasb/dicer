@@ -1,0 +1,76 @@
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+---
+# Example Dicer daemon configuration.
+#
+# Every setting below has a working default, so this file is optional. The
+# daemon manages one host; there is nothing to join and nothing to configure
+# about peers.
+
+# Persistent state: instance, network, volume and kernel definitions,
+# plus cached images and instance disks.
+data_dir: /var/lib/dicer
+
+# Runtime state: sockets, config disks, and the record of what is running.
+# Should be a tmpfs, so a reboot clears it.
+run_dir: /run/dicer
+
+# Where the API is served.
+api:
+  # The local transport. Access control is the socket's file permissions:
+  # whoever can open it may do anything.
+  socket:
+    path: /run/dicer/dicer.sock
+    mode: 0660
+  # The network transport, off unless listen is set. Every connection is
+  # mutual TLS, and only clients enrolled with a token from
+  # 'dicer token create' are served. The daemon's certificate is generated
+  # on first use, under data_dir/tls.
+  tcp:
+    listen: ""
+    # The host:port pairs clients should connect to, written into every
+    # enrolment token. Worked out from listen and the host's addresses when
+    # empty; set them behind NAT or a port forward.
+    advertise: []
+
+# How much CPU and memory instances may be given. A start that would take
+# more is refused. Allowed = host CPUs x cpu_overcommit, and
+# (host memory - reserved_memory_bytes) x memory_overcommit.
+resources:
+  # vCPUs per host CPU. Idle vCPUs cost nothing, so they are shared.
+  cpu_overcommit: 4
+  # 1 gives out no more memory than there is: nothing takes memory back from
+  # a guest, and a host that runs out kills VMs.
+  memory_overcommit: 1
+  # Kept back for the host itself and the VMMs' own overhead (1 GiB).
+  reserved_memory_bytes: 1073741824
+
+network:
+  # Interface that NAT traffic leaves by. Detected from the default route
+  # when unset.
+  uplink_interface: ""
+  # Uplink capacity, used as the ceiling for per-instance bandwidth shaping.
+  uplink_capacity_bps: 0
+  # How far an instance may briefly exceed its rate limit, as a multiple of
+  # it.
+  upload_burst_multiplier: 4
+  download_burst_multiplier: 4
+
+# What an instance gets when its definition leaves something out. Unset,
+# an instance gets the only kernel or network there is, and must name one
+# when there are several -- so a host with one of each needs neither.
+defaults:
+  kernel: ""
+  network: ""
+
+# Prometheus metrics. The daemon always records them; this decides whether
+# they are served. Off by default: unlike the API, the endpoint has nothing
+# to authenticate with, so it binds to loopback unless you deliberately widen
+# it.
+metrics:
+  enabled: false
+  listen: 127.0.0.1:9101
+  path: /metrics
+
+log_level: info

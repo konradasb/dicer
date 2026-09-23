@@ -1,0 +1,64 @@
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+---
+name: lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # The packages that embed binaries do not compile without them.
+      - name: Build embedded binaries
+        run: make embedded hypervisor-binaries
+
+      - name: Lint
+        run: make lint
+
+      - name: Check formatting
+        run: |
+          make fmt
+          git diff --exit-code
+
+  license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Check licence headers
+        run: make license-check
+
+  generated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Check generated code is up to date
+        run: |
+          make generate
+          git diff --exit-code
+
+      - name: Check go.mod is tidy
+        run: go mod tidy -diff

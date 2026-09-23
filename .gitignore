@@ -1,0 +1,15 @@
+# Build output and pinned tools (make build, make tools).
+/bin/
+
+# Binaries dicerd embeds, built or downloaded by make; see the Makefile.
+/internal/initrd/bin/
+/internal/hypervisor/cloudhypervisor/bin/
+/internal/hypervisor/firecracker/bin/
+
+# Test binaries and coverage profiles.
+*.test
+*.out
+
+# Local Go workspaces.
+go.work
+go.work.sum
