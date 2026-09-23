@@ -8,7 +8,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.5.0
 	github.com/distribution/reference v0.6.0
 	github.com/docker/go-units v0.5.0
-	github.com/florianl/go-tc v0.4.7
+	github.com/florianl/go-tc v0.4.8
 	github.com/google/go-containerregistry v0.20.7
 	github.com/mdlayher/vsock v1.2.1
 	github.com/nrednav/cuid2 v1.1.0
