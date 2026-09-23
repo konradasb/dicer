@@ -1,6 +1,6 @@
 module github.com/dicer-sh/dicer
 
-go 1.25.5
+go 1.26.0
 
 require (
 	github.com/apex/log v1.9.0
@@ -22,7 +22,7 @@ require (
 	github.com/spf13/pflag v1.0.9
 	github.com/u-root/u-root v0.15.0
 	github.com/vishvananda/netlink v1.3.1
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 	google.golang.org/grpc v1.79.1
