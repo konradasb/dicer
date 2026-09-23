@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/apex/log v1.9.0
 	github.com/creack/pty v1.1.24
-	github.com/cyphar/filepath-securejoin v0.5.0
+	github.com/cyphar/filepath-securejoin v0.7.0
 	github.com/distribution/reference v0.6.0
 	github.com/docker/go-units v0.5.0
 	github.com/florianl/go-tc v0.4.7
