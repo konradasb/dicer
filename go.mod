@@ -10,7 +10,7 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/florianl/go-tc v0.4.7
 	github.com/google/go-containerregistry v0.20.7
-	github.com/mdlayher/vsock v1.2.1
+	github.com/mdlayher/vsock v1.3.0
 	github.com/nrednav/cuid2 v1.1.0
 	github.com/olekukonko/tablewriter v1.1.3
 	github.com/opencontainers/go-digest v1.0.0
@@ -55,7 +55,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/mdlayher/netlink v1.7.2 // indirect
-	github.com/mdlayher/socket v0.5.1 // indirect
+	github.com/mdlayher/socket v0.6.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/moby/sys/user v0.4.0 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
