@@ -1,0 +1,1025 @@
+// Copyright 2026 Dicer Authors
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package dicerd.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/konradasb/dicer/proto/dicerd/v1;dicerdv1";
+
+// DaemonService manages virtual machines on a single host.
+//
+// There is no notion of a cluster, a node or placement: the daemon owns the
+// machine it runs on. To manage several hosts, run a daemon on each and point
+// a client at whichever one you mean.
+//
+// Creating an instance records its definition; it does not boot it. Use
+// StartInstance for that. The two are separate so a definition can be written,
+// reviewed and version-controlled before anything runs.
+//
+// Resources are addressed by name or ID wherever a request has a name field.
+// Methods follow the resource-oriented design of https://google.aip.dev:
+// standard methods return the resource they act on, and deletes return Empty.
+//
+// A failed call ends with a status whose code says what kind of failure it
+// was, and whose message says it for a person:
+//
+// - `NOT_FOUND`: the resource named does not exist.
+// - `ALREADY_EXISTS`: a resource with that name exists already.
+// - `INVALID_ARGUMENT`: the request is malformed, whatever the host's state.
+// - `FAILED_PRECONDITION`: the resource is in the wrong state for the call,
+//   such as deleting a running instance.
+// - `RESOURCE_EXHAUSTED`: the host has too little left: CPU or memory for an
+//   instance, addresses on a network.
+// - `UNAVAILABLE`: something the daemon needs cannot be reached: a registry,
+//   a guest's agent. Trying again may work.
+// - `PERMISSION_DENIED`: the guest refused, such as a file it protects.
+// - `UNIMPLEMENTED`: the daemon, or an instance's guest agent, is too old for
+//   the call.
+// - `INTERNAL`: anything else: the daemon failed.
+service DaemonService {
+  // CreateInstance records an instance definition without starting it,
+  // unless start is set.
+  rpc CreateInstance(CreateInstanceRequest) returns (Instance);
+  // UpdateInstance modifies the definition of a stopped instance.
+  rpc UpdateInstance(UpdateInstanceRequest) returns (Instance);
+  // RenameInstance changes a stopped instance's name. The instance keeps its
+  // ID, its disks and its address; only what people call it changes.
+  rpc RenameInstance(RenameInstanceRequest) returns (Instance);
+  // StartInstance boots a defined instance.
+  rpc StartInstance(StartInstanceRequest) returns (Instance);
+  // StopInstance shuts a running instance down, keeping its definition,
+  // overlay disk and address.
+  rpc StopInstance(StopInstanceRequest) returns (Instance);
+  // PauseInstance halts a running instance's vCPUs, keeping it resident.
+  rpc PauseInstance(PauseInstanceRequest) returns (Instance);
+  // ResumeInstance continues a paused instance.
+  rpc ResumeInstance(ResumeInstanceRequest) returns (Instance);
+  // DeleteInstance removes an instance and its overlay disk. It refuses a
+  // running instance unless force is set.
+  rpc DeleteInstance(DeleteInstanceRequest) returns (google.protobuf.Empty);
+  // ListInstances returns every defined instance.
+  rpc ListInstances(ListInstancesRequest) returns (ListInstancesResponse);
+  // GetInstance returns one instance.
+  rpc GetInstance(GetInstanceRequest) returns (Instance);
+  // GetInstanceLogs streams an instance's log. The guest's console is kept
+  // with the instance, so it can be read after a stop to explain one.
+  rpc GetInstanceLogs(GetInstanceLogsRequest) returns (stream InstanceLogChunk);
+
+  // CreateSnapshot freezes a running or paused instance to disk: its memory,
+  // its device state and a copy of its overlay disk. A running instance is
+  // paused for as long as it takes and resumed afterwards.
+  rpc CreateSnapshot(CreateSnapshotRequest) returns (Snapshot);
+  // ListSnapshots returns an instance's snapshots, oldest first.
+  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
+  // GetSnapshot returns one snapshot.
+  rpc GetSnapshot(GetSnapshotRequest) returns (Snapshot);
+  // DeleteSnapshot removes a snapshot.
+  rpc DeleteSnapshot(DeleteSnapshotRequest) returns (google.protobuf.Empty);
+  // RestoreSnapshot puts a stopped instance back to the moment a snapshot
+  // was taken and resumes it. Anything written to its disk since is
+  // discarded.
+  rpc RestoreSnapshot(RestoreSnapshotRequest) returns (Instance);
+
+  // ExecInstance runs a command inside a running instance. The first client
+  // message must be an ExecInstanceStart; subsequent messages carry stdin data
+  // or terminal resize events.
+  rpc ExecInstance(stream ExecInstanceRequest) returns (stream ExecInstanceResponse);
+  // CopyToInstance writes a file or directory into a running instance. The
+  // first message must be a CopyToInstanceStart; the rest carry a tar
+  // archive of it, in chunks, which lands at the path as cp would put it.
+  rpc CopyToInstance(stream CopyToInstanceRequest) returns (google.protobuf.Empty);
+  // CopyFromInstance reads a file or directory out of a running instance, as
+  // a tar archive in chunks.
+  rpc CopyFromInstance(CopyFromInstanceRequest) returns (stream CopyFromInstanceResponse);
+
+  // CreateNetwork defines a host-local network. Its bridge is brought up
+  // when the first instance on it starts.
+  rpc CreateNetwork(CreateNetworkRequest) returns (Network);
+  // ListNetworks returns every network.
+  rpc ListNetworks(ListNetworksRequest) returns (ListNetworksResponse);
+  // GetNetwork returns one network.
+  rpc GetNetwork(GetNetworkRequest) returns (Network);
+  // DeleteNetwork removes a network that no instance references.
+  rpc DeleteNetwork(DeleteNetworkRequest) returns (google.protobuf.Empty);
+  // ListNetworkAllocations reports which addresses are assigned on a network.
+  // Allocation itself is a side effect of starting an instance and has no
+  // separate RPC.
+  rpc ListNetworkAllocations(ListNetworkAllocationsRequest) returns (ListNetworkAllocationsResponse);
+
+  // CreateVolume provisions a persistent block volume.
+  rpc CreateVolume(CreateVolumeRequest) returns (Volume);
+  // ListVolumes returns every volume.
+  rpc ListVolumes(ListVolumesRequest) returns (ListVolumesResponse);
+  // GetVolume returns one volume.
+  rpc GetVolume(GetVolumeRequest) returns (Volume);
+  // DeleteVolume removes a volume that no instance references.
+  rpc DeleteVolume(DeleteVolumeRequest) returns (google.protobuf.Empty);
+
+  // PullImage fetches an OCI image and converts it to a bootable root
+  // filesystem, reporting progress as it goes. The last message carries the
+  // image, which is ready to boot.
+  rpc PullImage(PullImageRequest) returns (stream PullImageProgress);
+  // ListImages returns every pulled image.
+  rpc ListImages(ListImagesRequest) returns (ListImagesResponse);
+  // GetImage returns one pulled image.
+  rpc GetImage(GetImageRequest) returns (Image);
+  // DeleteImage removes a pulled image. It refuses an image an instance is
+  // defined to boot from, unless force is set.
+  rpc DeleteImage(DeleteImageRequest) returns (google.protobuf.Empty);
+  // PruneImages removes every image no instance is defined to boot from.
+  rpc PruneImages(PruneImagesRequest) returns (PruneImagesResponse);
+
+  // ImportKernel records a guest kernel by URL. It is downloaded the first
+  // time an instance boots with it.
+  rpc ImportKernel(ImportKernelRequest) returns (Kernel);
+  // ListKernels returns every imported kernel.
+  rpc ListKernels(ListKernelsRequest) returns (ListKernelsResponse);
+  // GetKernel returns one kernel.
+  rpc GetKernel(GetKernelRequest) returns (Kernel);
+  // DeleteKernel removes a kernel that no instance references.
+  rpc DeleteKernel(DeleteKernelRequest) returns (google.protobuf.Empty);
+
+  // GetHostInfo reports what the daemon is: its version, the hypervisors it
+  // carries, and how it is reached.
+  rpc GetHostInfo(GetHostInfoRequest) returns (GetHostInfoResponse);
+  // GetResources reports how much CPU and memory instances may be given,
+  // how much they hold, and how full the data directory's disk is.
+  rpc GetResources(GetResourcesRequest) returns (GetResourcesResponse);
+
+  // GetEvents streams what has happened to the resources on this host: the
+  // history kept, oldest first, in batches, then, with follow, each new
+  // event as it happens, none missed between the two. A follower that does
+  // not keep up is disconnected with RESOURCE_EXHAUSTED rather than slowing
+  // the host.
+  rpc GetEvents(GetEventsRequest) returns (stream GetEventsResponse);
+}
+
+// HypervisorType is the virtual machine monitor an instance runs on.
+enum HypervisorType {
+  HYPERVISOR_TYPE_UNSPECIFIED = 0;
+  // Cloud Hypervisor, the default.
+  HYPERVISOR_TYPE_CLOUD_HYPERVISOR = 1;
+  HYPERVISOR_TYPE_FIRECRACKER = 2;
+}
+
+// InstanceState is where an instance is in its lifecycle.
+enum InstanceState {
+  INSTANCE_STATE_UNSPECIFIED = 0;
+  // Defined but not running. A new instance starts here.
+  INSTANCE_STATE_STOPPED = 1;
+  // A start is in progress.
+  INSTANCE_STATE_STARTING = 2;
+  // The guest is running.
+  INSTANCE_STATE_RUNNING = 3;
+  // The guest's vCPUs are halted, and it is kept resident.
+  INSTANCE_STATE_PAUSED = 4;
+  // A stop is in progress.
+  INSTANCE_STATE_STOPPING = 5;
+  // The instance ended without being asked to, and its restart policy will
+  // start it again at next_restart_time. It holds nothing meanwhile.
+  INSTANCE_STATE_RESTARTING = 6;
+  // The last operation failed; state_error says why.
+  INSTANCE_STATE_FAILED = 7;
+}
+
+// InitMode is how the guest starts an instance's command.
+enum InitMode {
+  INIT_MODE_UNSPECIFIED = 0;
+  // Systemd if the command resolves to the systemd binary in the image,
+  // exec otherwise. The default.
+  INIT_MODE_AUTO = 1;
+  // The command runs as PID 1 of its own PID namespace, as a container
+  // runs it.
+  INIT_MODE_EXEC = 2;
+  // The command, systemd, is the machine's PID 1.
+  INIT_MODE_SYSTEMD = 3;
+}
+
+// RestartMode is when an instance that ended without being asked to is
+// started again.
+enum RestartMode {
+  RESTART_MODE_UNSPECIFIED = 0;
+  // Leave the instance as it ended. The default.
+  RESTART_MODE_NO = 1;
+  // Restart it unless it ended cleanly, by its workload exiting 0 or its
+  // guest powering off.
+  RESTART_MODE_ON_FAILURE = 2;
+  // Restart it however it ended, and start it when the daemon starts,
+  // unless a user stopped it.
+  RESTART_MODE_UNLESS_STOPPED = 3;
+  // Restart it however it ended, and start it when the daemon starts, even
+  // if a user stopped it.
+  RESTART_MODE_ALWAYS = 4;
+}
+
+// MountType is what a Mount attaches.
+enum MountType {
+  MOUNT_TYPE_UNSPECIFIED = 0;
+  // A named volume: persistent storage, as a disk of its own.
+  MOUNT_TYPE_VOLUME = 1;
+  // A copy of a host file, read at each start.
+  MOUNT_TYPE_FILE = 2;
+  // An empty in-memory filesystem, lost when the guest stops.
+  MOUNT_TYPE_TMPFS = 3;
+}
+
+// Protocol is the transport a port mapping forwards.
+enum Protocol {
+  // Means TCP.
+  PROTOCOL_UNSPECIFIED = 0;
+  PROTOCOL_TCP = 1;
+  PROTOCOL_UDP = 2;
+}
+
+// HealthStatus is what an instance's health check has found.
+enum HealthStatus {
+  HEALTH_STATUS_UNSPECIFIED = 0;
+  // No verdict yet: the workload is in its start period, or has not been
+  // probed.
+  HEALTH_STATUS_STARTING = 1;
+  // The last probe passed.
+  HEALTH_STATUS_HEALTHY = 2;
+  // The check's retries have failed in a row.
+  HEALTH_STATUS_UNHEALTHY = 3;
+}
+
+// Architecture is the CPU architecture a kernel is built for.
+enum Architecture {
+  ARCHITECTURE_UNSPECIFIED = 0;
+  ARCHITECTURE_X86_64 = 1;
+  ARCHITECTURE_AARCH64 = 2;
+}
+
+// EventKind is the kind of resource an event is about.
+enum EventKind {
+  EVENT_KIND_UNSPECIFIED = 0;
+  EVENT_KIND_INSTANCE = 1;
+  EVENT_KIND_IMAGE = 2;
+}
+
+// EventAction is what happened to the resource.
+enum EventAction {
+  EVENT_ACTION_UNSPECIFIED = 0;
+  // Any kind of resource.
+  EVENT_ACTION_CREATED = 1;
+  EVENT_ACTION_UPDATED = 2;
+  EVENT_ACTION_DELETED = 3;
+  // An instance.
+  EVENT_ACTION_STARTED = 4;
+  EVENT_ACTION_STOPPED = 5;
+  EVENT_ACTION_PAUSED = 6;
+  EVENT_ACTION_RESUMED = 7;
+  // The guest ended cleanly, of its own accord.
+  EVENT_ACTION_EXITED = 8;
+  // The guest ended in failure.
+  EVENT_ACTION_DIED = 9;
+  // The restart policy will start the instance again.
+  EVENT_ACTION_RESTARTING = 10;
+  EVENT_ACTION_RENAMED = 11;
+  // The health check reached a verdict.
+  EVENT_ACTION_HEALTHY = 12;
+  EVENT_ACTION_UNHEALTHY = 13;
+  EVENT_ACTION_SNAPSHOT_CREATED = 14;
+  EVENT_ACTION_SNAPSHOT_RESTORED = 15;
+  EVENT_ACTION_SNAPSHOT_DELETED = 16;
+  // An image.
+  EVENT_ACTION_PULLED = 17;
+  // Garbage collection removed the image.
+  EVENT_ACTION_COLLECTED = 18;
+}
+
+// Instance combines an instance's definition with its observed runtime state.
+// Fields from state onwards are output only and are empty when the instance
+// is not running.
+message Instance {
+  string id = 1;
+  string name = 2;
+  string hostname = 3;
+  string image_ref = 4;
+  HypervisorType hypervisor_type = 5;
+  // A version that hypervisor ships; the newest by default.
+  string hypervisor_version = 6;
+  string kernel_name = 7;
+  string kernel_args = 8;
+  int32 vcpus = 9;
+  int64 memory_bytes = 10;
+  int64 disk_bytes = 11;
+  string network_name = 12;
+  string static_ip = 13;
+  reserved 14, 15;
+  reserved "volumes", "files";
+  repeated Mount mounts = 39;
+  map<string, string> env = 16;
+  repeated string cmd = 17;
+  map<string, string> labels = 18;
+  reserved 19;
+  reserved "autostart";
+  RestartPolicy restart_policy = 30;
+  google.protobuf.Timestamp create_time = 20;
+  google.protobuf.Timestamp update_time = 21;
+
+  InstanceState state = 22;
+  string state_error = 23;
+  int64 hypervisor_pid = 24;
+  int64 vsock_cid = 25;
+  string ip = 26;
+  string mac = 27;
+  google.protobuf.Timestamp start_time = 28;
+
+  repeated PortMapping ports = 29;
+
+  // The exit code the guest reported when it last ended on its own: its
+  // workload's, or 0 for a guest that powered itself off. Unset if it has
+  // not ended since it was last started, or ended without saying how.
+  optional int32 exit_code = 31;
+  // When the guest last ended on its own.
+  google.protobuf.Timestamp finish_time = 33;
+  // How many times in a row the restart policy has started the instance
+  // again. A start a user asks for resets it.
+  int32 restart_count = 32;
+  // When a Restarting instance is due to start again.
+  google.protobuf.Timestamp next_restart_time = 34;
+
+  // How the instance's health is checked, overriding its image's. Unset
+  // means the image's, if it declares one.
+  HealthCheck health_check = 35;
+  // What the health check of the running instance has found. Unset if it
+  // is not running, or has no check.
+  Health health = 36;
+
+  // How the guest starts the command. See CreateInstanceRequest.init_mode.
+  InitMode init_mode = 37;
+
+  // Whether the instance is deleted once it stops. See
+  // CreateInstanceRequest.remove_on_exit.
+  bool remove_on_exit = 38;
+}
+
+// HealthCheck is how an instance's health is checked: one probe, run inside
+// the guest by its agent, and when to run it. Unset timings take the
+// defaults: every 10s, a 5s timeout, no start period and 3 retries.
+message HealthCheck {
+  oneof probe {
+    // Healthy when the command exits 0.
+    HealthCheckExec exec = 1;
+    // Healthy when a GET on the guest's loopback address answers 2xx or 3xx.
+    HealthCheckHTTP http = 2;
+    // Healthy when a connection to the guest's loopback address opens.
+    HealthCheckTCP tcp = 3;
+  }
+  // The time between the end of one probe and the start of the next.
+  google.protobuf.Duration interval = 4;
+  // How long a probe may take; one that overruns has failed.
+  google.protobuf.Duration timeout = 5;
+  // How long after a start failures do not count.
+  google.protobuf.Duration start_period = 6;
+  // How many failures in a row make the instance unhealthy.
+  int32 retries = 7;
+  // Switches health checking off, the image's check included. Nothing else
+  // may be set with it.
+  bool disabled = 8;
+}
+
+message HealthCheckExec {
+  repeated string command = 1;
+}
+
+message HealthCheckHTTP {
+  uint32 port = 1;
+  // Defaults to /.
+  string path = 2;
+}
+
+message HealthCheckTCP {
+  uint32 port = 1;
+}
+
+// Health is what an instance's health check has found. An unhealthy instance
+// is restarted if its restart policy would restart it after a failure, and
+// otherwise left running.
+message Health {
+  HealthStatus status = 1;
+  // How many probes in a row have failed.
+  int32 failing_streak = 2;
+  google.protobuf.Timestamp last_check_time = 3;
+  // What the last probe said. Truncated.
+  string last_output = 4;
+  // The check being run: the instance's, or its image's, with the defaults
+  // filled in.
+  HealthCheck check = 5;
+}
+
+// RestartPolicy is what the daemon does when an instance ends without being
+// asked to: when its workload exits, its guest resets or its hypervisor
+// dies. Restarts back off exponentially, from a second up to five minutes;
+// an instance that stays up for ten minutes starts the count again.
+message RestartPolicy {
+  RestartMode mode = 1;
+  // For on-failure, how many restarts in a row are made before the
+  // instance is left Failed. 0 means no limit.
+  int32 max_retries = 2;
+}
+
+// Mount attaches a volume, a host file or a tmpfs at target in the guest.
+message Mount {
+  MountType type = 1;
+  // The volume's name for a volume. For a file, the host file's absolute
+  // path: the daemon reads it when the instance starts and puts a copy on
+  // the guest's config disk, so a change reaches the guest at its next
+  // start. A tmpfs has none.
+  string source = 2;
+  // The absolute path the mount appears at in the guest.
+  string target = 3;
+  // A volume every instance attaching it mounts read-only can be shared.
+  bool read_only = 4;
+}
+
+// PortMapping publishes a guest port on the host, so the guest can be reached
+// from outside it. It is applied each time the instance starts. Traffic to
+// the host's loopback addresses is not forwarded.
+message PortMapping {
+  // The host address to publish on. Empty means every address the host has.
+  string host_ip = 1;
+  uint32 host_port = 2;
+  uint32 guest_port = 3;
+  Protocol protocol = 4;
+}
+
+message CreateInstanceRequest {
+  string name = 1;
+  string image_ref = 2;
+  // Unspecified means Cloud Hypervisor.
+  HypervisorType hypervisor_type = 3;
+  // A version that hypervisor ships; the newest by default.
+  string hypervisor_version = 4;
+  // Empty means the daemon's default kernel: see
+  // GetHostInfoResponse.default_kernel.
+  string kernel_name = 5;
+  string kernel_args = 6;
+  int32 vcpus = 7;
+  int64 memory_bytes = 8;
+  int64 disk_bytes = 9;
+  // Empty means the daemon's default network: see
+  // GetHostInfoResponse.default_network.
+  string network_name = 10;
+  string static_ip = 11;
+  reserved 12, 13;
+  reserved "volumes", "files";
+  repeated Mount mounts = 25;
+  map<string, string> env = 14;
+  repeated string cmd = 15;
+  map<string, string> labels = 16;
+  string hostname = 17;
+  reserved 18;
+  reserved "autostart";
+  RestartPolicy restart_policy = 21;
+  HealthCheck health_check = 22;
+  // How the guest starts the command. Unspecified means auto.
+  InitMode init_mode = 23;
+  // Boots the instance immediately after defining it.
+  bool start = 19;
+  repeated PortMapping ports = 20;
+  // Deletes the instance once it stops, whether its guest ended on its own
+  // or someone stopped it. The daemon does the deleting, so it happens even
+  // if whoever asked for it has gone. An instance that its restart policy
+  // will start again is not deleted.
+  bool remove_on_exit = 24;
+}
+
+// UpdateInstanceRequest changes the fields that are set: an optional field
+// that is present, an enum that is not unspecified, a message that is
+// present, and a repeated or map field that is not empty, which replaces
+// the existing value whole.
+message UpdateInstanceRequest {
+  string name = 1;
+  optional string image_ref = 2;
+  HypervisorType hypervisor_type = 3;
+  optional string hypervisor_version = 4;
+  optional string kernel_name = 5;
+  optional string kernel_args = 6;
+  optional int32 vcpus = 7;
+  optional int64 memory_bytes = 8;
+  optional int64 disk_bytes = 9;
+  optional string network_name = 10;
+  optional string static_ip = 11;
+  optional string hostname = 12;
+  reserved 13;
+  reserved "autostart";
+  RestartPolicy restart_policy = 20;
+  HealthCheck health_check = 21;
+  InitMode init_mode = 22;
+  optional bool remove_on_exit = 23;
+  reserved 14, 15;
+  reserved "volumes", "files";
+  repeated Mount mounts = 24;
+  map<string, string> env = 16;
+  repeated string cmd = 17;
+  map<string, string> labels = 18;
+  repeated PortMapping ports = 19;
+}
+
+message StartInstanceRequest {
+  string name = 1;
+}
+
+message StopInstanceRequest {
+  string name = 1;
+}
+
+message PauseInstanceRequest {
+  string name = 1;
+}
+
+message ResumeInstanceRequest {
+  string name = 1;
+}
+
+message RenameInstanceRequest {
+  string name = 1;
+  // The name to give it, which no other instance may have.
+  string new_name = 2;
+}
+
+message DeleteInstanceRequest {
+  string name = 1;
+  // Stops a running instance before deleting it.
+  bool force = 2;
+}
+
+message GetInstanceRequest {
+  string name = 1;
+}
+
+message ListInstancesRequest {}
+
+message ListInstancesResponse {
+  repeated Instance instances = 1;
+}
+
+// ExecInstanceStart is the first message on an ExecInstance stream.
+message ExecInstanceStart {
+  // The instance to run the command in.
+  string name = 1;
+  // The command and its arguments. Defaults to /bin/sh.
+  repeated string command = 2;
+  // Whether to allocate a pseudo-terminal.
+  bool tty = 3;
+  // The working directory inside the guest.
+  string cwd = 4;
+  // Kills the command after this many seconds. Zero means no limit.
+  int32 timeout_seconds = 5;
+  // The initial terminal size, when tty is set.
+  uint32 rows = 6;
+  uint32 cols = 7;
+  // Environment variables added to the command's environment.
+  map<string, string> env = 8;
+}
+
+// ExecInstanceResize resizes the remote terminal window.
+message ExecInstanceResize {
+  uint32 rows = 1;
+  uint32 cols = 2;
+}
+
+message ExecInstanceRequest {
+  oneof payload {
+    ExecInstanceStart start = 1;
+    bytes stdin = 2;
+    ExecInstanceResize resize = 3;
+  }
+}
+
+message ExecInstanceResponse {
+  oneof payload {
+    bytes stdout = 1;
+    bytes stderr = 2;
+    // The command's exit status. Always the last message on the stream.
+    int32 exit_code = 3;
+  }
+}
+
+// CopyToInstanceStart is the first message on a CopyToInstance stream.
+message CopyToInstanceStart {
+  // The instance to copy into.
+  string name = 1;
+  // Where the archive's contents go inside it: into it, if it is a
+  // directory; in its place, if it is a file; at it, if nothing is there.
+  // A relative path is taken from the guest's root directory.
+  string path = 2;
+}
+
+message CopyToInstanceRequest {
+  oneof payload {
+    CopyToInstanceStart start = 1;
+    // The next chunk of the tar archive.
+    bytes data = 2;
+  }
+}
+
+message CopyFromInstanceRequest {
+  // The instance to copy from.
+  string name = 1;
+  // The file or directory to read. A relative path is taken from the guest's
+  // root directory.
+  string path = 2;
+}
+
+message CopyFromInstanceResponse {
+  // The next chunk of the tar archive.
+  bytes data = 1;
+}
+
+// LogSource is one of the logs an instance produces.
+enum LogSource {
+  // Defaults to the guest's console.
+  LOG_SOURCE_UNSPECIFIED = 0;
+  // The guest's serial console: the kernel's boot messages, dicer-init's,
+  // and whatever the workload writes to the console.
+  LOG_SOURCE_GUEST = 1;
+  // The hypervisor's own log, which explains a guest that never booted. It
+  // is discarded when the instance stops.
+  LOG_SOURCE_HYPERVISOR = 2;
+}
+
+message GetInstanceLogsRequest {
+  string name = 1;
+  LogSource source = 2;
+  // Limits the output to the last lines. Zero means all of it.
+  int32 tail_lines = 3;
+  // Keeps the stream open, sending new output until the instance stops.
+  bool follow = 4;
+}
+
+message InstanceLogChunk {
+  bytes data = 1;
+}
+
+// Snapshot is a point-in-time copy of an instance: the guest's memory and
+// device state, plus the overlay disk as it was at that moment.
+message Snapshot {
+  string name = 1;
+  string instance_name = 2;
+  // The hypervisor that took it, and the version of it. Restoring needs the
+  // same version, since snapshot formats are specific to it.
+  HypervisorType hypervisor_type = 3;
+  string hypervisor_version = 4;
+  // The guest memory the snapshot was taken with.
+  int64 memory_bytes = 5;
+  // What the snapshot occupies on disk, which on a copy-on-write filesystem
+  // may be far less than the guest's memory and disk together.
+  int64 size_bytes = 6;
+  google.protobuf.Timestamp create_time = 7;
+}
+
+message CreateSnapshotRequest {
+  // The instance to snapshot.
+  string instance = 1;
+  // The snapshot's name. Generated from the current time when empty.
+  string name = 2;
+}
+
+message ListSnapshotsRequest {
+  string instance = 1;
+}
+
+message ListSnapshotsResponse {
+  repeated Snapshot snapshots = 1;
+}
+
+message GetSnapshotRequest {
+  string instance = 1;
+  string name = 2;
+}
+
+message DeleteSnapshotRequest {
+  string instance = 1;
+  string name = 2;
+}
+
+message RestoreSnapshotRequest {
+  string instance = 1;
+  string name = 2;
+}
+
+// Network is a host-local bridge with NAT to the uplink.
+message Network {
+  string id = 1;
+  string name = 2;
+  string subnet = 3;
+  string gateway = 4;
+  string bridge = 5;
+  int32 mtu = 6;
+  repeated string nameservers = 7;
+  // Stops instances on the network reaching each other; each can still
+  // reach the gateway and, through NAT, the outside.
+  bool isolated = 8;
+  int64 total_ips = 9;
+  int64 free_ips = 10;
+  google.protobuf.Timestamp create_time = 11;
+  google.protobuf.Timestamp update_time = 12;
+}
+
+// NetworkAllocation is an address assigned to an instance.
+message NetworkAllocation {
+  string instance_id = 1;
+  string instance_name = 2;
+  string ip = 3;
+  string mac = 4;
+  string tap_device = 5;
+}
+
+message CreateNetworkRequest {
+  string name = 1;
+  string subnet = 2;
+  string gateway = 3;
+  int32 mtu = 4;
+  repeated string nameservers = 5;
+  bool isolated = 6;
+}
+
+message ListNetworksRequest {}
+
+message ListNetworksResponse {
+  repeated Network networks = 1;
+}
+
+message GetNetworkRequest {
+  string name = 1;
+}
+
+message DeleteNetworkRequest {
+  string name = 1;
+}
+
+message ListNetworkAllocationsRequest {
+  string name = 1;
+}
+
+message ListNetworkAllocationsResponse {
+  repeated NetworkAllocation allocations = 1;
+}
+
+// Volume is a persistent block device that outlives the instances using it.
+message Volume {
+  string id = 1;
+  string name = 2;
+  int64 size_bytes = 3;
+  google.protobuf.Timestamp create_time = 4;
+  google.protobuf.Timestamp update_time = 5;
+}
+
+message CreateVolumeRequest {
+  string name = 1;
+  int64 size_bytes = 2;
+}
+
+message ListVolumesRequest {}
+
+message ListVolumesResponse {
+  repeated Volume volumes = 1;
+}
+
+message GetVolumeRequest {
+  string name = 1;
+}
+
+message DeleteVolumeRequest {
+  string name = 1;
+}
+
+// Image is a pulled, converted image. Pulling is synchronous, so an image
+// either exists and is bootable or the pull returned an error; there is no
+// state to report.
+message Image {
+  string name = 1;
+  string digest = 2;
+  int64 size_bytes = 3;
+  google.protobuf.Timestamp create_time = 4;
+  google.protobuf.Timestamp update_time = 5;
+  // The HEALTHCHECK the image declares, which instances of it run unless
+  // they set their own. Unset if it declares none.
+  HealthCheck health_check = 6;
+  // When the image was last pulled or in use: by an instance defined to
+  // boot from it, a running guest or a snapshot. Garbage collection judges
+  // it by this.
+  google.protobuf.Timestamp last_used_time = 7;
+}
+
+message PullImageRequest {
+  string ref = 1;
+}
+
+// PullStage is the part of a pull that is currently working.
+enum PullStage {
+  PULL_STAGE_UNSPECIFIED = 0;
+  // Asking the registry what the reference points at.
+  PULL_STAGE_RESOLVING = 1;
+  // Fetching the layers, the only stage with a byte count.
+  PULL_STAGE_DOWNLOADING = 2;
+  // Writing those layers out as a root filesystem.
+  PULL_STAGE_UNPACKING = 3;
+  // Packing that filesystem into the disk a guest boots from.
+  PULL_STAGE_CONVERTING = 4;
+}
+
+message PullImageProgress {
+  PullStage stage = 1;
+  // Compressed layer bytes fetched and expected. Both are zero outside the
+  // downloading stage, and the total counts only what is actually fetched:
+  // a layer already held is not downloaded again.
+  int64 downloaded_bytes = 2;
+  int64 total_bytes = 3;
+  // Set on the final message only, when the image is ready to boot.
+  Image image = 4;
+}
+
+message ListImagesRequest {}
+
+message ListImagesResponse {
+  repeated Image images = 1;
+}
+
+message GetImageRequest {
+  string ref = 1;
+}
+
+message DeleteImageRequest {
+  string ref = 1;
+  // Removes the image even if an instance is defined to boot from it. That
+  // instance will pull it again on its next start.
+  bool force = 2;
+}
+
+message PruneImagesRequest {}
+
+message PruneImagesResponse {
+  // The images that were removed.
+  repeated Image images = 1;
+  // The disk space their disks and cached layers gave back.
+  int64 reclaimed_bytes = 2;
+}
+
+// Kernel is a guest kernel image available to instances.
+message Kernel {
+  string id = 1;
+  string name = 2;
+  Architecture arch = 3;
+  string url = 4;
+  string sha256 = 5;
+  google.protobuf.Timestamp create_time = 6;
+  google.protobuf.Timestamp update_time = 7;
+}
+
+message ImportKernelRequest {
+  string name = 1;
+  string url = 2;
+  Architecture arch = 3;
+  // The expected SHA-256 of the download, hex-encoded. Verified when set.
+  string sha256 = 4;
+}
+
+message ListKernelsRequest {}
+
+message ListKernelsResponse {
+  repeated Kernel kernels = 1;
+}
+
+message GetKernelRequest {
+  string name = 1;
+}
+
+message DeleteKernelRequest {
+  string name = 1;
+}
+
+message GetHostInfoRequest {}
+
+message GetHostInfoResponse {
+  string version = 1;
+  string hostname = 2;
+  // The hypervisors this daemon can start instances with.
+  repeated HypervisorInfo hypervisors = 3;
+  // Field 4 held the fingerprint of the key the API was served with, back
+  // when the network API authenticated its clients.
+  reserved 4;
+  // The addresses the API is served on over TCP, for a client being pointed
+  // at this daemon. Empty if it is not served over TCP.
+  repeated string api_addresses = 5;
+  // The kernel an instance created without one boots with: the one the
+  // daemon's configuration names, or else the only kernel there is. Empty
+  // if there is no such kernel, and an instance must name one.
+  string default_kernel = 6;
+  // The network an instance created without one attaches to, chosen as the
+  // default kernel is.
+  string default_network = 7;
+}
+
+message GetResourcesRequest {}
+
+message GetResourcesResponse {
+  // vCPUs, counted in vCPUs.
+  ResourceCapacity cpu = 1;
+  // Guest memory, counted in bytes.
+  ResourceCapacity memory = 2;
+  // The filesystem holding the data directory. Reported, not enforced.
+  DiskUsage disk = 3;
+  // The instances holding CPU and memory -- those starting, running or
+  // paused -- in name order.
+  repeated InstanceResources instances = 4;
+}
+
+// ResourceCapacity is how much of one resource instances may be given, and
+// how much they hold. A start that would take allocated past allocatable is
+// refused.
+message ResourceCapacity {
+  // What the host has: its logical CPUs, or its memory.
+  int64 host = 1;
+  // What is kept back from instances for the host itself.
+  int64 reserved = 2;
+  // How far what remains is stretched: 4 lets four vCPUs share each CPU.
+  double overcommit = 3;
+  // What instances may be given in total: (host - reserved) * overcommit.
+  int64 allocatable = 4;
+  // What instances hold.
+  int64 allocated = 5;
+  // What is left for further instances: allocatable - allocated, or 0.
+  int64 available = 6;
+}
+
+// DiskUsage is how full the filesystem holding the data directory is, and
+// how much has been promised on it. Disks are sparse, so provisioned may be
+// far more than the filesystem's size without anything being wrong -- until
+// the guests fill them.
+message DiskUsage {
+  // The data directory.
+  string path = 1;
+  int64 total_bytes = 2;
+  // What can still be written.
+  int64 free_bytes = 3;
+  // The sizes of every instance's overlay disk and every volume, added up.
+  int64 provisioned_bytes = 4;
+}
+
+// InstanceResources is what one instance holds.
+message InstanceResources {
+  string name = 1;
+  InstanceState state = 2;
+  int32 vcpus = 3;
+  int64 memory_bytes = 4;
+}
+
+// HypervisorInfo is a hypervisor the daemon carries, and the versions of it
+// an instance may name.
+message HypervisorInfo {
+  HypervisorType type = 1;
+  // The versions available, the one an instance gets by default first.
+  repeated string versions = 2;
+  // Whether this is the hypervisor an instance gets when it names none.
+  bool is_default = 3;
+}
+
+// Event is one thing that happened to one resource on this host.
+message Event {
+  google.protobuf.Timestamp time = 1;
+  EventKind kind = 2;
+  // The resource's ID, which tells apart resources that had the same name
+  // at different times. Empty for a resource known only by its name, such
+  // as an image.
+  string id = 3;
+  string name = 4;
+  EventAction action = 5;
+  // What happened, in a line, for a person.
+  string message = 6;
+  // What happened, for a program: exit_code, restart_count, digest.
+  map<string, string> attributes = 7;
+}
+
+// GetEventsRequest picks events: every one, unless narrowed.
+message GetEventsRequest {
+  // Unspecified picks every kind.
+  EventKind kind = 1;
+  string id = 2;
+  // The resource's name. An image's may be given as it is pulled:
+  // busybox:latest picks the events about docker.io/library/busybox:latest.
+  string name = 3;
+  // Only events at or after this time.
+  google.protobuf.Timestamp since = 4;
+  // Only the last this many events of the history. Zero means all of it.
+  int32 limit = 5;
+  // Keep streaming new events after the history.
+  bool follow = 6;
+}
+
+// GetEventsResponse is a batch of events, oldest first.
+message GetEventsResponse {
+  repeated Event events = 1;
+  // Set on the last batch of the history, sent even if the history is
+  // empty: what follows, if the request follows, is new. A client can lay
+  // out the history as a whole before it shows any of it.
+  bool caught_up = 2;
+}

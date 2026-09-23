@@ -1,0 +1,57 @@
+{{- /*
+Copyright 2026 Dicer Authors
+SPDX-License-Identifier: MIT
+
+The home page's hero: a badge, a headline whose second line is
+highlighted, a subtitle, the calls to action and the install command on
+the left, and what the shortcode encloses, such as a terminal, on the
+right.
+
+@param {string} badge The badge's text.
+@param {string} badgeLink Where the badge links to.
+@param {string} title The headline's first line.
+@param {string} highlight The headline's second line, highlighted.
+@param {string} subtitle The text beneath the headline.
+@param {string} install The install command, copied by its button.
+*/ -}}
+<section class="dicer-hero not-prose">
+  <div class="dicer-hero-text">
+    {{- with .Get "badge" }}
+    <a class="dicer-badge" href="{{ $.Get "badgeLink" }}" target="_blank"
+      rel="noreferrer">{{ . }} <span aria-hidden="true">→</span></a>
+    {{- end }}
+    <h1 class="dicer-headline">{{ .Get "title" }}<br /><span
+        class="dicer-gradient">{{ .Get "highlight" }}</span></h1>
+    <p class="dicer-subtitle">{{ .Get "subtitle" | markdownify }}</p>
+    <div class="dicer-actions">
+      <a class="dicer-button dicer-button-primary"
+        href="docs/getting-started/">Get started</a>
+      <a class="dicer-button dicer-button-secondary"
+        href="https://github.com/konradasb/dicer" target="_blank"
+        rel="noreferrer">
+        {{- partial "utils/icon.html" (dict "name" "github" "attributes"
+        "height=18") }} GitHub
+      </a>
+    </div>
+    {{- with .Get "install" }}
+    <div class="dicer-install">
+      <code><span class="dicer-prompt">$</span> {{ . }}</code>
+      <button type="button" class="dicer-copy"
+        aria-label="Copy the install command" data-copy="{{ . }}">
+        {{- partial "utils/icon.html" (dict "name" "copy" "attributes"
+        "height=16") -}}
+      </button>
+    </div>
+    {{- end }}
+  </div>
+  <div class="dicer-hero-aside">{{ .Inner }}</div>
+</section>
+<script>
+  document.querySelectorAll(".dicer-copy").forEach((button) => {
+    button.addEventListener("click", () => {
+      navigator.clipboard.writeText(button.dataset.copy);
+      button.classList.add("copied");
+      setTimeout(() => button.classList.remove("copied"), 1500);
+    });
+  });
+</script>

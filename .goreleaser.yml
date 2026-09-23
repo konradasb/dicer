@@ -1,0 +1,120 @@
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+---
+version: 2
+
+project_name: dicer
+
+before:
+  hooks:
+    # Builds the guest binaries and downloads the hypervisor binaries
+    # for every architecture; each dicerd build embeds only its own.
+    - make release-prep
+
+builds:
+  - id: dicer
+    main: ./cmd/dicer
+    binary: dicer
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/konradasb/dicer/internal/version.Version={{ .Version }}
+      - -X github.com/konradasb/dicer/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/konradasb/dicer/internal/version.BuildDate={{ .CommitDate }}
+  - id: dicerd
+    main: ./cmd/dicerd
+    binary: dicerd
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    tags:
+      - containers_image_openpgp
+    ldflags:
+      - -s -w
+      - -X github.com/konradasb/dicer/internal/version.Version={{ .Version }}
+      - -X github.com/konradasb/dicer/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/konradasb/dicer/internal/version.BuildDate={{ .CommitDate }}
+
+archives:
+  - id: dicer
+    ids:
+      - dicer
+    name_template: "dicer_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+  - id: dicerd
+    ids:
+      - dicerd
+    name_template: "dicerd_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+# Generate SBOMs for every archive and the source tarball using syft
+sboms:
+  - artifacts: archive
+  - artifacts: source
+    id: source
+
+# Sign the checksums file with cosign (keyless, via GitHub OIDC in CI)
+# Each artifact's sha256 is covered transitively via the checksums file.
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    output: true
+    artifacts: checksum
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  abbrev: 0
+  filters:
+    exclude:
+      - "chore:.*"
+      - "docs:.*"
+  groups:
+    - title: New Features
+      regexp: "^feat:.*"
+      order: 0
+    - title: Bug Fixes
+      regexp: "^fix:.*"
+      order: 1
+
+release:
+  github:
+    owner: konradasb
+    name: dicer
+  draft: true
+  replace_existing_draft: true
+  footer: |
+    {{- if .PreviousTag }}
+    **Full Changelog**: https://github.com/konradasb/dicer/compare/{{ .PreviousTag }}...{{ .Tag }}
+    {{- end }}
+
+    Thanks for using Dicer! If you have any questions or feedback, please let us know by opening an issue [here](https://github.com/konradasb/dicer/issues)

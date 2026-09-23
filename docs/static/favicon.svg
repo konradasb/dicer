@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <polygon points="6,24 22,8 56,8 40,24" fill="#67e8f9" stroke="#67e8f9" stroke-width="3" stroke-linejoin="round"/>
+  <polygon points="40,24 56,8 56,42 40,58" fill="#0e7490" stroke="#0e7490" stroke-width="3" stroke-linejoin="round"/>
+  <polygon points="6,24 40,24 40,58 6,58" fill="#06b6d4" stroke="#06b6d4" stroke-width="3" stroke-linejoin="round"/>
+  <ellipse transform="matrix(34,0,0,34,6,24)" cx="0.25" cy="0.25" rx="0.105" ry="0.105" fill="#ffffff"/>
+  <ellipse transform="matrix(34,0,0,34,6,24)" cx="0.75" cy="0.25" rx="0.105" ry="0.105" fill="#ffffff"/>
+  <ellipse transform="matrix(34,0,0,34,6,24)" cx="0.5" cy="0.5" rx="0.105" ry="0.105" fill="#ffffff"/>
+  <ellipse transform="matrix(34,0,0,34,6,24)" cx="0.25" cy="0.75" rx="0.105" ry="0.105" fill="#ffffff"/>
+  <ellipse transform="matrix(34,0,0,34,6,24)" cx="0.75" cy="0.75" rx="0.105" ry="0.105" fill="#ffffff"/>
+  <ellipse transform="matrix(34,0,16,-16,6,24)" cx="0.28" cy="0.5" rx="0.09" ry="0.2" fill="#0e7490"/>
+  <ellipse transform="matrix(34,0,16,-16,6,24)" cx="0.72" cy="0.5" rx="0.09" ry="0.2" fill="#0e7490"/>
+  <ellipse transform="matrix(16,-16,0,34,40,24)" cx="0.5" cy="0.5" rx="0.2" ry="0.09" fill="#ffffff"/>
+</svg>

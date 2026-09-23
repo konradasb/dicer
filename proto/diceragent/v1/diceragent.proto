@@ -1,0 +1,155 @@
+// Copyright 2026 Dicer Authors
+// SPDX-License-Identifier: MIT
+
+syntax = "proto3";
+
+package diceragent.v1;
+
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/konradasb/dicer/proto/diceragent/v1;diceragentv1";
+
+// AgentService runs inside the guest and is reached by the host over vsock.
+service AgentService {
+  // Exec runs a command inside the VM with bidirectional streaming for I/O.
+  // The first client message must be an ExecStart; subsequent messages carry
+  // stdin data or terminal resize events.
+  rpc Exec(stream ExecRequest) returns (stream ExecResponse);
+
+  // CopyIn writes a file or directory into the VM. The first message must be
+  // a CopyInStart; the rest carry a tar archive of it, in chunks, which lands
+  // at the path as cp would put it there.
+  rpc CopyIn(stream CopyInRequest) returns (CopyInResponse);
+
+  // CopyOut reads a file or directory out of the VM, as a tar archive in
+  // chunks.
+  rpc CopyOut(CopyOutRequest) returns (stream CopyOutResponse);
+
+  // Sync flushes every filesystem in the VM to its disks, so that nothing
+  // written is lost when the VM is ended.
+  rpc Sync(SyncRequest) returns (SyncResponse);
+
+  // Probe runs one health check probe inside the VM and reports whether it
+  // passed. The agent keeps no state: when to probe, and what the results
+  // add up to, is the host's business.
+  rpc Probe(ProbeRequest) returns (ProbeResponse);
+
+  // Shutdown asks the guest's PID 1 to shut down in an orderly way -- the
+  // workload to stop, or systemd to power the machine off -- and returns
+  // once it has asked. The machine ends when the shutdown is done, which is
+  // what the host waits for.
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+}
+
+// ExecStart is the first message sent by the client to start a command.
+message ExecStart {
+  // The command and its arguments. Defaults to /bin/sh.
+  repeated string command = 1;
+  // Whether to allocate a pseudo-terminal.
+  bool tty = 2;
+  // The working directory. Defaults to the agent's own.
+  string cwd = 3;
+  // Kills the command after this many seconds. Zero means no limit.
+  int32 timeout_seconds = 4;
+  // The initial terminal size, when tty is set.
+  uint32 rows = 5;
+  uint32 cols = 6;
+  // Environment variables added to the command's environment.
+  map<string, string> env = 7;
+}
+
+// ExecResize resizes the remote terminal window.
+message ExecResize {
+  uint32 rows = 1;
+  uint32 cols = 2;
+}
+
+// ExecRequest is a client-to-server message on the Exec stream.
+message ExecRequest {
+  oneof payload {
+    ExecStart start = 1;
+    bytes stdin = 2;
+    ExecResize resize = 3;
+  }
+}
+
+// ExecResponse is a server-to-client message on the Exec stream.
+message ExecResponse {
+  oneof payload {
+    bytes stdout = 1;
+    bytes stderr = 2;
+    // The command's exit status. Always the last message on the stream.
+    int32 exit_code = 3;
+  }
+}
+
+message CopyInStart {
+  // Where the archive's contents go: into it, if it is a directory; in its
+  // place, if it is a file; at it, if nothing is there. A relative path is
+  // taken from the root directory.
+  string path = 1;
+}
+
+message CopyInRequest {
+  oneof payload {
+    CopyInStart start = 1;
+    // The next chunk of the tar archive.
+    bytes data = 2;
+  }
+}
+
+message CopyInResponse {}
+
+message CopyOutRequest {
+  // The file or directory to read. A relative path is taken from the root
+  // directory.
+  string path = 1;
+}
+
+message CopyOutResponse {
+  // The next chunk of the tar archive.
+  bytes data = 1;
+}
+
+message SyncRequest {}
+
+message SyncResponse {}
+
+message ProbeRequest {
+  oneof probe {
+    ExecProbe exec = 1;
+    HTTPProbe http = 2;
+    TCPProbe tcp = 3;
+  }
+  // How long the probe may take. A probe that overruns has failed.
+  google.protobuf.Duration timeout = 4;
+}
+
+// ExecProbe passes when the command exits 0.
+message ExecProbe {
+  repeated string command = 1;
+}
+
+// HTTPProbe passes when a GET of path on port, on the loopback address,
+// answers with a 2xx or 3xx status. Redirects are not followed.
+message HTTPProbe {
+  uint32 port = 1;
+  // Defaults to /.
+  string path = 2;
+}
+
+// TCPProbe passes when a connection to port, on the loopback address, opens.
+message TCPProbe {
+  uint32 port = 1;
+}
+
+message ProbeResponse {
+  bool healthy = 1;
+  // What the probe said: a command's output, an HTTP status, or why it
+  // failed. Truncated.
+  string output = 2;
+}
+
+message ShutdownRequest {}
+
+message ShutdownResponse {}

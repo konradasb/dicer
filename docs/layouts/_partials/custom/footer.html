@@ -1,0 +1,68 @@
+{{- /*
+Copyright 2026 Dicer Authors
+SPDX-License-Identifier: MIT
+
+The site's footer: what Dicer is, where to go next, and the licence. The
+home page also ends in the name, large. Links to pages resolve through
+site.GetPage, so they are right for whichever version is being read.
+*/ -}}
+{{- $page := .context -}}
+{{- $columns := slice
+(dict "title" "Docs" "links" (slice
+(dict "page" "/docs/getting-started" "title" "Getting started")
+(dict "page" "/docs/concepts" "title" "Concepts")
+(dict "page" "/docs/guides" "title" "Guides")
+(dict "page" "/docs/reference" "title" "Reference")))
+(dict "title" "Project" "links" (slice
+(dict "url" "https://github.com/konradasb/dicer/blob/main/ROADMAP.md" "title"
+"Roadmap")
+(dict "url" "https://github.com/konradasb/dicer/blob/main/CONTRIBUTING.md"
+"title" "Contributing")
+(dict "url" "https://github.com/konradasb/dicer/blob/main/SECURITY.md" "title"
+"Security")))
+(dict "title" "Code" "links" (slice
+(dict "url"
+"https://github.com/konradasb/dicer/blob/main/proto/dicerd/v1/dicerd.proto"
+"title" "API ")
+(dict "url" "https://github.com/konradasb/dicer" "title" "Repository")
+(dict "url" "https://github.com/konradasb/dicer/issues" "title" "Issues")))
+-}}
+<div class="dicer-footer">
+  <div class="dicer-footer-about">
+    <a class="dicer-footer-brand" href="{{ site.Home.RelPermalink }}">
+      <img src="{{ "images/logo.svg" | relURL }}" alt width="28" height="28" />
+      <span>Dicer</span>
+    </a>
+    <p>Virtual machines from container images, on your own Linux host.</p>
+    <p>MIT licensed, and developed in the open on GitHub.</p>
+  </div>
+  {{- range $columns }}
+  <nav class="dicer-footer-column" aria-label="{{ .title }}">
+    <h2>{{ .title }}</h2>
+    <ul>
+      {{- range $link := .links }}
+      <li>
+        {{- with $link.url }}
+        <a href="{{ . }}" target="_blank" rel="noreferrer">{{ $link.title }}</a>
+        {{- end }}
+        {{- with $link.page }}
+        {{- with site.GetPage . }}<a href="{{ .RelPermalink }}">{{ $link.title
+          }}</a>{{ else }}{{ errorf "footer: no page %q" . }}{{ end }}
+        {{- end }}
+      </li>
+      {{- end }}
+    </ul>
+  </nav>
+  {{- end }}
+</div>
+<div class="dicer-footer-legal">
+  <span>© {{ now.Year }} Dicer Authors · <a
+      href="https://github.com/konradasb/dicer/blob/main/LICENSE"
+      target="_blank" rel="noreferrer">MIT License</a></span>
+  <span>Built with <a href="https://gohugo.io" target="_blank"
+      rel="noreferrer">Hugo</a> and <a href="https://github.com/imfing/hextra"
+      target="_blank" rel="noreferrer">Hextra</a></span>
+</div>
+{{- if $page.IsHome }}
+<div class="dicer-wordmark" aria-hidden="true">Dicer</div>
+{{- end }}

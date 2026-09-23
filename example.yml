@@ -1,0 +1,188 @@
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+---
+# Example dicerd configuration, read from /etc/dicerd/config.yaml by default.
+#
+# Every key is shown with its default value, so this file is optional and
+# any key can be left out. Unknown keys are rejected.
+
+#
+# Persistent state: instance, network, volume and kernel definitions, images
+# and instance disks.
+#
+data_dir: /var/lib/dicer
+
+#
+# Runtime state: sockets, config disks and the record of what is running.
+# Should be a tmpfs so a reboot clears it.
+#
+run_dir: /run/dicer
+
+#
+# Where the API is served.
+#
+api:
+  #
+  # The local Unix socket. Anyone who can open it has full control of the
+  # daemon.
+  #
+  socket:
+    #
+    # Path of the socket.
+    #
+    path: /run/dicer/dicer.sock
+
+    #
+    # Permission bits of the socket.
+    #
+    mode: 0660
+
+  #
+  # The network listener. Without tls it is unauthenticated and unencrypted:
+  # anyone who can reach it has root-equivalent access to this host.
+  #
+  tcp:
+    #
+    # host:port to listen on, e.g. 0.0.0.0:7443. Empty disables the listener.
+    #
+    listen: ""
+
+    #
+    # TLS for the network listener.
+    #
+    tls:
+      #
+      # PEM certificate of the daemon. It must name the address clients
+      # connect to. Reloaded when it changes on disk.
+      #
+      cert_file: ""
+
+      #
+      # PEM private key for cert_file. Reloaded when it changes on disk.
+      #
+      key_file: ""
+
+      #
+      # PEM authorities that client certificates must be issued by. When set,
+      # every client must present a valid certificate; when empty, any client
+      # is accepted. Use a CA dedicated to Dicer clients. Read at startup.
+      #
+      client_ca_file: ""
+
+#
+# How much CPU and memory instances may be given. A start that would exceed
+# it is refused.
+#
+resources:
+  #
+  # vCPUs allowed per host CPU.
+  #
+  cpu_overcommit: 4
+
+  #
+  # Multiplier on the memory available to instances. 1 never promises more
+  # memory than the host has.
+  #
+  memory_overcommit: 1
+
+  #
+  # Memory in bytes kept back for the host and hypervisor overhead.
+  #
+  reserved_memory_bytes: 1073741824
+
+#
+# Host networking.
+#
+network:
+  #
+  # Interface that NAT traffic leaves through. Empty detects it from the
+  # default route.
+  #
+  uplink_interface: ""
+
+  #
+  # Uplink capacity in bits per second, the ceiling for per-instance
+  # bandwidth shaping. 0 disables the ceiling.
+  #
+  uplink_capacity_bps: 0
+
+  #
+  # How far an instance may briefly exceed its upload rate limit, as a
+  # multiple of it.
+  #
+  upload_burst_multiplier: 4
+
+  #
+  # How far an instance may briefly exceed its download rate limit, as a
+  # multiple of it.
+  #
+  download_burst_multiplier: 4
+
+#
+# What an instance gets when its definition leaves something out.
+#
+defaults:
+  #
+  # Kernel name. Empty uses the only kernel if there is exactly one.
+  #
+  kernel: ""
+
+  #
+  # Network name. Empty uses the only network if there is exactly one.
+  #
+  network: ""
+
+#
+# Prometheus metrics endpoint, served at /metrics without authentication.
+#
+metrics:
+  #
+  # Serve the endpoint.
+  #
+  enable: false
+
+  #
+  # host:port to listen on.
+  #
+  listen: 127.0.0.1:9101
+
+#
+# Image garbage collection. It only removes images no instance, running guest
+# or snapshot uses. Disabled while both limits are 0.
+#
+images:
+  #
+  # Remove images unused for longer than this, e.g. 168h. 0 means no limit.
+  #
+  gc_max_unused_age: 0s
+
+  #
+  # Remove the least recently used images while the store is larger than
+  # this, e.g. 50GiB. 0 means no limit.
+  #
+  gc_max_size: 0
+
+  #
+  # How often garbage collection runs.
+  #
+  gc_interval: 1h
+
+#
+# The events log shown by `dicer events`.
+#
+events:
+  #
+  # Number of most recent events to keep.
+  #
+  max_count: 10000
+
+  #
+  # Drop events older than this, e.g. 720h. 0 means no limit.
+  #
+  max_age: 0s
+
+#
+# Log level: debug, info, warn or error.
+#
+log_level: info

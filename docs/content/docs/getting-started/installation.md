@@ -1,0 +1,88 @@
+---
+title: Installation
+weight: 1
+description: "What a host needs, and how to install Dicer and check it works."
+icon: download
+related_title: Next steps
+related:
+  - /docs/getting-started/quickstart
+  - /docs/reference/configuration
+---
+
+Dicer runs on one Linux host, as a daemon, `dicerd`, managed by systemd, with
+the `dicer` command line beside it. The install script builds both from
+source and sets the daemon up.
+
+## Requirements
+
+**The host**
+
+- Linux on x86_64 or aarch64, with systemd.
+- KVM: `/dev/kvm` must exist. On a cloud virtual machine, that means one
+  with nested virtualisation enabled.
+- `erofs-utils`, for `mkfs.erofs`, and `e2fsprogs`, for `mkfs.ext4` and
+  `mke2fs`.
+- `iptables`.
+
+**To build**
+
+- Go 1.25 or later, `git`, `make` and `curl`.
+
+On Debian or Ubuntu:
+
+```console
+$ sudo apt install erofs-utils e2fsprogs iptables git make curl
+```
+
+and Go from [go.dev/dl](https://go.dev/dl/), as distributions often carry an
+older one.
+
+Check that KVM is there:
+
+```console
+$ ls -l /dev/kvm
+crw-rw---- 1 root kvm 10, 232 Sep 24 09:12 /dev/kvm
+```
+
+## Install
+
+```console
+$ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash
+```
+
+The script asks for `sudo` when it needs it, then:
+
+1. checks the requirements above;
+2. builds `dicer` and `dicerd`, with the hypervisors and guest binaries
+   `dicerd` carries, from the `main` branch;
+3. installs both to `/usr/local/bin`;
+4. writes a configuration, `/etc/dicerd/config.yaml`, unless there is one;
+5. turns on IPv4 forwarding, now and at every boot;
+6. installs `dicerd.service`, enables it and starts it.
+
+`--ref` builds a branch, tag or commit instead of `main`:
+
+```console
+$ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash -s -- --ref v0.2.0
+```
+
+## Check it
+
+```console
+$ sudo systemctl status dicerd
+$ sudo dicer version
+$ sudo dicer info
+```
+
+`dicer info` shows the daemon, the hypervisors it carries, and how much of
+the host's CPU, memory and disk it may give instances.
+
+The daemon's socket belongs to root, so `dicer` is run with `sudo` on the
+host. See [Remote access](../../guides/remote-access) to manage the host from
+another machine.
+
+## Upgrade and remove
+
+Running the install script again upgrades Dicer, without stopping the
+instances that are running. `uninstall.sh` removes it. See
+[Operating the daemon](../../guides/operating-the-daemon#upgrading) for both.

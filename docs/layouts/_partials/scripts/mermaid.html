@@ -1,0 +1,148 @@
+{{- /*
+  Copyright (c) 2023 Xin, Hextra; changes copyright 2026 Dicer Authors
+  SPDX-License-Identifier: MIT
+
+  Hextra's scripts/mermaid.html (v0.12.3), which loads Mermaid unchanged but
+  starts it with the site's colours and font instead of Mermaid's own. It
+  waits for the fonts, as Mermaid sizes every box around its text when it
+  draws it. Keep in step with Hextra when upgrading it.
+*/ -}}
+{{- /* Mermaid */ -}}
+
+{{- $mermaidBase := "" -}}
+{{- $useDefaultCdn := true -}}
+{{- with site.Params.mermaid.base -}}
+  {{- $mermaidBase = . -}}
+  {{- $useDefaultCdn = false -}}
+{{- end -}}
+
+{{- $mermaidJsAsset := "" -}}
+{{- with site.Params.mermaid.js -}}
+  {{- $mermaidJsAsset = . -}}
+{{- end -}}
+
+{{- /* If only js is set without base, use local asset loading */ -}}
+{{- if and $useDefaultCdn (ne $mermaidJsAsset "") -}}
+  {{- $useDefaultCdn = false -}}
+{{- end -}}
+
+{{- /* Set default CDN base if needed */ -}}
+{{- if $useDefaultCdn -}}
+  {{- $mermaidBase = "https://cdn.jsdelivr.net/npm/mermaid@latest/dist" -}}
+{{- end -}}
+
+{{- $isRemoteBase := or (strings.HasPrefix $mermaidBase "http://") (strings.HasPrefix $mermaidBase "https://") -}}
+{{- $minSuffix := cond hugo.IsProduction ".min" "" -}}
+
+{{- /* JS retrieval: get raw JS from either local asset or remote, then process */ -}}
+{{- if $isRemoteBase -}}
+  {{- $jsPath := cond (ne $mermaidJsAsset "") $mermaidJsAsset (printf "mermaid%s.js" $minSuffix) -}}
+  {{- $mermaidJsUrl := urls.JoinPath $mermaidBase $jsPath -}}
+  {{- with try (resources.GetRemote $mermaidJsUrl) -}}
+    {{- with .Err -}}
+      {{- errorf "Could not retrieve Mermaid js file from %s. Reason: %s." $mermaidJsUrl . -}}
+    {{- else with .Value -}}
+      {{- with resources.Copy (printf "js/mermaid%s.js" $minSuffix) . -}}
+        {{- $mermaidJs := . | fingerprint -}}
+        <script defer src="{{ $mermaidJs.RelPermalink }}" integrity="{{ $mermaidJs.Data.Integrity }}" crossorigin="anonymous"></script>
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+{{- else if $mermaidJsAsset -}}
+  {{- with resources.Get $mermaidJsAsset -}}
+    {{- $mermaidJs := . | fingerprint -}}
+    <script defer src="{{ $mermaidJs.RelPermalink }}" integrity="{{ $mermaidJs.Data.Integrity }}" crossorigin="anonymous"></script>
+  {{- else -}}
+    {{- errorf "Mermaid js asset not found at %q" $mermaidJsAsset -}}
+  {{- end -}}
+{{- end -}}
+
+<script>
+  (() => {
+    const font = '"DM Sans", ui-sans-serif, system-ui, sans-serif';
+    const themes = {
+      light: {
+        darkMode: false,
+        background: "#ffffff",
+        fontFamily: font,
+        fontSize: "15px",
+        primaryColor: "#ecfeff",
+        primaryBorderColor: "#22b8cf",
+        primaryTextColor: "#0f172a",
+        secondaryColor: "#f0fdfa",
+        tertiaryColor: "#f8fafc",
+        lineColor: "#64748b",
+        textColor: "#0f172a",
+        edgeLabelBackground: "#ffffff",
+        clusterBkg: "#f5feff",
+        clusterBorder: "#a5e8f3",
+        labelBackgroundColor: "#ffffff",
+        transitionColor: "#64748b",
+        transitionLabelColor: "#334155",
+        nodeTextColor: "#0f172a",
+        stateLabelColor: "#0f172a",
+        stateBkg: "#ecfeff",
+        stateBorder: "#22b8cf",
+        compositeBackground: "#f8fafc",
+        altBackground: "#f8fafc",
+        noteBkgColor: "#f8fafc",
+        noteBorderColor: "#cbd5e1",
+      },
+      dark: {
+        darkMode: true,
+        background: "#111111",
+        fontFamily: font,
+        fontSize: "15px",
+        primaryColor: "#0c2830",
+        primaryBorderColor: "#1b9fb6",
+        primaryTextColor: "#e2e8f0",
+        secondaryColor: "#0f1f24",
+        tertiaryColor: "#16181d",
+        lineColor: "#94a3b8",
+        textColor: "#e2e8f0",
+        edgeLabelBackground: "#111111",
+        clusterBkg: "#0d1a1e",
+        clusterBorder: "#155e75",
+        labelBackgroundColor: "#111111",
+        transitionColor: "#94a3b8",
+        transitionLabelColor: "#cbd5e1",
+        nodeTextColor: "#e2e8f0",
+        stateLabelColor: "#e2e8f0",
+        stateBkg: "#0c2830",
+        stateBorder: "#1b9fb6",
+        compositeBackground: "#16181d",
+        altBackground: "#16181d",
+        noteBkgColor: "#16181d",
+        noteBorderColor: "#334155",
+      },
+    };
+
+    const render = () => {
+      const dark = document.documentElement.classList.contains("dark");
+      document.querySelectorAll(".mermaid").forEach((el) => {
+        el.innerHTML = el.dataset.original;
+        el.removeAttribute("data-processed");
+      });
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "base",
+        themeVariables: dark ? themes.dark : themes.light,
+        flowchart: { curve: "basis", padding: 12 },
+      });
+      mermaid.run({ querySelector: ".mermaid" });
+    };
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.querySelectorAll(".mermaid").forEach((el) => {
+        el.dataset.original = el.innerHTML;
+      });
+      document.fonts.ready.then(render);
+
+      let timeout;
+      new MutationObserver(() => {
+        clearTimeout(timeout);
+        timeout = setTimeout(render, 150);
+      }).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    });
+  })();
+</script>
