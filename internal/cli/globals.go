@@ -107,11 +107,15 @@ func dialOptions(cmd *cobra.Command) []grpc.DialOption {
 			ctx context.Context, method string, req, reply any, cc *grpc.ClientConn,
 			invoker grpc.UnaryInvoker, opts ...grpc.CallOption,
 		) error {
+			parent := ctx
 			ctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 
+			// The daemon is sent the deadline too, and its timer may run out
+			// before ours: a deadline passed while the caller's context lives
+			// is --timeout's either way.
 			err := invoker(ctx, method, req, reply, cc, opts...)
-			if status.Code(err) == codes.DeadlineExceeded && ctx.Err() != nil {
+			if status.Code(err) == codes.DeadlineExceeded && parent.Err() == nil {
 				return fmt.Errorf("%s took longer than --timeout %s", path.Base(method), timeout)
 			}
 			return err
