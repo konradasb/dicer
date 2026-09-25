@@ -34,7 +34,8 @@ A command runs:
 - as root, in `/`, unless `-w` gives another directory;
 - with the instance's environment, and any `-e KEY=VALUE` given;
 - beside the workload, not inside it: it sees every process in the guest,
-  with `dicer-init` as PID 1.
+  with `dicer-init` as PID 1. The workload, in a PID namespace of its own,
+  sees itself as PID 1, so the same process has a different PID in each.
 
 ```console
 $ dicer exec -w /srv -e DEBUG=1 web ./check.sh

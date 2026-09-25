@@ -30,6 +30,7 @@ func NewCommand() *cobra.Command {
 	}
 
 	cmd.SetVersionTemplate(version.String() + "\n")
+	cmd.AddCommand(newEntrypointCommand())
 
 	cmd.Flags().StringP("config", "c", guest.ConfigFile, "Config filename on the config disk ("+configDiskDevice+")")
 

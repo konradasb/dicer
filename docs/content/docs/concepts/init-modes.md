@@ -16,9 +16,15 @@ instance's command in one of two ways.
 ## exec
 
 The command runs as a container runs it: as PID 1 of a PID namespace of its
-own, under `dicer-init`, which is the machine's PID 1. `dicer-init` supervises
+own, with a `/proc` of its own, under `dicer-init`, which is the machine's
+PID 1. `ps` in it shows its processes and no others, and tools that look
+processes up in `/proc`, such as Docker's, find them. `dicer-init` supervises
 it, and when it exits, reports its exit code and ends the machine. The
 instance ends when its command does.
+
+A command that cannot be started, because the image does not have it, ends
+the instance at once, as a shell would: with exit code 127, or 126 for one
+that cannot be run.
 
 This is how an application image, such as `nginx` or `postgres`, runs.
 

@@ -17,8 +17,9 @@ import (
 )
 
 // bootExec starts dicer-agent, then runs the entrypoint in the overlay rootfs
-// as PID 1 of its own PID namespace. When it exits, its exit code is written
-// to the status disk and the machine ends. It does not return.
+// as PID 1 of its own PID namespace, with a mount namespace and /proc of its
+// own. When it exits, its exit code is written to the status disk and the
+// machine ends. It does not return.
 func bootExec(log *slog.Logger, cfg *guest.Config) {
 	if err := syscall.Chroot(overlayRoot); err != nil {
 		fatal(log, "chroot failed", err)
@@ -47,14 +48,18 @@ func bootExec(log *slog.Logger, cfg *guest.Config) {
 		workdir = "/"
 	}
 
+	// dicer-init starts again as the namespaces' first process, to mount their
+	// /proc before it becomes the workload: Go cannot run code between
+	// creating a process and running its program. /proc/self/exe is this
+	// binary, which the chroot has otherwise left behind.
 	argv := cfg.Argv()
-	appCmd := exec.Command(argv[0], argv[1:]...)
+	appCmd := exec.Command("/proc/self/exe", append([]string{entrypointCommand, "--"}, argv...)...)
 	appCmd.Stdin = os.Stdin
 	appCmd.Stdout = os.Stdout
 	appCmd.Stderr = os.Stderr
 	appCmd.Env = env
 	appCmd.Dir = workdir
-	appCmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: syscall.CLONE_NEWPID}
+	appCmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS}
 
 	log.Info("starting entrypoint", "argv", argv, "workdir", workdir)
 
@@ -63,18 +68,23 @@ func bootExec(log *slog.Logger, cfg *guest.Config) {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, forwardedSignals...)
 
+	// A workload that cannot be started ends the machine as one that exited
+	// would, with the status a shell gives: the instance then says why, rather
+	// than running with nothing in it.
+	exitCode := exitCannotExecute
 	if err := appCmd.Start(); err != nil {
-		fatal(log, "entrypoint start failed", err)
-	}
-	go forwardSignals(log, signals, appCmd.Process)
+		log.Error("entrypoint start failed", "err", err)
+	} else {
+		go forwardSignals(log, signals, appCmd.Process)
 
-	exitCode := 0
-	if err := appCmd.Wait(); err != nil {
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
-			exitCode = guest.ExitStatus(ee.ProcessState)
-		} else {
-			log.Error("entrypoint wait failed", "err", err)
+		exitCode = 0
+		if err := appCmd.Wait(); err != nil {
+			var ee *exec.ExitError
+			if errors.As(err, &ee) {
+				exitCode = guest.ExitStatus(ee.ProcessState)
+			} else {
+				log.Error("entrypoint wait failed", "err", err)
+			}
 		}
 	}
 

@@ -125,22 +125,26 @@ A guest that powers itself off, or a workload that exits 0, ends
 **Stopped**, not Failed: that is the workload finishing, not failing. Give
 it a command that keeps running, or a [restart policy](../restarts).
 
-## An instance runs, but its workload does not
+## The command cannot be started
 
-An instance whose command cannot be started, because the path is wrong or
-the image does not have it, stays **Running**, with nothing working. Its
-console says why:
+An instance whose command the image does not have, or cannot run, ends
+straight away, **Failed**, as a shell would: with exit code 127 for a command
+not found, and 126 for one that cannot be run. Its console says why:
 
 ```console
-$ dicer logs web
-… level=ERROR msg="entrypoint start failed" err="fork/exec /usr/bin/app: no such file or directory"
+$ dicer inspect web
+     Active: failed, exited (127) 3 seconds ago
+$ dicer logs web | tail -2
+dicer-init: start /usr/bin/app: exec: "/usr/bin/app": stat /usr/bin/app: no such file or directory
 ```
 
-The guest is still up, so look around in it, then fix the command:
+To look around the image, run it with a command that waits, find the right
+one, and fix the instance:
 
 ```console
-$ dicer exec web ls -l /usr/bin
-$ dicer stop web
+$ dicer run --name look ghcr.io/acme/app:2 sleep infinity
+$ dicer exec look ls -l /usr/local/bin
+$ dicer rm -f look
 $ dicer update web -- /usr/local/bin/app
 $ dicer start web
 ```
