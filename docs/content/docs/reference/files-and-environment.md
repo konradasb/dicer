@@ -46,7 +46,7 @@ alone. Change it only through the API, which keeps it consistent.
 │   └── metadata.json         its name, configuration and when it was used
 ├── oci-cache/                downloaded layers, shared between images
 ├── tmp/                      images being unpacked
-├── initrd/                   the guest initramfs, built from dicer-init and dicer-agent
+├── initrd/<arch>/initrd      the guest initramfs, built from dicer-init and dicer-agent
 ├── bin/<hypervisor>/<version>/   the hypervisor binaries dicerd carries
 └── events.jsonl              the events log: dicer events
 ```
