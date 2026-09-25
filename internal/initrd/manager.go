@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"time"
 
 	"golang.org/x/sync/singleflight"
 
@@ -41,15 +40,6 @@ const (
 	// hashFilename stores the content hash of the last successful build.
 	hashFilename = ".hash"
 )
-
-// Initrd describes a built initrd image on disk.
-type Initrd struct {
-	ID        string
-	Arch      string
-	Path      string
-	SizeBytes int64
-	Hash      string
-}
 
 // Config configures an initrd Manager.
 type Config struct {
@@ -107,67 +97,11 @@ func NewManager(cfg Config) (*Manager, error) {
 	return m, nil
 }
 
-// Get returns an initrd by ID and arch.
-func (m *Manager) Get(id, arch string) (*Initrd, error) {
-	p := m.initrdPath(id, arch)
-	info, err := os.Stat(p)
-	if err != nil {
-		return nil, fmt.Errorf("initrd %s/%s not found: %w", id, arch, err)
-	}
-
-	var hash string
-	if h, err := os.ReadFile(m.hashPath(id, arch)); err == nil {
-		hash = string(h)
-	}
-
-	initrd := &Initrd{
-		ID:        id,
-		Arch:      arch,
-		Path:      p,
-		SizeBytes: info.Size(),
-		Hash:      hash,
-	}
-
-	return initrd, nil
-}
-
-// GetLatest follows the latest symlink for the given arch.
-func (m *Manager) GetLatest(arch string) (*Initrd, error) {
-	link := m.latestLink(arch)
-	target, err := os.Readlink(link)
-	if err != nil {
-		return nil, fmt.Errorf("read latest link for %s: %w", arch, err)
-	}
-
-	// The target is a relative path; resolve it.
-	resolved := filepath.Join(filepath.Dir(link), target)
-	info, err := os.Stat(filepath.Join(resolved, initrdFilename))
-	if err != nil {
-		return nil, fmt.Errorf("latest initrd not found: %w", err)
-	}
-
-	// Extract ID from the resolved path (parent of arch dir).
-	id := filepath.Base(filepath.Dir(resolved))
-
-	var hash string
-	if h, err := os.ReadFile(filepath.Join(resolved, hashFilename)); err == nil {
-		hash = string(h)
-	}
-
-	initrd := &Initrd{
-		ID:        id,
-		Arch:      arch,
-		Path:      filepath.Join(resolved, initrdFilename),
-		SizeBytes: info.Size(),
-		Hash:      hash,
-	}
-
-	return initrd, nil
-}
-
-// Prepare ensures the initrd exists and is up to date for the current arch,
-// building it if necessary. Returns the path to the initrd.
-// Safe for concurrent use.
+// Prepare ensures the initrd for the current arch exists and matches the
+// embedded binaries, building it if necessary, and returns its path. The path
+// is the same for every build, so a hypervisor that reopens it -- as Cloud
+// Hypervisor does on a guest reboot and on restoring a snapshot -- always finds
+// a complete initrd. Safe for concurrent use.
 func (m *Manager) Prepare(ctx context.Context) (string, error) {
 	var arch string
 	switch runtime.GOARCH {
@@ -190,57 +124,65 @@ func (m *Manager) Prepare(ctx context.Context) (string, error) {
 	}
 
 	want := m.contentHash(initBin, agentBin)
+	path := m.initrdPath(arch)
 
-	// Check if latest exists and hash matches.
-	if latest, err := m.GetLatest(arch); err == nil && latest.Hash == want {
-		m.logger.Info("initrd already exists and is up to date", "path", latest.Path)
-		return latest.Path, nil
+	if m.current(arch, want) {
+		return path, nil
 	}
 
-	// Build via singleflight to avoid redundant concurrent builds.
-	result, err, _ := m.sf.Do("prepare-"+arch, func() (any, error) {
-		id := time.Now().UTC().Format("20060102T150405Z")
-		return m.build(ctx, id, arch, initBin, agentBin)
+	// Build via singleflight to avoid redundant concurrent builds, checking
+	// again inside it in case a build finished since the check above.
+	_, err, _ = m.sf.Do("prepare-"+arch, func() (any, error) {
+		if m.current(arch, want) {
+			return path, nil
+		}
+		return path, m.build(ctx, arch, want, initBin, agentBin)
 	})
 	if err != nil {
 		return "", fmt.Errorf("ensure initrd: %w", err)
 	}
 
-	initrd, ok := result.(*Initrd)
-	if !ok {
-		return "", fmt.Errorf("unexpected result type %T from initrd build", result)
-	}
-
-	m.logger.Info("initrd ready", "path", initrd.Path, "size_bytes", initrd.SizeBytes)
-	return initrd.Path, nil
+	return path, nil
 }
 
-// build pulls the base image, installs the init and agent binaries, packs the
-// directory tree into a CPIO archive, records the content hash, and updates
-// the latest symlink.
-func (m *Manager) build(ctx context.Context, id, arch string, initBin, agentBin []byte) (*Initrd, error) {
+// current reports whether the initrd for arch exists and was built from the
+// inputs hashing to want.
+func (m *Manager) current(arch, want string) bool {
+	if _, err := os.Stat(m.initrdPath(arch)); err != nil {
+		return false
+	}
+	h, err := os.ReadFile(m.hashPath(arch))
+	return err == nil && string(h) == want
+}
+
+// build pulls the base image, installs the init and agent binaries, and packs
+// the directory tree into a CPIO archive beside the initrd. Only then is it
+// renamed into place, so the path never holds a partial initrd, and a
+// hypervisor that already opened the old one keeps reading it. The hash is
+// written last: a crash in between leaves a stale hash, which rebuilds.
+func (m *Manager) build(ctx context.Context, arch, hash string, initBin, agentBin []byte) error {
 	if len(initBin) == 0 {
-		return nil, errors.New("init binary must not be empty")
+		return errors.New("init binary must not be empty")
 	}
 	if len(agentBin) == 0 {
-		return nil, errors.New("agent binary must not be empty")
+		return errors.New("agent binary must not be empty")
 	}
 
-	outDir := filepath.Join(m.buildDir(id), arch)
+	outDir := m.archDir(arch)
 	if err := os.MkdirAll(outDir, 0o750); err != nil {
-		return nil, fmt.Errorf("create output dir: %w", err)
+		return fmt.Errorf("create output dir: %w", err)
 	}
 
-	m.logger.Info("building initrd", "id", id, "arch", arch, "base", m.cfg.BaseImage)
+	m.logger.Info("building initrd", "arch", arch, "base", m.cfg.BaseImage)
 
 	digest, err := m.puller.Resolve(ctx, m.baseRef)
 	if err != nil {
-		return nil, fmt.Errorf("resolve %s: %w", m.cfg.BaseImage, err)
+		return fmt.Errorf("resolve %s: %w", m.cfg.BaseImage, err)
 	}
 
 	tmp, err := os.MkdirTemp("", "dicer-initrd-*")
 	if err != nil {
-		return nil, fmt.Errorf("create temp dir: %w", err)
+		return fmt.Errorf("create temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 
@@ -250,7 +192,7 @@ func (m *Manager) build(ctx context.Context, id, arch string, initBin, agentBin 
 
 	// Nothing watches the initrd being built, so no progress is reported.
 	if _, err := m.puller.PullAndExport(ctx, m.baseRef.String(), digest, dir, nil); err != nil {
-		return nil, fmt.Errorf("pull %s: %w", m.cfg.BaseImage, err)
+		return fmt.Errorf("pull %s: %w", m.cfg.BaseImage, err)
 	}
 
 	// Install binaries into the initrd filesystem tree.
@@ -262,61 +204,31 @@ func (m *Manager) build(ctx context.Context, id, arch string, initBin, agentBin 
 		{filepath.Join(dir, "usr", "local", "bin", "dicer-agent"), agentBin},
 	} {
 		if err := os.MkdirAll(filepath.Dir(bin.path), 0o750); err != nil {
-			return nil, fmt.Errorf("create dir for %s: %w", bin.path, err)
+			return fmt.Errorf("create dir for %s: %w", bin.path, err)
 		}
 		if err := os.WriteFile(bin.path, bin.data, 0o755); err != nil {
-			return nil, fmt.Errorf("write %s: %w", bin.path, err)
+			return fmt.Errorf("write %s: %w", bin.path, err)
 		}
 	}
 
-	outPath := filepath.Join(outDir, initrdFilename)
+	outPath := m.initrdPath(arch)
+	partial := outPath + ".tmp"
+	defer func() { _ = os.Remove(partial) }()
 
-	sizeBytes, err := m.packer.Pack(ctx, dir, outPath)
+	sizeBytes, err := m.packer.Pack(ctx, dir, partial)
 	if err != nil {
-		return nil, fmt.Errorf("pack dir as cpio: %w", err)
+		return fmt.Errorf("pack dir as cpio: %w", err)
 	}
 
-	hash := m.contentHash(initBin, agentBin)
-	hashPath := filepath.Join(outDir, hashFilename)
-	if err := os.WriteFile(hashPath, []byte(hash), 0o644); err != nil {
-		return nil, fmt.Errorf("write hash file: %w", err)
+	if err := os.Rename(partial, outPath); err != nil {
+		return fmt.Errorf("install initrd: %w", err)
 	}
 
-	// Update the latest symlink.
-	if err := m.updateLatestLink(id, arch); err != nil {
-		m.logger.Warn("failed to update latest symlink", "error", err)
+	if err := os.WriteFile(m.hashPath(arch), []byte(hash), 0o644); err != nil {
+		return fmt.Errorf("write hash file: %w", err)
 	}
 
 	m.logger.Info("initrd built", "path", outPath, "size_bytes", sizeBytes)
-
-	initrd := &Initrd{
-		ID:        id,
-		Arch:      arch,
-		Path:      outPath,
-		SizeBytes: sizeBytes,
-		Hash:      hash,
-	}
-
-	return initrd, nil
-}
-
-// updateLatestLink updates the latest symlink for an arch to point to a build.
-func (m *Manager) updateLatestLink(id, arch string) error {
-	link := m.latestLink(arch)
-	if err := os.MkdirAll(filepath.Dir(link), 0o750); err != nil {
-		return fmt.Errorf("create latest link dir: %w", err)
-	}
-
-	// Target is relative: ../{id}/{arch}
-	target := filepath.Join("..", id, arch)
-
-	// Remove old symlink if it exists.
-	_ = os.Remove(link)
-
-	if err := os.Symlink(target, link); err != nil {
-		return fmt.Errorf("create symlink: %w", err)
-	}
-
 	return nil
 }
 
