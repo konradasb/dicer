@@ -104,5 +104,4 @@ the instance's environment and the contents of its file mounts.
 
 | Variable | |
 |---|---|
-| `DOCKER_CONFIG` | The directory of the Docker configuration file that registry credentials are read from. Without it, `~/.docker` of the user the daemon runs as. See [Managing images](../../guides/managing-images#private-registries). |
 | `PATH` | Where `mkfs.erofs`, `mkfs.ext4`, `mke2fs`, `iptables` and any registry credential helpers are found. |

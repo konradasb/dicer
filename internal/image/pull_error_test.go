@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/registry"
 )
 
 // TestPullErrorDescribes checks a failed pull reads in terms of the image and
@@ -24,6 +26,10 @@ func TestPullErrorDescribes(t *testing.T) {
 	}
 	netErr := fmt.Errorf("resolve manifest: %w",
 		&net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connect: connection refused")})
+	// As the HTTP transport returns a keychain's failure: inside a url.Error,
+	// which is a net.Error too.
+	credErr := fmt.Errorf("resolve manifest: %w", &url.Error{Op: "Get", URL: "https://ghcr.io/v2/",
+		Err: &registry.CredentialsError{Registry: "ghcr.io", Err: errors.New("open /etc/dicerd/token: no such file")}})
 
 	for _, tc := range []struct {
 		ref     string
@@ -45,6 +51,10 @@ func TestPullErrorDescribes(t *testing.T) {
 			"localhost:5000 is limiting how often this host may pull; try again later",
 		},
 		{"nginx", netErr, errdefs.ErrUnavailable, "cannot reach docker.io: connect: connection refused"},
+		{
+			"ghcr.io/acme/app:2", credErr, errdefs.ErrUnavailable,
+			"cannot log in to ghcr.io: open /etc/dicerd/token: no such file",
+		},
 		{"nginx", errors.New("disk full"), errdefs.ErrUnavailable, `cannot pull image "nginx": disk full`},
 	} {
 		err := error(&PullError{Ref: tc.ref, Cause: tc.cause})

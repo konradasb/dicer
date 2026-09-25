@@ -6,6 +6,7 @@
 package daemon
 
 import (
+	"bytes"
 	"os"
 	"reflect"
 	"strings"
@@ -14,27 +15,45 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const exampleConfig = "../../example.yml"
+// configReference is the documentation's page for the configuration, whose
+// YAML block shows every key with its default.
+const configReference = "../../docs/content/docs/reference/configuration.md"
 
-// TestExampleConfigIsTheDefaults keeps example.yml loadable and in step with
-// defaultConfig.
-func TestExampleConfigIsTheDefaults(t *testing.T) {
-	cfg, err := loadConfig(exampleConfig)
+// referenceConfig returns the YAML block of the configuration reference.
+func referenceConfig(t *testing.T) []byte {
+	t.Helper()
+
+	page, err := os.ReadFile(configReference)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, block, ok := bytes.Cut(page, []byte("\n```yaml\n"))
+	if !ok {
+		t.Fatalf("%s has no yaml block", configReference)
+	}
+	block, _, ok = bytes.Cut(block, []byte("\n```"))
+	if !ok {
+		t.Fatalf("%s's yaml block does not end", configReference)
+	}
+	return block
+}
+
+// TestConfigReferenceIsTheDefaults keeps the configuration reference loadable
+// and in step with defaultConfig.
+func TestConfigReferenceIsTheDefaults(t *testing.T) {
+	cfg, err := loadConfig(writeConfig(t, string(referenceConfig(t))))
 	if err != nil {
 		t.Fatalf("loadConfig: %v", err)
 	}
 
 	if want := defaultConfig(); !reflect.DeepEqual(*cfg, want) {
-		t.Errorf("example.yml = %+v\nwant the defaults %+v", *cfg, want)
+		t.Errorf("the configuration reference = %+v\nwant the defaults %+v", *cfg, want)
 	}
 }
 
-// TestExampleConfigShowsEveryKey keeps example.yml complete.
-func TestExampleConfigShowsEveryKey(t *testing.T) {
-	data, err := os.ReadFile(exampleConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
+// TestConfigReferenceShowsEveryKey keeps the configuration reference complete.
+func TestConfigReferenceShowsEveryKey(t *testing.T) {
+	data := referenceConfig(t)
 
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
@@ -43,7 +62,7 @@ func TestExampleConfigShowsEveryKey(t *testing.T) {
 
 	for _, key := range configKeys(reflect.TypeFor[Config](), "") {
 		if lookupKey(doc.Content[0], strings.Split(key, ".")) == nil {
-			t.Errorf("example.yml does not show %s", key)
+			t.Errorf("the configuration reference does not show %s", key)
 		}
 	}
 }

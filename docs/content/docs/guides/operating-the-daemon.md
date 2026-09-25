@@ -64,7 +64,7 @@ named with its line:
 ```console
 $ sudo dicerd validate
 Error: parse /etc/dicerd/config.yaml: yaml: unmarshal errors:
-  line 12: field log_levle not found in type daemon.Config
+  line 12: field log_lvl not found in type daemon.Config
 ```
 
 The one exception is the API's TLS certificate and key, which the daemon

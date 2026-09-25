@@ -56,7 +56,11 @@ func TestListenSocketSetsItsGroup(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := int(info.Sys().(*syscall.Stat_t).Gid); got != gid {
+			st, ok := info.Sys().(*syscall.Stat_t)
+			if !ok {
+				t.Fatalf("stat of %s is %T, want *syscall.Stat_t", path, info.Sys())
+			}
+			if got := int(st.Gid); got != gid {
 				t.Errorf("group = %d, want %d", got, gid)
 			}
 		})

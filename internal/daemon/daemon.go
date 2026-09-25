@@ -218,7 +218,12 @@ func (d *daemon) initServices() error {
 		return fmt.Errorf("open events: %w", err)
 	}
 
-	registryClient, err := registry.NewClient(d.cfg.DataDir, registry.WithLogger(d.logger))
+	auths := make(map[string]registry.Auth, len(d.cfg.Registries))
+	for host, r := range d.cfg.Registries {
+		auths[host] = r.auth()
+	}
+	registryClient, err := registry.NewClient(d.cfg.DataDir,
+		registry.WithLogger(d.logger), registry.WithKeychain(registry.NewKeychain(auths)))
 	if err != nil {
 		return fmt.Errorf("create registry client: %w", err)
 	}

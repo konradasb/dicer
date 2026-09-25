@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/exec"
 	"os/user"
 	"strconv"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/konradasb/dicer/internal/hostnet"
 	"github.com/konradasb/dicer/internal/image"
 	"github.com/konradasb/dicer/internal/naming"
+	"github.com/konradasb/dicer/internal/registry"
 	"github.com/konradasb/dicer/internal/types"
 )
 
@@ -42,7 +44,8 @@ const (
 	defaultGCInterval = time.Hour
 )
 
-// Config is the daemon configuration. See example.yml for every key.
+// Config is the daemon configuration. The configuration reference in the
+// documentation, docs/content/docs/reference/configuration.md, shows every key.
 type Config struct {
 	// DataDir holds definitions, images and disks. Persistent.
 	DataDir string `yaml:"data_dir,omitempty"`
@@ -58,8 +61,70 @@ type Config struct {
 	Images    ImagesConfig    `yaml:"images"`
 	Events    EventsConfig    `yaml:"events"`
 
+	// Registries holds credentials for private registries, by host. Images
+	// from any other registry are pulled anonymously.
+	Registries map[string]RegistryConfig `yaml:"registries,omitempty"`
+
 	// LogLevel is debug, info, warn or error.
 	LogLevel string `yaml:"log_level,omitempty"`
+}
+
+// RegistryConfig is how the daemon logs in to one registry: with a username
+// and a password, given or read from a file, or through a credential helper.
+type RegistryConfig struct {
+	Username     string `yaml:"username,omitempty"`
+	Password     string `yaml:"password,omitempty"`
+	PasswordFile string `yaml:"password_file,omitempty"`
+
+	// CredentialHelper names a docker-credential-<name> program on the
+	// daemon's PATH, such as ecr-login.
+	CredentialHelper string `yaml:"credential_helper,omitempty"`
+}
+
+// validate reports whether the registry's credentials are complete. The files
+// and programs they name are checkHost's.
+func (r RegistryConfig) validate(host string) error {
+	key := "registries." + host
+	switch {
+	case r.CredentialHelper != "" && (r.Username != "" || r.Password != "" || r.PasswordFile != ""):
+		return fmt.Errorf("%s: credential_helper gives the credentials itself: leave out username and password", key)
+	case r.CredentialHelper != "":
+		return nil
+	case r.Username == "":
+		return fmt.Errorf("%s: username is required, or a credential_helper", key)
+	case r.Password != "" && r.PasswordFile != "":
+		return fmt.Errorf("%s: set password or password_file, not both", key)
+	case r.Password == "" && r.PasswordFile == "":
+		return fmt.Errorf("%s: password or password_file is required", key)
+	}
+	return nil
+}
+
+// checkHost reports whether what the registry's credentials name is on this
+// host: the password file readable, or the credential helper on PATH.
+func (r RegistryConfig) checkHost(host string) error {
+	key := "registries." + host
+	if r.PasswordFile != "" {
+		if _, err := os.ReadFile(r.PasswordFile); err != nil {
+			return fmt.Errorf("%s.password_file: %w", key, err)
+		}
+	}
+	if r.CredentialHelper != "" {
+		if _, err := exec.LookPath("docker-credential-" + r.CredentialHelper); err != nil {
+			return fmt.Errorf("%s.credential_helper: %w", key, err)
+		}
+	}
+	return nil
+}
+
+// auth is the registry's credentials as the registry client takes them.
+func (r RegistryConfig) auth() registry.Auth {
+	return registry.Auth{
+		Username:         r.Username,
+		Password:         r.Password,
+		PasswordFile:     r.PasswordFile,
+		CredentialHelper: r.CredentialHelper,
+	}
 }
 
 // APIConfig controls where the API is served: always on a Unix socket, and
@@ -322,6 +387,11 @@ func (c *Config) Validate() error {
 	}
 	if err := c.Events.validate(); err != nil {
 		return err
+	}
+	for host, r := range c.Registries {
+		if err := r.validate(host); err != nil {
+			return err
+		}
 	}
 
 	return c.Metrics.validate()

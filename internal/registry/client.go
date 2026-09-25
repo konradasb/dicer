@@ -44,10 +44,19 @@ func WithLogger(l *slog.Logger) Option {
 	}
 }
 
+// WithKeychain sets the credentials registries are logged in to with. Without
+// it, every image is pulled anonymously.
+func WithKeychain(k authn.Keychain) Option {
+	return func(c *Client) {
+		c.keychain = k
+	}
+}
+
 // Client handles OCI image registry operations and local caching.
 type Client struct {
 	cacheDir string
 	platform gcr.Platform
+	keychain authn.Keychain
 	layoutMu sync.Mutex
 	logger   *slog.Logger
 }
@@ -87,6 +96,9 @@ func NewClient(dataDir string, opts ...Option) (*Client, error) {
 	if c.logger == nil {
 		c.logger = slog.Default()
 	}
+	if c.keychain == nil {
+		c.keychain = NewKeychain(nil)
+	}
 
 	setUmociLogger(c.logger)
 
@@ -108,7 +120,7 @@ func (c *Client) inspectManifest(ctx context.Context, imageRef string) (string, 
 
 	img, err := remote.Image(ref,
 		remote.WithContext(ctx),
-		remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		remote.WithAuthFromKeychain(c.keychain),
 		remote.WithPlatform(c.platform))
 	if err != nil {
 		return "", fmt.Errorf("fetch manifest: %w", err)
@@ -211,7 +223,7 @@ func (c *Client) pullToOCILayout(ctx context.Context, imageRef, digest, layoutTa
 
 	img, err := remote.Image(ref.Context().Digest(digest),
 		remote.WithContext(ctx),
-		remote.WithAuthFromKeychain(authn.DefaultKeychain),
+		remote.WithAuthFromKeychain(c.keychain),
 		remote.WithPlatform(c.platform))
 	if err != nil {
 		return fmt.Errorf("fetch image: %w", err)

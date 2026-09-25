@@ -7,6 +7,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/cyphar/filepath-securejoin v0.5.0
 	github.com/distribution/reference v0.6.0
+	github.com/docker/docker-credential-helpers v0.9.3
 	github.com/docker/go-units v0.5.0
 	github.com/florianl/go-tc v0.4.7
 	github.com/google/go-containerregistry v0.20.7
@@ -43,7 +44,6 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/docker/cli v29.0.3+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
-	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect

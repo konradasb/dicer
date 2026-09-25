@@ -48,36 +48,31 @@ name. `dicer info` shows how full the disk holding them is.
 
 ## Private registries
 
-The daemon logs in to registries as Docker does, reading the Docker
-configuration file of the user it runs as. For the service `install.sh`
-sets up, that is root's, `/root/.docker/config.json`:
+The daemon logs in to a registry with the credentials its
+[configuration](../../reference/configuration) gives for it, under
+`registries`, keyed by the registry's host as an image's name gives it:
+`docker.io`, `ghcr.io`, or `registry.example.com:5000`. A registry not listed
+there is pulled from anonymously.
 
-```console
-$ sudo docker login ghcr.io
+```yaml {filename="/etc/dicerd/config.yaml"}
+registries:
+  docker.io:
+    username: dicer-bot
+    password_file: /etc/dicerd/secrets/docker-token
+  ghcr.io:
+    username: dicer-bot
+    password_file: /etc/dicerd/secrets/ghcr-token
+  123456789012.dkr.ecr.eu-west-1.amazonaws.com:
+    credential_helper: ecr-login
 ```
 
-Without Docker, write the file yourself; `auth` is `username:password`,
-or `username:token`, in base64:
-
-```json {filename="/root/.docker/config.json"}
-{
-  "auths": {
-    "ghcr.io": { "auth": "YWNtZTpnaHBfLi4u" }
-  }
-}
-```
-
-Credential helpers the file names, such as `docker-credential-ecr-login`,
-are used too, if they are on the daemon's `PATH`. The file is read at every
-pull, so a change needs no restart.
-
-To keep the file somewhere else, set `DOCKER_CONFIG` to its directory in a
-drop-in for the service:
-
-```ini {filename="/etc/systemd/system/dicerd.service.d/registry.conf"}
-[Service]
-Environment=DOCKER_CONFIG=/etc/dicerd/docker
-```
+A registry takes a `username` and either a `password`, or a `password_file`
+that holds it; prefer the file, readable only by root, so the secret is not in
+the configuration. The file is read at every pull, so a rotated password needs
+no restart. A registry whose credentials expire, such as Amazon ECR, takes a
+`credential_helper` instead: the name of a `docker-credential-<name>` program
+on the daemon's `PATH`, which gives fresh credentials each time, using root's
+credentials for the cloud, such as an instance role.
 
 ## Update to a newer image
 

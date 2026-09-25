@@ -14,6 +14,7 @@ import (
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/image/reference"
+	"github.com/konradasb/dicer/internal/registry"
 )
 
 // ErrInvalidReference reports an image reference that cannot be parsed.
@@ -43,25 +44,32 @@ func (e *PullError) Unwrap() []error {
 
 // describe returns the message and class of the failure.
 func (e *PullError) describe() (string, error) {
-	registry := registryOf(e.Ref)
+	host := registryOf(e.Ref)
 
 	var httpErr *transport.Error
 	if errors.As(e.Cause, &httpErr) {
 		switch httpErr.StatusCode {
 		case http.StatusNotFound:
-			return fmt.Sprintf("image %q not found on %s", e.Ref, registry), errdefs.ErrNotFound
+			return fmt.Sprintf("image %q not found on %s", e.Ref, host), errdefs.ErrNotFound
 		case http.StatusUnauthorized, http.StatusForbidden:
 			// Registries answer so for missing repositories too.
-			return fmt.Sprintf("image %q not found on %s (or it is private)", e.Ref, registry), errdefs.ErrNotFound
+			return fmt.Sprintf("image %q not found on %s (or it is private)", e.Ref, host), errdefs.ErrNotFound
 		case http.StatusTooManyRequests:
-			return registry + " is limiting how often this host may pull; try again later",
+			return host + " is limiting how often this host may pull; try again later",
 				errdefs.ErrUnavailable
 		}
 	}
 
+	// Checked before network errors: credentials are resolved inside the
+	// HTTP transport, which wraps their failure as if it were the network's.
+	var credErr *registry.CredentialsError
+	if errors.As(e.Cause, &credErr) {
+		return fmt.Sprintf("cannot log in to %s: %v", host, credErr.Err), errdefs.ErrUnavailable
+	}
+
 	var netErr net.Error
 	if errors.As(e.Cause, &netErr) {
-		return fmt.Sprintf("cannot reach %s: %v", registry, innermost(e.Cause)), errdefs.ErrUnavailable
+		return fmt.Sprintf("cannot reach %s: %v", host, innermost(e.Cause)), errdefs.ErrUnavailable
 	}
 
 	return fmt.Sprintf("cannot pull image %q: %v", e.Ref, innermost(e.Cause)), errdefs.ErrUnavailable

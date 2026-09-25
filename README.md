@@ -50,8 +50,10 @@ See `dicer --help` for every command.
 ## Configuration
 
 `dicerd` reads `/etc/dicerd/config.yaml`. The file is optional: every key has
-a default, and unknown keys are rejected. See [`example.yml`](example.yml) for
-every option.
+a default, and unknown keys are rejected. The
+[configuration reference](docs/content/docs/reference/configuration.md) shows
+every key with its default, and `dicerd validate` checks a file before the
+daemon uses it.
 
 ## License
 

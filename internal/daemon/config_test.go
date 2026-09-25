@@ -138,6 +138,27 @@ func TestValidate(t *testing.T) {
 		{name: "tcp without port", mutate: func(c *Config) { c.API.TCP.Listen = "0.0.0.0" }, wantErr: true},
 		{name: "socket group by id", mutate: func(c *Config) { c.API.Socket.Group = "0" }},
 		{name: "unknown socket group", mutate: func(c *Config) { c.API.Socket.Group = "no-such-group" }, wantErr: true},
+		{name: "registry password", mutate: func(c *Config) {
+			c.Registries = map[string]RegistryConfig{"ghcr.io": {Username: "bot", Password: "x"}}
+		}},
+		{name: "registry password file", mutate: func(c *Config) {
+			c.Registries = map[string]RegistryConfig{"ghcr.io": {Username: "bot", PasswordFile: "/etc/x"}}
+		}},
+		{name: "registry helper", mutate: func(c *Config) {
+			c.Registries = map[string]RegistryConfig{"ghcr.io": {CredentialHelper: "ecr-login"}}
+		}},
+		{name: "registry without username", mutate: func(c *Config) {
+			c.Registries = map[string]RegistryConfig{"ghcr.io": {Password: "x"}}
+		}, wantErr: true},
+		{name: "registry without password", mutate: func(c *Config) {
+			c.Registries = map[string]RegistryConfig{"ghcr.io": {Username: "bot"}}
+		}, wantErr: true},
+		{name: "registry password twice", mutate: func(c *Config) {
+			c.Registries = map[string]RegistryConfig{"ghcr.io": {Username: "bot", Password: "x", PasswordFile: "/etc/x"}}
+		}, wantErr: true},
+		{name: "registry helper and password", mutate: func(c *Config) {
+			c.Registries = map[string]RegistryConfig{"ghcr.io": {CredentialHelper: "ecr-login", Username: "bot"}}
+		}, wantErr: true},
 	}
 
 	for _, tt := range tests {

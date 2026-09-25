@@ -103,8 +103,9 @@ Dicer runs virtual machines and requires elevated host privileges. Operators sho
   an `--isolated` one
 - Remember what passes through the host in the clear: the contents of `file`
   mounts and instances' environment are in the runtime directory (root-only)
-  while the instance runs, and registry credentials are in the Docker
-  configuration file the daemon reads
+  while the instance runs, and registry credentials are in the daemon's
+  configuration (`registries`), or the password files it names: keep both
+  readable by root only
 
 ## Disclosure Policy
 

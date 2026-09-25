@@ -26,7 +26,8 @@ func newValidateCommand() *cobra.Command {
 		Short: "Check a configuration file before the daemon uses it",
 		Long: "Checks a configuration file as the daemon would when it starts: that it\n" +
 			"parses, knows every key, and holds valid values, that the TLS files it\n" +
-			"names can be read, and that this host can give instances what it allows.\n" +
+			"names can be read, as can the registries' password files and credential\n" +
+			"helpers, and that this host can give instances what it allows.\n" +
 			"Run it before restarting the daemon after a change, since a configuration\n" +
 			"the daemon cannot use stops it from starting.",
 		Example: "  dicerd validate\n" +
@@ -66,6 +67,12 @@ func validateConfig(path string) error {
 	if tls := cfg.API.TCP.TLS; cfg.API.TCP.Enabled() && tls.Enabled() {
 		if _, err := serverTLSConfig(tls, slog.New(slog.DiscardHandler)); err != nil {
 			return fmt.Errorf("api.tcp.tls: %w", err)
+		}
+	}
+
+	for host, r := range cfg.Registries {
+		if err := r.checkHost(host); err != nil {
+			return err
 		}
 	}
 
