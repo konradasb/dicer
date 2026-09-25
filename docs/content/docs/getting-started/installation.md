@@ -58,7 +58,9 @@ The script asks for `sudo` when it needs it, then:
 3. installs both to `/usr/local/bin`;
 4. writes a configuration, `/etc/dicerd/config.yaml`, unless there is one;
 5. turns on IPv4 forwarding, now and at every boot;
-6. installs `dicerd.service`, enables it and starts it.
+6. creates the `dicer` group, whose members can use the daemon without
+   `sudo`;
+7. installs `dicerd.service`, enables it and starts it.
 
 `--ref` builds a branch, tag or commit instead of `main`:
 
@@ -66,20 +68,35 @@ The script asks for `sudo` when it needs it, then:
 $ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash -s -- --ref v0.2.0
 ```
 
+## Use Dicer without `sudo`
+
+The daemon's socket belongs to root and the `dicer` group. Join the group,
+then start a new login shell, or run `newgrp dicer` in this one:
+
+```console
+$ sudo usermod -aG dicer $USER
+$ newgrp dicer
+```
+
+The docs' commands assume you have: without it, run each `dicer` command
+with `sudo`.
+
+{{< callout type="warning" >}}
+  A member of the `dicer` group can do anything with the daemon, which is as
+  much as root on the host. Add only whom you would give root.
+{{< /callout >}}
+
 ## Check it
 
 ```console
-$ sudo systemctl status dicerd
-$ sudo dicer version
-$ sudo dicer info
+$ systemctl status dicerd
+$ dicer version
+$ dicer info
 ```
 
 `dicer info` shows the daemon, the hypervisors it carries, and how much of
-the host's CPU, memory and disk it may give instances.
-
-The daemon's socket belongs to root, so `dicer` is run with `sudo` on the
-host. See [Remote access](../../guides/remote-access) to manage the host from
-another machine.
+the host's CPU, memory and disk it may give instances. To manage the host
+from another machine, see [Remote access](../../guides/remote-access).
 
 ## Upgrade and remove
 

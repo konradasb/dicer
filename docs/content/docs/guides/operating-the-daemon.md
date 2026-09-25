@@ -96,7 +96,7 @@ To shut the host down cleanly, stop the instances first, so their workloads
 shut down as they expect:
 
 ```console
-$ sudo dicer stop $(sudo dicer ps -q --filter state=running)
+$ dicer stop $(dicer ps -q --filter state=running)
 ```
 
 ## Backing up
@@ -112,7 +112,7 @@ full size. A disk copied while its guest runs is as consistent as one
 after a power cut; for a copy you can rely on, stop the instances first:
 
 ```console
-$ sudo dicer stop $(sudo dicer ps -q --filter state=running)
+$ dicer stop $(dicer ps -q --filter state=running)
 $ sudo systemctl stop dicerd
 $ sudo tar --sparse -czf dicer-backup.tar.gz /etc/dicerd /var/lib/dicer
 $ sudo systemctl start dicerd
@@ -132,7 +132,7 @@ running then goes on running, unmanaged, with its bridge and firewall
 rules left behind:
 
 ```console
-$ sudo dicer rm -f $(sudo dicer ps -q)
+$ dicer rm -f $(dicer ps -q)
 $ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/uninstall.sh | bash
 ```
 

@@ -45,7 +45,9 @@ $ journalctl -u dicerd -n 50
 Error: connection error: desc = "transport: Error while dialing: dial unix /run/dicer/dicer.sock: connect: permission denied"
 ```
 
-Only root can use the socket: run the command with `sudo`.
+Only root and the `dicer` group can use the socket: run the command with
+`sudo`, or [join the group](../remote-access#on-the-host-itself). Joining
+takes effect at your next login.
 
 For a remote daemon, check which one a command reaches with `dicer info`,
 and see [Remote access](../remote-access). A TLS error names what did not

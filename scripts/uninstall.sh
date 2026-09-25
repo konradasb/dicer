@@ -156,6 +156,11 @@ fi
 # Remove system configuration files
 # =============================================================================
 
+if getent group dicer >/dev/null 2>&1; then
+  info "Removing the dicer group..."
+  $SUDO groupdel dicer
+fi
+
 if [ -f /etc/sysctl.d/99-dicer.conf ]; then
   info "Removing /etc/sysctl.d/99-dicer.conf..."
   $SUDO rm -f /etc/sysctl.d/99-dicer.conf

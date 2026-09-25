@@ -26,7 +26,7 @@ Docker builds its networks from netfilter, NAT and bridges, which
 [quickstart](../../getting-started/quickstart).
 
 ```console
-$ sudo dicer kernel import linux-6.18 --arch x86_64 \
+$ dicer kernel import linux-6.18 --arch x86_64 \
     --url https://github.com/konradasb/dicer-kernel/releases/download/v6.18.53-1/vmlinux-x86_64 \
     --sha256 ca5db6c291deb8a409db1f1ab14cc55ef6d35504daf17fc0f5577ffc1662b669
 ```
@@ -34,7 +34,7 @@ $ sudo dicer kernel import linux-6.18 --arch x86_64 \
 ### Create a volume for Docker's data
 
 ```console
-$ sudo dicer volume create docker-data --size 20GiB
+$ dicer volume create docker-data --size 20GiB
 ```
 
 Size it for the images and containers Docker will keep. See
@@ -43,7 +43,7 @@ Size it for the images and containers Docker will keep. See
 ### Run Docker
 
 ```console
-$ sudo dicer run --name docker --kernel linux-6.18 --vcpus 2 --memory 2GiB \
+$ dicer run --name docker --kernel linux-6.18 --vcpus 2 --memory 2GiB \
     --mount source=docker-data,target=/var/lib/docker \
     docker:27-dind
 ```
@@ -55,9 +55,9 @@ workload. Docker, and what it runs, share the instance's memory: give it
 ### Use it
 
 ```console
-$ sudo dicer exec docker docker info --format '{{.Driver}}'
+$ dicer exec docker docker info --format '{{.Driver}}'
 overlay2
-$ sudo dicer exec docker docker run --rm hello-world
+$ dicer exec docker docker run --rm hello-world
 ```
 
 `docker info` may take a few seconds to answer while `dockerd` starts.

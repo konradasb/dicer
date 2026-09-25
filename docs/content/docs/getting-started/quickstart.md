@@ -12,8 +12,9 @@ related:
 ---
 
 From a fresh [install](../installation) to a web server running in a
-virtual machine. Every command talks to the daemon's socket, which belongs
-to root, so they are run with `sudo`.
+virtual machine. The commands assume you are in the `dicer` group, as
+[Installation](../installation#use-dicer-without-sudo) sets up; if not, run
+them with `sudo`.
 
 {{% steps %}}
 
@@ -23,7 +24,7 @@ Instances need a network to be attached to. Create one, with a private
 subnet of your choice:
 
 ```console
-$ sudo dicer network create default --subnet 172.20.0.0/16
+$ dicer network create default --subnet 172.20.0.0/16
 ```
 
 Its gateway is the subnet's first address, `172.20.0.1`, on a bridge the
@@ -38,14 +39,14 @@ Linux release built for Dicer's guests:
 {{< tabs >}}
   {{< tab name="x86_64" >}}
   ```console
-  $ sudo dicer kernel import linux-6.18 --arch x86_64 \
+  $ dicer kernel import linux-6.18 --arch x86_64 \
       --url https://github.com/konradasb/dicer-kernel/releases/download/v6.18.53-1/vmlinux-x86_64 \
       --sha256 ca5db6c291deb8a409db1f1ab14cc55ef6d35504daf17fc0f5577ffc1662b669
   ```
   {{< /tab >}}
   {{< tab name="aarch64" >}}
   ```console
-  $ sudo dicer kernel import linux-6.18 --arch aarch64 \
+  $ dicer kernel import linux-6.18 --arch aarch64 \
       --url https://github.com/konradasb/dicer-kernel/releases/download/v6.18.53-1/Image-arm64 \
       --sha256 1ce335854bc05535584dd57638f10832db91c4a20cbb76bab7851890c3d14568
   ```
@@ -61,7 +62,7 @@ against the checksum. See
 With one network and one kernel, instances use them without being told:
 
 ```console
-$ sudo dicer run --name web -p 8080:80 nginx:1.27
+$ dicer run --name web -p 8080:80 nginx:1.27
 Instance web started in 1.1s (172.20.61.102)
 ```
 
@@ -83,9 +84,9 @@ from the host, use its address or the guest's, which `dicer run` printed.
 ### Look inside
 
 ```console
-$ sudo dicer ps
-$ sudo dicer logs web
-$ sudo dicer exec web
+$ dicer ps
+$ dicer logs web
+$ dicer exec web
 ```
 
 `dicer logs` shows the guest's console: the kernel booting, then nginx.
@@ -94,8 +95,8 @@ $ sudo dicer exec web
 ### Clean up
 
 ```console
-$ sudo dicer stop web
-$ sudo dicer rm web
+$ dicer stop web
+$ dicer rm web
 ```
 
 {{% /steps %}}

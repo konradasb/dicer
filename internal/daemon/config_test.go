@@ -136,6 +136,8 @@ func TestValidate(t *testing.T) {
 		{name: "missing socket", mutate: func(c *Config) { c.API.Socket.Path = "" }, wantErr: true},
 		{name: "tcp listener", mutate: func(c *Config) { c.API.TCP.Listen = "0.0.0.0:7443" }},
 		{name: "tcp without port", mutate: func(c *Config) { c.API.TCP.Listen = "0.0.0.0" }, wantErr: true},
+		{name: "socket group by id", mutate: func(c *Config) { c.API.Socket.Group = "0" }},
+		{name: "unknown socket group", mutate: func(c *Config) { c.API.Socket.Group = "no-such-group" }, wantErr: true},
 	}
 
 	for _, tt := range tests {

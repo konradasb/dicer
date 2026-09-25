@@ -18,7 +18,8 @@ every call and message is listed in the [API reference](../../reference/api).
 ## Connecting
 
 The daemon serves the API on its Unix socket, `unix:///run/dicer/dicer.sock`,
-which only root can open, and optionally on a TCP listener, with TLS. See
+which root and the `dicer` group can open, and optionally on a TCP listener,
+with TLS. See
 [Remote access](../remote-access) for the listener and its certificates.
 
 ## From Go
@@ -159,10 +160,10 @@ The daemon does not serve reflection, so give
 [grpcurl](https://github.com/fullstorydev/grpcurl) the proto file:
 
 ```console
-$ sudo grpcurl -plaintext -unix \
+$ grpcurl -plaintext -unix \
     -import-path dicer/proto -proto dicerd/v1/dicerd.proto \
     /run/dicer/dicer.sock dicerd.v1.DaemonService/GetHostInfo
-$ sudo grpcurl -plaintext -unix \
+$ grpcurl -plaintext -unix \
     -import-path dicer/proto -proto dicerd/v1/dicerd.proto \
     -d '{"name": "web"}' \
     /run/dicer/dicer.sock dicerd.v1.DaemonService/GetInstance

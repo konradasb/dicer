@@ -42,7 +42,7 @@ affected.
 `dicer info` shows how much is held, of how much:
 
 ```console
-$ sudo dicer info
+$ dicer info
 …
            vCPU: █████░░░░░░░░░░░░░░░  4 of 16         25%
                  4 CPUs, 4× overcommit

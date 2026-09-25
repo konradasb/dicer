@@ -38,6 +38,13 @@ api:
     #
     mode: 0660
 
+    #
+    # Group of the socket, by name or ID. Its members can use the API as far as
+    # mode lets the group, which is as much as root on this host. Empty leaves
+    # the socket root's alone.
+    #
+    group: ""
+
   #
   # The network listener. Without tls it is unauthenticated and unencrypted:
   # anyone who can reach it has root-equivalent access to this host.

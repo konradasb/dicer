@@ -19,7 +19,7 @@ and `run_dir`.
 | `/etc/systemd/system/dicerd.service` | The service `install.sh` sets up. |
 | `/var/lib/dicer` | Persistent state, `data_dir`: kept across reboots. |
 | `/run/dicer` | Runtime state, `run_dir`: a tmpfs, which a reboot clears. |
-| `/run/dicer/dicer.sock` | The API's socket, root's only. |
+| `/run/dicer/dicer.sock` | The API's socket, root's and the `dicer` group's. |
 
 Everything under both directories belongs to root and is readable by root
 alone. Change it only through the API, which keeps it consistent.

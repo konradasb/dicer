@@ -180,6 +180,16 @@ func listenSocket(ctx context.Context, cfg SocketConfig) (net.Listener, error) {
 		return nil, fmt.Errorf("listen on %s: %w", cfg.Path, err)
 	}
 
+	// Its group before its mode, for the same reason.
+	gid, err := cfg.gid()
+	if err == nil && gid >= 0 {
+		err = os.Chown(cfg.Path, -1, gid)
+	}
+	if err != nil {
+		_ = listener.Close()
+		return nil, fmt.Errorf("set socket group: %w", err)
+	}
+
 	mode := cfg.Mode
 	if mode == 0 {
 		mode = defaultSocketMode

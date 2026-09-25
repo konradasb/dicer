@@ -22,12 +22,20 @@ certificates, and points the command line at it.
 
 ## On the host itself
 
-The socket, `/run/dicer/dicer.sock`, belongs to root, and only root can
-open it, so use `sudo` on the host:
+The socket, `/run/dicer/dicer.sock`, belongs to root and to the `dicer`
+group, which `install.sh` creates, empty. Use `sudo` on the host, or join the
+group and log in again:
 
 ```console
-$ sudo dicer ps
+$ sudo usermod -aG dicer $USER
+$ dicer ps
 ```
+
+The group's members can do anything with the daemon, which is as much as root
+on the host: add only whom you would give root. `api.socket.group` in the
+[configuration](../../reference/configuration) names the group. A
+configuration written before it existed has none: add `group: dicer` under
+`api.socket`, and restart the daemon.
 
 ## Serve the API over TCP
 
@@ -81,7 +89,7 @@ api:
 ```console
 $ sudo chmod 600 /etc/dicerd/tls/server-key.pem
 $ sudo systemctl restart dicerd
-$ sudo dicer info | grep 'Network API'
+$ dicer info | grep 'Network API'
     Network API: 0.0.0.0:7443
 ```
 

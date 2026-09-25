@@ -72,8 +72,10 @@ Dicer runs virtual machines and requires elevated host privileges. Operators sho
   roles: every client the daemon accepts can do anything, including reading
   any file on the host by mounting it into a guest
   (`--mount type=file,...`), since the daemon reads it as root
-- Keep the Unix socket as it is set up: owned by root and not readable by
-  others (`api.socket.mode`). Whoever can open it controls the daemon
+- Keep the Unix socket as it is set up: owned by root and the `dicer` group
+  (`api.socket.group`), and not open to others (`api.socket.mode`). Whoever
+  can open it controls the daemon, so add to the group only whom you would
+  give root
 - Leave the TCP listener (`api.tcp.listen`) unset unless you need it. When
   you serve it:
   - Set `api.tcp.tls` with a certificate and key, so traffic is encrypted

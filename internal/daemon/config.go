@@ -14,6 +14,8 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/user"
+	"strconv"
 	"time"
 
 	"github.com/docker/go-units"
@@ -72,6 +74,30 @@ type APIConfig struct {
 type SocketConfig struct {
 	Path string `yaml:"path,omitempty"`
 	Mode uint32 `yaml:"mode,omitempty"`
+
+	// Group is the group the socket belongs to, by name or ID, whose members
+	// have the access Mode gives the group. Empty leaves it root's.
+	Group string `yaml:"group,omitempty"`
+}
+
+// gid returns the ID of the socket's group, or -1 if it names none.
+func (s SocketConfig) gid() (int, error) {
+	if s.Group == "" {
+		return -1, nil
+	}
+
+	if id, err := strconv.Atoi(s.Group); err == nil {
+		return id, nil
+	}
+	g, err := user.LookupGroup(s.Group)
+	if err != nil {
+		return 0, fmt.Errorf("api.socket.group: %w", err)
+	}
+	id, err := strconv.Atoi(g.Gid)
+	if err != nil {
+		return 0, fmt.Errorf("api.socket.group %s has the ID %q, not a number", s.Group, g.Gid)
+	}
+	return id, nil
 }
 
 // TCPConfig controls the network listener. Without TLS it is
@@ -305,6 +331,9 @@ func (c *Config) Validate() error {
 func (a *APIConfig) validate() error {
 	if a.Socket.Path == "" {
 		return errors.New("api.socket.path is required")
+	}
+	if _, err := a.Socket.gid(); err != nil {
+		return err
 	}
 
 	if !a.TCP.Enabled() {

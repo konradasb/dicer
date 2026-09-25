@@ -201,6 +201,17 @@ info "Creating data directory at ${DATA_DIR}..."
 $SUDO mkdir -p "$DATA_DIR"
 
 # =============================================================================
+# Create the dicer group
+# =============================================================================
+
+# Members of the dicer group can use the daemon's socket without sudo. It
+# starts empty: adding a user gives them as much as root on this host.
+if ! getent group dicer >/dev/null 2>&1; then
+  info "Creating the dicer group..."
+  $SUDO groupadd --system dicer
+fi
+
+# =============================================================================
 # Write config
 # =============================================================================
 
@@ -213,6 +224,7 @@ api:
   socket:
     path: /run/dicer/dicer.sock
     mode: 0660
+    group: dicer
 
 log_level: info
 EOF
@@ -315,6 +327,11 @@ echo "    --vcpus 1 --memory 2GiB --disk 10GiB"
 echo ""
 echo "  dicer instance start test1"
 echo "  dicer instance exec test1 -- bash"
+echo ""
+echo "The commands above need sudo. To run dicer without it, join the dicer group,"
+echo "which gives as much as root on this host, then log in again:"
+echo ""
+echo "  sudo usermod -aG dicer \$USER"
 echo ""
 echo "Full help: dicer --help"
 echo ""
