@@ -226,7 +226,8 @@ $ journalctl -u dicerd -n 100
 ```
 
 If the daemon will not start, its log says why. The usual cause is an error
-in `/etc/dicerd/config.yaml`, which the log names with its line.
+in `/etc/dicerd/config.yaml`, which `sudo dicerd validate` names with its
+line, without starting anything.
 
 ## Reporting a problem
 

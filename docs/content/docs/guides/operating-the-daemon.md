@@ -47,20 +47,32 @@ as `dicer logs -f` and `dicer exec` sessions, then ends them.
 
 The configuration, `/etc/dicerd/config.yaml`, is read when the daemon
 starts; every setting is in the [configuration reference](../../reference/configuration).
-Change it, then restart the daemon:
+Change it, check it, then restart the daemon:
 
 ```console
 $ sudoedit /etc/dicerd/config.yaml
+$ sudo dicerd validate
+/etc/dicerd/config.yaml is valid.
 $ sudo systemctl restart dicerd
-$ journalctl -u dicerd -n 20
+```
+
+`dicerd validate` checks the file as the daemon does when it starts: that
+every key is one it knows, every value one it takes, the TLS files it names
+readable, and the resources it allows possible on this host. A problem is
+named with its line:
+
+```console
+$ sudo dicerd validate
+Error: parse /etc/dicerd/config.yaml: yaml: unmarshal errors:
+  line 12: field log_levle not found in type daemon.Config
 ```
 
 The one exception is the API's TLS certificate and key, which the daemon
 reloads by itself when the files change, so renewing them needs no restart.
 
-The daemon refuses to start with a configuration it cannot read, a setting
-it does not know included, and says why in its log. Guests keep running
-meanwhile; fix the file and start it again.
+A configuration the daemon cannot use stops it from starting, and it says
+why in its log. Guests keep running meanwhile; fix the file and start it
+again.
 
 ## Upgrading
 

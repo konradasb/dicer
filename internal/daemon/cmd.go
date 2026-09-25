@@ -28,7 +28,7 @@ func NewCommand() *cobra.Command {
 	}
 
 	cmd.SetVersionTemplate(version.String() + "\n")
-	cmd.AddCommand(newServeCommand())
+	cmd.AddCommand(newServeCommand(), newValidateCommand())
 
 	return cmd
 }
