@@ -66,17 +66,3 @@ configuration sets them.
 |---|---|---|---|
 | `dicer_grpc_requests_total` | counter | `method`, `code` | API calls, by method and the gRPC status code they ended with. |
 | `dicer_grpc_request_duration_seconds` | histogram | `method` | How long API calls took. For a stream, such as `logs -f`, it is how long the client stayed. |
-
-## Label values
-
-| Label | Values |
-|---|---|
-| `state` | `stopped`, `starting`, `running`, `paused`, `stopping`, `restarting`, `failed` |
-| `status` | `starting`, `healthy`, `unhealthy` |
-| `operation` | `start`, `stop`, `pause`, `resume`, `delete`, `create_snapshot`, `restore_snapshot`, `delete_snapshot` |
-| `outcome` | `success`, `error` |
-| `result` | `hit`, `miss` |
-| `reason` | `unused`, `size` |
-| `network` | A network's name. |
-| `method` | A full gRPC method, such as `/dicerd.v1.DaemonService/StartInstance`. |
-| `code` | A gRPC status code, such as `OK` or `NotFound`. |
