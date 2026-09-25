@@ -43,5 +43,5 @@ dicer instance [flags]
 * [dicer instance start]({{< relref "/docs/reference/cli/dicer_instance_start" >}})	 - Start one or more defined instances
 * [dicer instance stop]({{< relref "/docs/reference/cli/dicer_instance_stop" >}})	 - Stop one or more running instances, keeping their definitions and disks
 * [dicer instance update]({{< relref "/docs/reference/cli/dicer_instance_update" >}})	 - Change a stopped instance's definition
-* [dicer instance wait]({{< relref "/docs/reference/cli/dicer_instance_wait" >}})	 - Wait until an instance stops, and exit with its status
+* [dicer instance wait]({{< relref "/docs/reference/cli/dicer_instance_wait" >}})	 - Wait until one or more instances stop, and print their exit codes
 

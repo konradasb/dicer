@@ -43,7 +43,7 @@ Size it for the images and containers Docker will keep. See
 ### Run Docker
 
 ```console
-$ dicer run --name docker --kernel linux-6.18 --vcpus 2 --memory 2GiB \
+$ dicer run -d --name docker --kernel linux-6.18 --vcpus 2 --memory 2GiB \
     --mount source=docker-data,target=/var/lib/docker \
     docker:27-dind
 ```

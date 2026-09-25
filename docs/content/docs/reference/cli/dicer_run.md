@@ -15,6 +15,11 @@ it is not on the host yet. The instance is named after the image unless
 A command after the image replaces its ENTRYPOINT and CMD. Flags go before
 the image: everything after it is the command's.
 
+As with docker run, the guest's console is written out until the instance
+stops, and the command exits with the status it ended with. Ctrl+C stops
+the instance; a second Ctrl+C stops waiting for it. With -d the instance
+runs in the background instead.
+
 ```
 dicer run [flags] IMAGE [COMMAND [ARG...]]
 ```
@@ -22,14 +27,15 @@ dicer run [flags] IMAGE [COMMAND [ARG...]]
 ### Examples
 
 ```
-  dicer run nginx:1.27
-  dicer run --name web -p 8080:80 --memory 1GiB nginx:1.27
-  dicer run --vcpus 2 alpine:3.21 sleep infinity
+  dicer run --rm alpine:3.21 echo hello
+  dicer run -d --name web -p 8080:80 --memory 1GiB nginx:1.27
+  dicer run -d --vcpus 2 alpine:3.21 sleep infinity
 ```
 
 ### Options
 
 ```
+  -d, --detach                         Run in the background: print nothing of the console and return once started
       --name string                    Instance name (default: the image's name and a random suffix)
       --kernel string                  Kernel to boot with
       --kernel-args string             Kernel command line arguments

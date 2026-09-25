@@ -168,6 +168,35 @@ func TestStreamLogsFollowStopsWithInstance(t *testing.T) {
 	}
 }
 
+// TestStreamLogsFollowsAStartingInstance checks that following the log of an
+// instance still starting follows its boot, rather than ending before it has
+// run: an attached 'dicer run' follows the console from the start.
+func TestStreamLogsFollowsAStartingInstance(t *testing.T) {
+	mgr, definitions, _ := newTestManager(t)
+	inst := seedInstance(t, definitions, "web")
+	writeGuestLog(t, mgr, inst, "booting\n")
+	forceState(t, mgr, inst.ID, types.StateStarting)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- mgr.StreamLogs(t.Context(), inst, LogOptions{Follow: true}, &bytes.Buffer{})
+	}()
+
+	select {
+	case err := <-done:
+		t.Fatalf("following a starting instance's log ended at once: %v", err)
+	case <-time.After(3 * logPollInterval):
+	}
+
+	forceState(t, mgr, inst.ID, types.StateFailed)
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("following a log did not end when the instance failed to start")
+	}
+}
+
 func TestStreamLogsMissing(t *testing.T) {
 	mgr, definitions, _ := newTestManager(t)
 	inst := seedInstance(t, definitions, "web")

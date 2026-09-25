@@ -67,8 +67,8 @@ A guest's port is reached from outside the host by publishing it on a host
 port, as with containers:
 
 ```console
-$ dicer run -p 8080:80 nginx:1.27
-$ dicer run -p 192.0.2.10:53:53/udp dns-server
+$ dicer run -d -p 8080:80 nginx:1.27
+$ dicer run -d -p 192.0.2.10:53:53/udp dns-server
 ```
 
 Traffic to the host port, on every address the host has or on the one given,

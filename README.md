@@ -37,7 +37,7 @@ $ dicer kernel import linux-6.18 --arch x86_64 \
 With one network and one kernel, instances use them by default:
 
 ```console
-$ dicer run --name web -p 8080:80 nginx:1.27
+$ dicer run -d --name web -p 8080:80 nginx:1.27
 $ dicer ps
 $ dicer exec web sh
 $ dicer logs -f web

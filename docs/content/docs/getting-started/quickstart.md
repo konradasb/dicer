@@ -62,7 +62,7 @@ against the checksum. See
 With one network and one kernel, instances use them without being told:
 
 ```console
-$ dicer run --name web -p 8080:80 nginx:1.27
+$ dicer run -d --name web -p 8080:80 nginx:1.27
 Instance web started in 1.1s (172.20.61.102)
 ```
 

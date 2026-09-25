@@ -18,7 +18,7 @@ only ever meant to run once can instead be deleted when it ends.
 A restart policy is set with `--restart`:
 
 ```console
-$ dicer run --name api --restart unless-stopped ghcr.io/acme/api:3
+$ dicer run -d --name api --restart unless-stopped ghcr.io/acme/api:3
 ```
 
 | Policy | Restarts after an end that was | Started when the daemon starts |
@@ -110,8 +110,9 @@ $ dicer run --rm --name migrate ghcr.io/acme/api:3 ./migrate up
 ```
 
 Its disk, console log and address go with it; [volumes](../files-and-volumes)
-it mounted are kept. To read why a temporary instance failed, follow its
-log while it runs, with `dicer logs -f`.
+it mounted are kept. Run without `-d`, as above, `dicer run` writes the
+console as the job runs and exits with the status it ended with, so a
+failure is explained before the instance is gone.
 
 `--rm` cannot be combined with a restart policy that restarts: an instance
 cannot be both deleted and restarted when it ends.

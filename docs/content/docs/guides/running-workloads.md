@@ -19,21 +19,34 @@ later. This guide assumes a [kernel](../../concepts/kernels) and a
 ## Run an image
 
 ```console
-$ dicer run --name web -p 8080:80 nginx:1.27
+$ dicer run -d --name web -p 8080:80 nginx:1.27
 Instance web started in 1.1s (172.20.61.102)
   Shell: dicer exec web   Logs: dicer logs -f web   Stop: dicer stop web
 ```
 
 `dicer run` pulls the image if the host does not have it, defines the
-instance and boots it, and returns once the guest is running: instances
-always run in the background. Without `--name`, the instance is named after
-the image, with a random suffix.
+instance and boots it. With `-d` it returns once the guest is running,
+leaving the instance in the background. Without `--name`, the instance is
+named after the image, with a random suffix.
+
+Without `-d`, as with `docker run`, it writes the guest's console until the
+instance stops, and exits with the status the workload ended with. That is
+how to run a one-off job:
+
+```console
+$ dicer run --rm alpine:3.21 echo hello
+hello
+```
+
+Ctrl+C stops the instance, and a second Ctrl+C stops waiting for it.
+Nothing typed reaches the guest: for an interactive shell, run the instance
+with `-d` and use [`dicer exec`](../working-inside-guests).
 
 Flags go before the image. Everything after it is the command, which
 replaces the image's `ENTRYPOINT` and `CMD`:
 
 ```console
-$ dicer run --name sleeper alpine:3.21 sleep infinity
+$ dicer run -d --name sleeper alpine:3.21 sleep infinity
 ```
 
 ## Define now, start later
@@ -60,7 +73,7 @@ and lines starting with `#` are skipped, and values are taken as written,
 quotes included. Variables from `-e` win over those from a file.
 
 ```console
-$ dicer run --env-file app.env -e LOG_LEVEL=debug ghcr.io/acme/app:2
+$ dicer run -d --env-file app.env -e LOG_LEVEL=debug ghcr.io/acme/app:2
 ```
 
 ## Sizing
@@ -81,8 +94,8 @@ A guest's port is published on the host with `-p`, as
 `[hostIP:]hostPort:guestPort[/tcp|udp]`:
 
 ```console
-$ dicer run -p 8080:80 -p 8443:443 nginx:1.27
-$ dicer run -p 192.0.2.10:53:53/udp dns-server
+$ dicer run -d -p 8080:80 -p 8443:443 nginx:1.27
+$ dicer run -d -p 192.0.2.10:53:53/udp dns-server
 ```
 
 Without a host address, the port is published on every address the host
@@ -104,7 +117,7 @@ name.
 Labels are `KEY=VALUE` pairs of your own, for finding instances again:
 
 ```console
-$ dicer run -l team=search -l tier=frontend nginx:1.27
+$ dicer run -d -l team=search -l tier=frontend nginx:1.27
 $ dicer ps --filter label=team=search
 ```
 

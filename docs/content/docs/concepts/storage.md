@@ -42,7 +42,7 @@ outlive it:
 
 ```console
 $ dicer volume create pgdata --size 20GiB
-$ dicer run --mount source=pgdata,target=/data ghcr.io/acme/app:2
+$ dicer run -d --mount source=pgdata,target=/data ghcr.io/acme/app:2
 ```
 
 It is attached to the guest as a disk of its own and mounted at the target.

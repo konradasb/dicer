@@ -19,7 +19,7 @@ Dicer runs virtual machines from container images on a single host.
 ### Examples
 
 ```
-  dicer run --name web -p 8080:80 nginx:1.27
+  dicer run -d --name web -p 8080:80 nginx:1.27
   dicer ps
   dicer exec web -- nginx -t
   dicer logs -f web
@@ -64,5 +64,5 @@ Dicer runs virtual machines from container images on a single host.
 * [dicer update]({{< relref "/docs/reference/cli/dicer_update" >}})	 - Change a stopped instance's definition
 * [dicer version]({{< relref "/docs/reference/cli/dicer_version" >}})	 - Show the client's version, and the daemon's
 * [dicer volume]({{< relref "/docs/reference/cli/dicer_volume" >}})	 - Manage volumes
-* [dicer wait]({{< relref "/docs/reference/cli/dicer_wait" >}})	 - Wait until an instance stops, and exit with its status
+* [dicer wait]({{< relref "/docs/reference/cli/dicer_wait" >}})	 - Wait until one or more instances stop, and print their exit codes
 

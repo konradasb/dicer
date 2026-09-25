@@ -13,7 +13,7 @@ description: "Run any OCI image as a virtual machine, with a kernel of its own, 
   install="curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash"
 >}}
 {{< home/terminal title="dicer" >}}
-$ dicer run --name web -p 8080:80 nginx:1.27
+$ dicer run -d --name web -p 8080:80 nginx:1.27
 Image docker.io/library/nginx:1.27 pulled in 7.9s (108.8 MiB)
 Instance web started in 380ms (172.20.151.177)
 $ dicer ps -c name,status,ports

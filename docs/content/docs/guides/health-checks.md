@@ -23,9 +23,9 @@ A check is one of three probes, all run inside the guest by its agent:
 | `--health-cmd 'COMMAND'` | The command, run by `/bin/sh`, exits 0. |
 
 ```console
-$ dicer run --name api -p 8080:3000 --health-http 3000/healthz ghcr.io/acme/api:3
-$ dicer run --name db --health-cmd 'pg_isready -U postgres' postgres:17
-$ dicer run --name cache --health-tcp 6379 redis:7
+$ dicer run -d --name api -p 8080:3000 --health-http 3000/healthz ghcr.io/acme/api:3
+$ dicer run -d --name db --health-cmd 'pg_isready -U postgres' postgres:17
+$ dicer run -d --name cache --health-tcp 6379 redis:7
 ```
 
 The HTTP and TCP probes need nothing in the image, so they suit minimal
@@ -42,7 +42,7 @@ what it prints is kept as the check's output.
 | `--health-start-period` | none | Time after a start in which failures do not count, for a workload that is slow to come up. A success counts at once. |
 
 ```console
-$ dicer run --name search \
+$ dicer run -d --name search \
     --health-http 9200/_cluster/health \
     --health-interval 30s --health-start-period 2m \
     ghcr.io/acme/search:8
@@ -100,7 +100,7 @@ So a check and a restart policy together keep a workload that hangs, and
 does not exit, running:
 
 ```console
-$ dicer run --name api --restart on-failure:5 --health-http 3000/healthz ghcr.io/acme/api:3
+$ dicer run -d --name api --restart on-failure:5 --health-http 3000/healthz ghcr.io/acme/api:3
 ```
 
 {{< callout type="info" >}}

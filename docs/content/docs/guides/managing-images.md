@@ -93,7 +93,7 @@ booted from until it next starts.
 To pin an instance to one image, whatever the tag does, give a digest:
 
 ```console
-$ dicer run --name web nginx:1.27@sha256:9d6b58feebd2…
+$ dicer run -d --name web nginx:1.27@sha256:9d6b58feebd2…
 ```
 
 ## Remove images

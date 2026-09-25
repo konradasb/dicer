@@ -54,6 +54,16 @@ type fakeInstanceDaemon struct {
 	// events is what GetEvents streams once it has caught up. A test that
 	// waits on an instance pushes what happens to it here.
 	events chan *dicerdv1.Event
+	// history is what GetEvents streams before it has caught up: what
+	// happened before the command asked.
+	history []*dicerdv1.Event
+
+	// console is what each instance's console holds, and ran which
+	// instances have been started, and so have one.
+	console map[string]string
+	ran     map[string]bool
+	// onStart, if set, is what happens as an instance starts.
+	onStart func(name string)
 }
 
 func newFakeInstanceDaemon(instances ...*dicerdv1.Instance) *fakeInstanceDaemon {
@@ -62,6 +72,8 @@ func newFakeInstanceDaemon(instances ...*dicerdv1.Instance) *fakeInstanceDaemon 
 		cached:    make(map[string]bool),
 		host:      &dicerdv1.GetHostInfoResponse{Version: "v9.9.9", Hostname: "compute-1"},
 		events:    make(chan *dicerdv1.Event, 8),
+		console:   make(map[string]string),
+		ran:       make(map[string]bool),
 	}
 	for _, inst := range instances {
 		d.instances[inst.GetName()] = inst
@@ -145,7 +157,20 @@ func (d *fakeInstanceDaemon) GetInstance(_ context.Context, req *dicerdv1.GetIns
 func (d *fakeInstanceDaemon) StartInstance(
 	_ context.Context, req *dicerdv1.StartInstanceRequest,
 ) (*dicerdv1.Instance, error) {
-	return d.setState("start", req.GetName(), stateRunning, stateStopped, stateFailed)
+	inst, err := d.setState("start", req.GetName(), stateRunning, stateStopped, stateFailed)
+	if err != nil {
+		return nil, err
+	}
+
+	d.mu.Lock()
+	d.ran[req.GetName()] = true
+	onStart := d.onStart
+	d.mu.Unlock()
+
+	if onStart != nil {
+		onStart(req.GetName())
+	}
+	return inst, nil
 }
 
 func (d *fakeInstanceDaemon) StopInstance(_ context.Context, req *dicerdv1.StopInstanceRequest) (*dicerdv1.Instance, error) {
@@ -189,7 +214,9 @@ func (d *fakeInstanceDaemon) CreateInstance(
 	defer d.mu.Unlock()
 
 	d.created = req
-	inst := &dicerdv1.Instance{Name: req.GetName(), ImageRef: req.GetImageRef(), State: stateStopped}
+	inst := &dicerdv1.Instance{
+		Id: "id-" + req.GetName(), Name: req.GetName(), ImageRef: req.GetImageRef(), State: stateStopped,
+	}
 	if req.GetStart() {
 		inst.State, inst.Ip = stateRunning, "10.0.0.9"
 	}
@@ -235,12 +262,16 @@ func (d *fakeInstanceDaemon) RenameInstance(
 	return reply(inst, nil)
 }
 
-// GetEvents reports an empty history, says so, and then streams whatever the
-// test pushes, which is the shape the daemon's own stream has.
+// GetEvents reports the history, says so, and then streams whatever the test
+// pushes, which is the shape the daemon's own stream has.
 func (d *fakeInstanceDaemon) GetEvents(
 	req *dicerdv1.GetEventsRequest, stream grpc.ServerStreamingServer[dicerdv1.GetEventsResponse],
 ) error {
-	if err := stream.Send(&dicerdv1.GetEventsResponse{CaughtUp: true}); err != nil {
+	d.mu.Lock()
+	history := slices.Clone(d.history)
+	d.mu.Unlock()
+
+	if err := stream.Send(&dicerdv1.GetEventsResponse{Events: history, CaughtUp: true}); err != nil {
 		return err
 	}
 	if !req.GetFollow() {
@@ -263,29 +294,86 @@ func (d *fakeInstanceDaemon) GetEvents(
 // as the daemon would.
 func (d *fakeInstanceDaemon) stops(name string, exitCode int32) {
 	d.mu.Lock()
+	id := "id-" + name
 	if inst, ok := d.instances[name]; ok {
 		inst.State = stateStopped
 		inst.ExitCode = &exitCode
+		id = inst.GetId()
 	}
 	d.mu.Unlock()
 
-	d.events <- &dicerdv1.Event{
-		Kind: dicerdv1.EventKind_EVENT_KIND_INSTANCE, Name: name, Action: dicerdv1.EventAction_EVENT_ACTION_EXITED,
-		Attributes: map[string]string{"exit_code": strconv.Itoa(int(exitCode))},
-	}
+	d.emit(exitedEvent(id, name, exitCode))
 }
 
 // stopsAndRemoves reports an instance as ended and deletes it, which is what
 // the daemon does for one started with --rm.
 func (d *fakeInstanceDaemon) stopsAndRemoves(name string, exitCode int32) {
 	d.mu.Lock()
+	id := "id-" + name
+	if inst, ok := d.instances[name]; ok {
+		id = inst.GetId()
+	}
 	delete(d.instances, name)
 	d.mu.Unlock()
 
-	d.events <- &dicerdv1.Event{
-		Kind: dicerdv1.EventKind_EVENT_KIND_INSTANCE, Name: name, Action: dicerdv1.EventAction_EVENT_ACTION_EXITED,
+	d.emit(exitedEvent(id, name, exitCode))
+	d.emit(&dicerdv1.Event{
+		Kind: dicerdv1.EventKind_EVENT_KIND_INSTANCE, Id: id, Name: name,
+		Action: dicerdv1.EventAction_EVENT_ACTION_DELETED,
+	})
+}
+
+// emit reports an event: to the history, and to a command following.
+func (d *fakeInstanceDaemon) emit(e *dicerdv1.Event) {
+	d.mu.Lock()
+	d.history = append(d.history, e)
+	d.mu.Unlock()
+
+	d.events <- e
+}
+
+// exitedEvent is the event the daemon reports for an instance that exited.
+func exitedEvent(id, name string, exitCode int32) *dicerdv1.Event {
+	return &dicerdv1.Event{
+		Kind: dicerdv1.EventKind_EVENT_KIND_INSTANCE, Id: id, Name: name,
+		Action:     dicerdv1.EventAction_EVENT_ACTION_EXITED,
 		Attributes: map[string]string{"exit_code": strconv.Itoa(int(exitCode))},
 	}
+}
+
+// GetInstanceLogs sends an instance's console, which it has once started,
+// and with follow waits for it to stop, as the daemon does.
+func (d *fakeInstanceDaemon) GetInstanceLogs(
+	req *dicerdv1.GetInstanceLogsRequest, stream grpc.ServerStreamingServer[dicerdv1.InstanceLogChunk],
+) error {
+	d.mu.Lock()
+	_, exists := d.instances[req.GetName()]
+	ran, console := d.ran[req.GetName()], d.console[req.GetName()]
+	d.mu.Unlock()
+
+	if !exists || !ran {
+		return errdefs.NotFound("instance %q has no guest log yet", req.GetName())
+	}
+	if err := stream.Send(&dicerdv1.InstanceLogChunk{Data: []byte(console)}); err != nil {
+		return err
+	}
+
+	for req.GetFollow() {
+		d.mu.Lock()
+		inst, ok := d.instances[req.GetName()]
+		running := ok && inst.GetState() == stateRunning
+		d.mu.Unlock()
+		if !running {
+			return nil
+		}
+
+		select {
+		case <-stream.Context().Done():
+			return nil
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	return nil
 }
 
 func (d *fakeInstanceDaemon) GetHostInfo(
@@ -560,7 +648,7 @@ func TestRun(t *testing.T) {
 	d := newFakeInstanceDaemon()
 	serveInstanceDaemon(t, d)
 
-	out, err := run(t, "run", "--name", "web", "-p", "8080:80", "-e", "A=1,2", "-m", "1GiB",
+	out, err := run(t, "run", "-d", "--name", "web", "-p", "8080:80", "-e", "A=1,2", "-m", "1GiB",
 		"nginx:1.27", "nginx", "-g", "daemon off;")
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
@@ -599,7 +687,7 @@ func TestRunNamesAfterTheImage(t *testing.T) {
 	d := newFakeInstanceDaemon()
 	serveInstanceDaemon(t, d)
 
-	if out, err := run(t, "run", "ghcr.io/acme/Web_App:2@sha256:abc", "--", "serve"); err != nil {
+	if out, err := run(t, "run", "-d", "ghcr.io/acme/Web_App:2@sha256:abc", "--", "serve"); err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
 

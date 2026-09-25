@@ -144,7 +144,7 @@ To look around the image, run it with a command that waits, find the right
 one, and fix the instance:
 
 ```console
-$ dicer run --name look ghcr.io/acme/app:2 sleep infinity
+$ dicer run -d --name look ghcr.io/acme/app:2 sleep infinity
 $ dicer exec look ls -l /usr/local/bin
 $ dicer rm -f look
 $ dicer update web -- /usr/local/bin/app

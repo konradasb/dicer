@@ -191,10 +191,14 @@ func newInstanceRunCommand() *cobra.Command {
 			"it is not on the host yet. The instance is named after the image unless\n" +
 			"--name is given.\n\n" +
 			"A command after the image replaces its ENTRYPOINT and CMD. Flags go before\n" +
-			"the image: everything after it is the command's.",
-		Example: "  dicer run nginx:1.27\n" +
-			"  dicer run --name web -p 8080:80 --memory 1GiB nginx:1.27\n" +
-			"  dicer run --vcpus 2 alpine:3.21 sleep infinity",
+			"the image: everything after it is the command's.\n\n" +
+			"As with docker run, the guest's console is written out until the instance\n" +
+			"stops, and the command exits with the status it ended with. Ctrl+C stops\n" +
+			"the instance; a second Ctrl+C stops waiting for it. With -d the instance\n" +
+			"runs in the background instead.",
+		Example: "  dicer run --rm alpine:3.21 echo hello\n" +
+			"  dicer run -d --name web -p 8080:80 --memory 1GiB nginx:1.27\n" +
+			"  dicer run -d --vcpus 2 alpine:3.21 sleep infinity",
 		Args: oneThenCommand("an image"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			req, err := buildRunRequest(cmd, args)
@@ -202,7 +206,10 @@ func newInstanceRunCommand() *cobra.Command {
 				return err
 			}
 
-			return createInstance(cmd, req)
+			if detach, _ := cmd.Flags().GetBool("detach"); detach {
+				return createInstance(cmd, req)
+			}
+			return runAttached(cmd, req)
 		},
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			if len(args) > 0 {
@@ -217,10 +224,9 @@ func newInstanceRunCommand() *cobra.Command {
 	// with docker run.
 	cmd.Flags().SetInterspersed(false)
 	cmd.Flags().SortFlags = false
+	cmd.Flags().BoolP("detach", "d", false, "Run in the background: print nothing of the console and return once started")
 	cmd.Flags().String("name", "", "Instance name (default: the image's name and a random suffix)")
 	addInstanceSpecFlags(cmd, true)
-	cmd.Flags().BoolP("detach", "d", true, "Accepted for Docker compatibility; instances always run detached")
-	_ = cmd.Flags().MarkHidden("detach")
 
 	return cmd
 }

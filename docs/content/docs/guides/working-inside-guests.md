@@ -115,28 +115,30 @@ that never got as far as booting. See [Troubleshooting](../troubleshooting).
 
 ## Wait for an instance to end
 
-`dicer wait` waits until an instance stops, prints the exit code its
-workload ended with, and exits with it:
+To run a one-off job and get the status it ended with, run it without
+`-d`: `dicer run` writes its console and exits with its status. `--rm`
+deletes it once it ends:
 
 ```console
-$ dicer run --name migrate ghcr.io/acme/api:3 ./migrate up
+$ dicer run --rm --name migrate ghcr.io/acme/api:3 ./migrate up
+```
+
+For an instance running in the background, `dicer wait` waits until it
+stops and prints the exit code its workload ended with, as `docker wait`
+does:
+
+```console
+$ dicer run -d --name migrate ghcr.io/acme/api:3 ./migrate up
 $ dicer wait migrate
 0
 ```
 
-It exits with 0 for a guest that powered itself off, and 125 for one that
-ended without saying how, such as after a kernel panic. An instance that has
-already stopped is not waited for, and one its [restart policy](../restarts)
-starts again has not stopped, so the wait goes on. `--timeout` gives up
-after a while.
+It prints 0 for a guest that powered itself off, and 125 for one that
+ended without saying how, such as after a kernel panic. The command itself
+succeeds whatever the status, so a script reads it:
+`status=$(dicer wait migrate)`. Several instances are waited for in turn, a
+line each.
 
-To run a one-off job, wait for it, and clean up after it:
-
-```console
-$ dicer run --name migrate ghcr.io/acme/api:3 ./migrate up
-$ dicer wait migrate && dicer rm migrate
-```
-
-This keeps a job that failed, and its log, for you to look at. `--rm` does
-not combine with `wait`: a job that ends quickly is deleted before `wait`
-finds it.
+An instance that has already stopped is not waited for, even one `--rm`
+has deleted since, and one its [restart policy](../restarts) starts again
+has not stopped, so the wait goes on. `--timeout` gives up after a while.

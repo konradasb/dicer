@@ -86,7 +86,7 @@ func NewCommand() *cobra.Command {
 		Use:   "dicer",
 		Short: "Run virtual machines from container images",
 		Long:  "Dicer runs virtual machines from container images on a single host.",
-		Example: "  dicer run --name web -p 8080:80 nginx:1.27\n" +
+		Example: "  dicer run -d --name web -p 8080:80 nginx:1.27\n" +
 			"  dicer ps\n" +
 			"  dicer exec web -- nginx -t\n" +
 			"  dicer logs -f web\n" +

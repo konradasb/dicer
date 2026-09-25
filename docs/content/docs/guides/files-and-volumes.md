@@ -36,7 +36,7 @@ A `file` mount puts a file from the host into the guest: a configuration
 file, a certificate, a list of allowed users.
 
 ```console
-$ dicer run --name web -p 8080:80 \
+$ dicer run -d --name web -p 8080:80 \
     --mount type=file,source=/etc/dicer/web/nginx.conf,target=/etc/nginx/nginx.conf,readonly \
     nginx:1.27
 ```
@@ -75,7 +75,7 @@ a database, uploads, a cache worth keeping.
 
 ```console
 $ dicer volume create pgdata --size 20GiB
-$ dicer run --name db \
+$ dicer run -d --name db \
     --mount source=pgdata,target=/var/lib/postgresql/data \
     -e PGDATA=/var/lib/postgresql/data/pgdata \
     -e POSTGRES_PASSWORD=secret \
@@ -115,7 +115,7 @@ any number of them. That suits data written once and read by many, such as a
 model or a dataset:
 
 ```console
-$ dicer run --mount source=models,target=/models,readonly ghcr.io/acme/inference:1
+$ dicer run -d --mount source=models,target=/models,readonly ghcr.io/acme/inference:1
 ```
 
 An instance can mount up to 22 volumes.
@@ -126,7 +126,7 @@ A `tmpfs` mount is an empty directory held in the guest's memory, for files
 that need not survive a stop, and that are faster in memory than on disk:
 
 ```console
-$ dicer run --mount type=tmpfs,target=/cache ghcr.io/acme/app:2
+$ dicer run -d --mount type=tmpfs,target=/cache ghcr.io/acme/app:2
 ```
 
 It takes no source, and cannot be read-only. What is written there counts

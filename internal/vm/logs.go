@@ -91,7 +91,8 @@ func (m *Manager) StreamLogs(ctx context.Context, inst types.InstanceSpec, opts 
 		}
 
 		// Once the instance has stopped, read once more for its last output.
-		if rt, err := m.Runtime(inst); err == nil && !rt.State.IsActive() {
+		// One still starting has not: its boot is what there is to follow.
+		if rt, err := m.Runtime(inst); err == nil && !rt.State.HoldsResources() {
 			ended = true
 			continue
 		}

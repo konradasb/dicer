@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -40,8 +41,6 @@ func TestWaitWaitsForARunningInstance(t *testing.T) {
 
 	done := make(chan string, 1)
 	go func() {
-		// run reports what the command printed; the status it exits with is
-		// what TestWaitExitsWithTheInstanceStatus covers.
 		out, _ := run(t, "wait", "job")
 		done <- out
 	}()
@@ -84,5 +83,67 @@ func TestWaitOnAnInstanceRemovedWhenItStopped(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("wait did not return after the instance was removed")
+	}
+}
+
+// As docker wait does, wait prints the status rather than exiting with it: a
+// job that failed is still a wait that worked.
+func TestWaitPrintsTheStatusAndSucceeds(t *testing.T) {
+	serveInstanceDaemon(t, newFakeInstanceDaemon(stoppedInstance("job", 3)))
+
+	out, err := run(t, "wait", "job")
+	if err != nil {
+		t.Fatalf("wait: %v\n%s", err, out)
+	}
+	if strings.TrimSpace(out) != "3" {
+		t.Errorf("wait printed %q, want the exit status", out)
+	}
+}
+
+// Several instances are waited for in turn, a line each.
+func TestWaitOnSeveralInstances(t *testing.T) {
+	serveInstanceDaemon(t, newFakeInstanceDaemon(stoppedInstance("a", 0), stoppedInstance("b", 2)))
+
+	out, err := run(t, "wait", "a", "b")
+	if err != nil {
+		t.Fatalf("wait: %v\n%s", err, out)
+	}
+	if out != "0\n2\n" {
+		t.Errorf("wait printed %q, want a status a line", out)
+	}
+}
+
+// An instance that cannot be waited for fails the command, and the others
+// are waited for all the same.
+func TestWaitOnAMissingInstance(t *testing.T) {
+	serveInstanceDaemon(t, newFakeInstanceDaemon(stoppedInstance("b", 2)))
+
+	out, err := run(t, "wait", "a", "b")
+	var exitErr *exitError
+	if !errors.As(err, &exitErr) || exitErr.code != 1 {
+		t.Fatalf("wait: %v, want exit status 1\n%s", err, out)
+	}
+	if !strings.Contains(out, `no instance "a"`) || !strings.HasSuffix(out, "2\n") {
+		t.Errorf("wait printed %q, want an error for a and the status of b", out)
+	}
+}
+
+// A job --rm deleted before wait began -- one that ended quickly -- reports
+// the status the events recorded for it.
+func TestWaitOnAnInstanceDeletedBeforeTheWait(t *testing.T) {
+	d := newFakeInstanceDaemon(&dicerdv1.Instance{
+		Id: "id-job", Name: "job", ImageRef: "alpine:3.21", State: stateRunning,
+	})
+	d.stopsAndRemoves("job", 4)
+	<-d.events
+	<-d.events
+	serveInstanceDaemon(t, d)
+
+	out, err := run(t, "wait", "job")
+	if err != nil {
+		t.Fatalf("wait: %v\n%s", err, out)
+	}
+	if strings.TrimSpace(out) != "4" {
+		t.Errorf("wait printed %q, want the status the deleted instance ended with", out)
 	}
 }

@@ -128,7 +128,7 @@ func TestRunWithCachedImageSaysNothingOfIt(t *testing.T) {
 	d.cached["alpine:3.21"] = true
 	serveInstanceDaemon(t, d)
 
-	out, err := run(t, "run", "--name", "a", "alpine:3.21")
+	out, err := run(t, "run", "-d", "--name", "a", "alpine:3.21")
 	if err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
 	}
