@@ -401,3 +401,28 @@ body:has(.dicer-hero) {
   background-clip: text;
   color: transparent;
 }
+
+/* The repository's star count, beside the links to it on GitHub. */
+
+.dicer-stars-host {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.dicer-stars {
+  display: inline-flex;
+  gap: 0.2rem;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--dicer-muted);
+}
+
+.dicer-button .dicer-stars {
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--dicer-line);
+  font-size: 0.85rem;
+}
+
