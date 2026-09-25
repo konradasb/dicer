@@ -229,11 +229,8 @@ func newRemoteListCommand() *cobra.Command {
 
 func newRemoteDeleteCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "delete NAME",
-		Short: "Forget a remote",
-		Long: "Forget a remote.\n\n" +
-			"The daemon goes on trusting this client until it is removed there, " +
-			"by removing it from the daemon's api.tcp.trusted_clients.",
+		Use:               "delete NAME",
+		Short:             "Forget a remote",
 		Args:              one("a remote name"),
 		Aliases:           []string{"rm", "remove"},
 		ValidArgsFunction: completeRemotes,

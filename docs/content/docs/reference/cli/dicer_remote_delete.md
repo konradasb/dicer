@@ -6,12 +6,6 @@ description: "Forget a remote"
 
 Forget a remote
 
-### Synopsis
-
-Forget a remote.
-
-The daemon goes on trusting this client until it is removed there, by removing it from the daemon's api.tcp.trusted_clients.
-
 ```
 dicer remote delete NAME [flags]
 ```
