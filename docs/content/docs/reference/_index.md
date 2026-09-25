@@ -1,6 +1,6 @@
 ---
 title: Reference
-weight: 4
+weight: 5
 description: "The command line, the API, the configuration and the metrics, in full."
 icon: document-text
 cascade:
