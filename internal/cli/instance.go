@@ -329,6 +329,12 @@ func ensureImage(cmd *cobra.Command, client *dicer.Client, ref string) error {
 		return err
 	}
 
+	return pullShowingProgress(cmd, client, ref)
+}
+
+// pullShowingProgress pulls an image, showing its progress on a terminal,
+// and says so once it is done if anything was downloaded.
+func pullShowingProgress(cmd *cobra.Command, client *dicer.Client, ref string) error {
 	// Off a terminal, the stages of a pull that is only a check would be
 	// noise in a log: a download is reported once it is done.
 	progress := cmd.ErrOrStderr()

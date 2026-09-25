@@ -92,7 +92,8 @@ proto/                  the API: protobuf definitions and generated code
 internal/
   types/                the daemon's model: instances, images, networks, ...
   daemon/               configuration, wiring, process lifecycle
-  cli/                  the command line
+  cli/                  the command line, dicer compose included
+  compose/              compose files: reading them, and the requests they make
   grpcapi/              the API's handlers
   vm/                   instance lifecycle: starting, stopping, supervising
   filestore/            resource definitions, as YAML on disk

@@ -97,6 +97,10 @@ func NewCommand() *cobra.Command {
 	}
 
 	cmd.SetVersionTemplate(version.String() + "\n")
+	// Each command's flags are read before its subcommand's, so a command
+	// may have flags of its own that its subcommands' do not clash with:
+	// 'dicer compose -f FILE logs -f'.
+	cmd.TraverseChildren = true
 	cmd.PersistentPreRunE = validateGlobalFlags
 	cmd.SetFlagErrorFunc(flagError)
 	addGlobalFlags(cmd)
@@ -137,6 +141,7 @@ func NewCommand() *cobra.Command {
 		newVolumeCommand(),
 		newKernelCommand(),
 		newRemoteCommand(),
+		newComposeCommand(),
 	)
 	inGroup(groupSystem, cmd,
 		newInfoCommand(),
@@ -144,6 +149,10 @@ func NewCommand() *cobra.Command {
 		newVersionCommand(),
 	)
 
+	// The root is a group too: traversing, cobra leaves an unknown command
+	// for it to report rather than reporting it itself.
+	cmd.Args = cobra.ArbitraryArgs
+	cmd.RunE = runGroup
 	forEachGroup(cmd, func(group *cobra.Command) {
 		group.Args = cobra.ArbitraryArgs
 		group.RunE = runGroup

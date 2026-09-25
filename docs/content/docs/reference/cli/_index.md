@@ -16,6 +16,10 @@ Run virtual machines from container images
 
 Dicer runs virtual machines from container images on a single host.
 
+```
+dicer [flags]
+```
+
 ### Examples
 
 ```
@@ -37,6 +41,7 @@ Dicer runs virtual machines from container images on a single host.
 
 ### SEE ALSO
 
+* [dicer compose]({{< relref "/docs/reference/cli/dicer_compose" >}})	 - Run a project of instances described in a compose file
 * [dicer cp]({{< relref "/docs/reference/cli/dicer_cp" >}})	 - Copy files between this machine and a running instance
 * [dicer create]({{< relref "/docs/reference/cli/dicer_create" >}})	 - Define an instance without starting it
 * [dicer events]({{< relref "/docs/reference/cli/dicer_events" >}})	 - Show what has happened to the instances and images on the host
