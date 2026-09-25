@@ -12,11 +12,12 @@ import (
 // InstanceStats is a point-in-time summary of the instances on this host,
 // read when a scrape arrives.
 type InstanceStats struct {
-	// ByState counts instances per state, including zeros.
+	// ByState counts instances per state, including zeros, each state named
+	// in lower case: running, stopped.
 	ByState map[string]int
 
 	// ByHealth counts the instances whose health is checked, by verdict
-	// (starting, healthy, unhealthy), every verdict named as ByState's
+	// (starting, healthy, unhealthy), named in lower case as ByState's
 	// states are.
 	ByHealth map[string]int
 

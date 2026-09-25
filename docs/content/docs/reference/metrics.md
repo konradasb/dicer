@@ -71,7 +71,7 @@ configuration sets them.
 
 | Label | Values |
 |---|---|
-| `state` | `Stopped`, `Starting`, `Running`, `Paused`, `Stopping`, `Restarting`, `Failed` |
+| `state` | `stopped`, `starting`, `running`, `paused`, `stopping`, `restarting`, `failed` |
 | `status` | `starting`, `healthy`, `unhealthy` |
 | `operation` | `start`, `stop`, `pause`, `resume`, `delete`, `create_snapshot`, `restore_snapshot`, `delete_snapshot` |
 | `outcome` | `success`, `error` |

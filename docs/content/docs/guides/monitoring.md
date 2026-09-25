@@ -28,8 +28,8 @@ metrics:
 ```console
 $ sudo systemctl restart dicerd
 $ curl -s 127.0.0.1:9101/metrics | grep '^dicer_instances{'
-dicer_instances{state="Running"} 3
-dicer_instances{state="Stopped"} 1
+dicer_instances{state="running"} 3
+dicer_instances{state="stopped"} 1
 …
 ```
 
@@ -52,7 +52,7 @@ Every metric is listed in the [metrics reference](../../reference/metrics).
 ```yaml {filename="dicer-alerts.yml"}
 rules:
 - alert: DicerInstanceFailed
-  expr: dicer_instances{state="Failed"} > 0
+  expr: dicer_instances{state="failed"} > 0
   for: 5m
   annotations:
     summary: "{{ $value }} instance(s) failed on {{ $labels.instance }}"

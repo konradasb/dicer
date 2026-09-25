@@ -20,13 +20,13 @@ import (
 func TestMetricsReportWhatIsRunning(t *testing.T) {
 	name := instanceName(t)
 
-	before := env.gauge(t, `dicer_instances{state="Running"}`)
+	before := env.gauge(t, `dicer_instances{state="running"}`)
 	allocatedBefore := env.gauge(t, `dicer_network_addresses_allocated{network="`+networkName+`"}`)
 
 	env.createInstance(t, name)
 	env.startInstance(t, name)
 
-	if got := env.gauge(t, `dicer_instances{state="Running"}`); got != before+1 {
+	if got := env.gauge(t, `dicer_instances{state="running"}`); got != before+1 {
 		t.Errorf("running instances = %v after starting one, want %v", got, before+1)
 	}
 	if got := env.gauge(t, `dicer_network_addresses_allocated{network="`+networkName+`"}`); got != allocatedBefore+1 {
@@ -42,7 +42,7 @@ func TestMetricsReportWhatIsRunning(t *testing.T) {
 	env.dicer(t, "instance", "stop", name)
 	env.waitForState(t, name, "Stopped")
 
-	if got := env.gauge(t, `dicer_instances{state="Running"}`); got != before {
+	if got := env.gauge(t, `dicer_instances{state="running"}`); got != before {
 		t.Errorf("running instances = %v after stopping it again, want %v", got, before)
 	}
 

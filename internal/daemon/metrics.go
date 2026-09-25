@@ -57,7 +57,7 @@ func (d *daemon) instanceStats() metrics.InstanceStats {
 
 	byState := make(map[string]int, len(usage.ByState))
 	for state, n := range usage.ByState {
-		byState[state.String()] = n
+		byState[state.Lower()] = n
 	}
 	byHealth := make(map[string]int, len(usage.ByHealth))
 	for status, n := range usage.ByHealth {
