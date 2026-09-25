@@ -142,6 +142,14 @@ lint: $(GOLANGCI_LINT) $(BUF) ## Run the linters
 	$(GOLANGCI_LINT) run --build-tags e2e ./test/...
 	$(BUF) lint
 
+# What the API is checked against: main locally, and the pull request's base
+# branch in CI.
+BUF_AGAINST ?= .git\#branch=main
+
+.PHONY: breaking
+breaking: $(BUF) ## Check the API for changes that break its clients
+	$(BUF) breaking --against '$(BUF_AGAINST)'
+
 .PHONY: fmt
 fmt: $(GOLANGCI_LINT) $(BUF) ## Format the code
 	$(GOLANGCI_LINT) fmt ./...

@@ -67,8 +67,9 @@ host needs KVM, `erofs-utils`, `e2fsprogs` and systemd, and root.
 ## Linting and formatting
 
 ```console
-make lint   # golangci-lint and buf lint
-make fmt    # gofmt, goimports, gci and buf format
+make lint      # golangci-lint and buf lint
+make fmt       # gofmt, goimports, gci and buf format
+make breaking  # buf breaking, against main
 ```
 
 Lint should report zero issues. A suppression says why it is correct.

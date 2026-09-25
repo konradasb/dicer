@@ -1,0 +1,32 @@
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+---
+name: buf
+
+on:
+  pull_request:
+    paths:
+      - proto/**
+      - buf.yaml
+      - .github/workflows/buf.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  # dicerd.v1 is a compatibility promise: a pull request may add to it, but
+  # not change or remove what clients already rely on.
+  breaking:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Check the API for breaking changes
+        run: >-
+          make breaking
+          BUF_AGAINST='https://github.com/${{ github.repository }}.git#branch=${{ github.base_ref }}'

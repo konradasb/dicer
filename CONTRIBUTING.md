@@ -21,7 +21,8 @@ make test
 ```
 
 Changes to `proto/` must be followed by `make generate`, and the generated
-code committed with them.
+code committed with them. They must not break the API's clients: `make
+breaking` checks, and CI runs it on every pull request that touches `proto/`.
 
 ## Pull requests
 

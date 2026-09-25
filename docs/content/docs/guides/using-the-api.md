@@ -14,6 +14,9 @@ API, and so can any program. The API is one service,
 `dicerd.v1.DaemonService`, defined in
 [`proto/dicerd/v1/dicerd.proto`](https://github.com/konradasb/dicer/blob/main/proto/dicerd/v1/dicerd.proto);
 every call and message is listed in the [API reference](../../reference/api).
+`dicerd.v1` only grows: calls, messages and fields are added, but never
+renamed, renumbered, retyped or removed, so a client built against it keeps
+working with newer daemons.
 
 ## Connecting
 
