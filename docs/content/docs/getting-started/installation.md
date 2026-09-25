@@ -28,11 +28,39 @@ source and sets the daemon up.
 
 - Go 1.25 or later, `git`, `make` and `curl`.
 
-On Debian or Ubuntu:
+To install them with the distribution's package manager:
 
-```console
-$ sudo apt install erofs-utils e2fsprogs iptables git make curl
-```
+{{< tabs >}}
+  {{< tab name="Debian, Ubuntu" >}}
+  ```console
+  $ sudo apt install erofs-utils e2fsprogs iptables git make curl
+  ```
+  {{< /tab >}}
+  {{< tab name="Fedora" >}}
+  ```console
+  $ sudo dnf install erofs-utils e2fsprogs iptables-nft git make curl
+  ```
+  {{< /tab >}}
+  {{< tab name="Rocky, AlmaLinux" >}}
+  `erofs-utils` is in [EPEL](https://docs.fedoraproject.org/en-US/epel/),
+  so turn it on first. On RHEL itself, EPEL's page says how.
+
+  ```console
+  $ sudo dnf install epel-release
+  $ sudo dnf install erofs-utils e2fsprogs iptables-nft git make curl
+  ```
+  {{< /tab >}}
+  {{< tab name="Arch" >}}
+  ```console
+  $ sudo pacman -S --needed erofs-utils e2fsprogs iptables-nft git make curl
+  ```
+  {{< /tab >}}
+  {{< tab name="openSUSE" >}}
+  ```console
+  $ sudo zypper install erofs-utils e2fsprogs iptables git make curl
+  ```
+  {{< /tab >}}
+{{< /tabs >}}
 
 and Go from [go.dev/dl](https://go.dev/dl/), as distributions often carry an
 older one.
