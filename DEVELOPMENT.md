@@ -67,8 +67,11 @@ host needs KVM, `erofs-utils`, `e2fsprogs` and systemd, and root.
 ## Linting and formatting
 
 ```console
-make lint   # golangci-lint and buf lint
-make fmt    # gofmt, goimports, gci and buf format
+make lint            # golangci-lint and buf lint
+make fmt             # gofmt, goimports, gci and buf format
+make breaking        # buf breaking, against main
+make vuln            # govulncheck: known vulnerabilities in code the binaries call
+make lint-workflows  # actionlint and zizmor, on .github/ (zizmor needs pipx)
 ```
 
 Lint should report zero issues. A suppression says why it is correct.
@@ -114,6 +117,7 @@ docs/                   the documentation site
 tools/docgen/           generates the documentation's reference pages
 specs/                  the Cloud Hypervisor OpenAPI spec
 scripts/                the install and uninstall scripts
+build/                  the Linux packages, and their apt and dnf repository
 ```
 
 ## Documentation site

@@ -9,8 +9,8 @@ related:
   - /docs/reference/files-and-environment
 ---
 
-`dicerd` runs as a systemd service, `dicerd.service`, as `install.sh` sets
-it up. This guide covers running it day to day: changing its
+`dicerd` runs as a systemd service, `dicerd.service`, as the `dicer`
+package or `install.sh` sets it up. This guide covers running it day to day: changing its
 configuration, restarting and upgrading it without disturbing guests,
 backing it up, and removing it.
 
@@ -76,16 +76,48 @@ again.
 
 ## Upgrading
 
-Run `install.sh` again, for the version you want:
+Upgrade Dicer the way you installed it:
 
-```console
-$ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash -s -- --ref v0.2.0
-```
+{{< tabs >}}
+  {{< tab name="Debian, Ubuntu" >}}
+  ```console
+  $ sudo apt update
+  $ sudo apt install dicer
+  ```
 
-It builds that version, stops the daemon, replaces `dicer` and `dicerd`,
-and starts the new daemon, which takes the running guests over. The
-configuration is kept. The service file is rewritten, so put changes of
-your own to it in a drop-in, under `/etc/systemd/system/dicerd.service.d/`.
+  Where you changed the configuration, dpkg asks which to keep.
+  {{< /tab >}}
+  {{< tab name="Fedora, RHEL, Rocky, AlmaLinux" >}}
+  ```console
+  $ sudo dnf upgrade dicer
+  ```
+
+  Where you changed the configuration, rpm keeps yours, and puts the new one
+  beside it, as `config.yaml.rpmnew`.
+  {{< /tab >}}
+  {{< tab name="openSUSE" >}}
+  ```console
+  $ sudo zypper update dicer
+  ```
+
+  Where you changed the configuration, rpm keeps yours, and puts the new one
+  beside it, as `config.yaml.rpmnew`.
+  {{< /tab >}}
+  {{< tab name="From source" >}}
+  Run `install.sh` again, for the version you want:
+
+  ```console
+  $ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash -s -- --ref v0.2.0
+  ```
+
+  It builds that version, stops the daemon, replaces `dicer` and `dicerd`,
+  and starts the new daemon. The configuration is kept.
+  {{< /tab >}}
+{{< /tabs >}}
+
+The new daemon takes the running guests over. The service file is replaced,
+so put changes of your own to it in a drop-in, under
+`/etc/systemd/system/dicerd.service.d/`.
 
 Guests go on running what they booted with: the new hypervisors, `dicer-init`
 and agent reach an instance at its next start. `dicer version` shows the
@@ -139,21 +171,58 @@ policy starts.
 
 ## Uninstalling
 
-Delete the instances first. `uninstall.sh` stops the daemon, and a guest
+Delete the instances first. Removing Dicer stops the daemon, and a guest
 running then goes on running, unmanaged, with its bridge and firewall
 rules left behind:
 
 ```console
 $ dicer rm -f $(dicer ps -q)
-$ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/uninstall.sh | bash
 ```
 
-This removes the binaries, the service and `/etc/dicerd`, TLS certificates
-kept there included, and keeps `/var/lib/dicer`. `--purge` removes that too,
-with every image, disk and volume in it; it cannot be undone:
+Then remove Dicer the way you installed it:
+
+{{< tabs >}}
+  {{< tab name="Debian, Ubuntu" >}}
+  ```console
+  $ sudo apt purge dicer
+  ```
+
+  This removes the binaries, the service and `/etc/dicerd`, TLS
+  certificates kept there included. `apt remove` keeps `/etc/dicerd`.
+  {{< /tab >}}
+  {{< tab name="Fedora, RHEL, Rocky, AlmaLinux" >}}
+  ```console
+  $ sudo dnf remove dicer
+  ```
+
+  This removes the binaries and the service. A configuration you changed
+  is kept, as `/etc/dicerd/config.yaml.rpmsave`, with any TLS certificates
+  beside it.
+  {{< /tab >}}
+  {{< tab name="openSUSE" >}}
+  ```console
+  $ sudo zypper remove dicer
+  ```
+
+  This removes the binaries and the service. A configuration you changed
+  is kept, as `/etc/dicerd/config.yaml.rpmsave`, with any TLS certificates
+  beside it.
+  {{< /tab >}}
+  {{< tab name="From source" >}}
+  ```console
+  $ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/uninstall.sh | bash
+  ```
+
+  This removes the binaries, the service and `/etc/dicerd`, TLS
+  certificates kept there included.
+  {{< /tab >}}
+{{< /tabs >}}
+
+Each keeps `/var/lib/dicer`, with every image, disk and volume in it. To
+remove that too, which cannot be undone:
 
 ```console
-$ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/uninstall.sh | bash -s -- --purge
+$ sudo rm -rf /var/lib/dicer
 ```
 
 Networks' bridges remain until the host reboots, or until removed with

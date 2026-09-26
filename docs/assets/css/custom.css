@@ -28,6 +28,17 @@
   --dicer-terminal: #0b1220;
 }
 
+/*
+ * Hextra and this sheet size everything in rem, and cap the page's width, so
+ * on a 4K screen the whole site shrinks to a small strip in the middle. Past
+ * 2240px wide the root font grows with the viewport, and everything with it:
+ * a 3840px screen gets the proportions of a 2240px one. Media queries still
+ * measure in the browser's default rem, so breakpoints don't move.
+ */
+html {
+  font-size: max(100%, calc(100vw / 140));
+}
+
 .dark {
   --primary-hue: 188deg;
   --primary-saturation: 86%;
@@ -54,6 +65,7 @@
  * hyphenated, so there it stays ragged.
  */
 @media (min-width: 640px) {
+
   .content p,
   .content li {
     text-align: justify;
@@ -425,4 +437,3 @@ body:has(.dicer-hero) {
   border-left: 1px solid var(--dicer-line);
   font-size: 0.85rem;
 }
-

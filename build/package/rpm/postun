@@ -1,0 +1,14 @@
+#!/bin/sh
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+# The dicer package's %postun: $1 is 0 when the package is removed. RPM keeps a
+# changed configuration as /etc/dicerd/config.yaml.rpmsave, and the package
+# never removes /var/lib/dicer, which holds every instance's disk and
+# volume, nor the dicer group, which files may still belong to.
+
+if [ "$1" -eq 0 ] && [ -d /run/systemd/system ]; then
+  systemctl daemon-reload || true
+fi
+
+exit 0

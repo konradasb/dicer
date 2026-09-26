@@ -1,5 +1,12 @@
 # Dicer
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/konradasb/dicer/badge)](https://scorecard.dev/viewer/?uri=github.com/konradasb/dicer)
+[![test](https://github.com/konradasb/dicer/actions/workflows/test.yaml/badge.svg)](https://github.com/konradasb/dicer/actions/workflows/test.yaml)
+[![lint](https://github.com/konradasb/dicer/actions/workflows/lint.yaml/badge.svg)](https://github.com/konradasb/dicer/actions/workflows/lint.yaml)
+[![security](https://github.com/konradasb/dicer/actions/workflows/security.yaml/badge.svg)](https://github.com/konradasb/dicer/actions/workflows/security.yaml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/konradasb/dicer.svg)](https://pkg.go.dev/github.com/konradasb/dicer)
+[![License: MIT](https://img.shields.io/github/license/konradasb/dicer)](LICENSE)
+
 Run virtual machines from container images, on one host.
 
 Dicer pulls an OCI image, converts it to a read-only root filesystem and boots

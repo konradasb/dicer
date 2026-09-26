@@ -1,0 +1,24 @@
+#!/bin/sh
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+# The dicer package's postrm. Purging removes the configuration, TLS files
+# kept beside it included, but never /var/lib/dicer: it holds every
+# instance's disk and volume, which are not the package's to delete. Nor the
+# dicer group, which files may still belong to.
+
+set -e
+
+case "$1" in
+remove)
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+  fi
+  ;;
+purge)
+  rm -rf /etc/dicerd
+  if [ -d /var/lib/dicer ]; then
+    echo "dicer: kept /var/lib/dicer, with its images, disks and volumes" >&2
+  fi
+  ;;
+esac
