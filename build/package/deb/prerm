@@ -1,0 +1,13 @@
+#!/bin/sh
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+# The dicer package's prerm. Only removing the package stops the daemon: an
+# upgrade restarts it, from the postinst, once the new one is in place.
+# Guests keep running, unmanaged.
+
+set -e
+
+if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+  systemctl disable --now dicerd.service || true
+fi

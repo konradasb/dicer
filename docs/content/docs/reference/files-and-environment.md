@@ -14,9 +14,10 @@ and `run_dir`.
 
 | Path | |
 |---|---|
-| `/usr/local/bin/dicerd`, `/usr/local/bin/dicer` | The daemon and the command line, as `install.sh` puts them. |
+| `/usr/bin/dicerd`, `/usr/bin/dicer` | The daemon and the command line, as the package installs them. `install.sh` puts them in `/usr/local/bin`. |
 | `/etc/dicerd/config.yaml` | The daemon's configuration. `dicerd serve --config` names another. |
-| `/etc/systemd/system/dicerd.service` | The service `install.sh` sets up. |
+| `/usr/lib/systemd/system/dicerd.service` | The service, as the package installs it. `install.sh` writes it to `/etc/systemd/system`. |
+| `/usr/lib/sysctl.d/60-dicer.conf` | The package's setting turning IPv4 forwarding on. `install.sh` writes `/etc/sysctl.d/99-dicer.conf`. |
 | `/var/lib/dicer` | Persistent state, `data_dir`: kept across reboots. |
 | `/run/dicer` | Runtime state, `run_dir`: a tmpfs, which a reboot clears. |
 | `/run/dicer/dicer.sock` | The API's socket, root's and the `dicer` group's. |

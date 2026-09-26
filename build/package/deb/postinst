@@ -1,0 +1,33 @@
+#!/bin/sh
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+# The dicer package's postinst: configure, with the version replaced as $2
+# on an upgrade. As Debian expects, a first install enables and starts the
+# daemon; an upgrade restarts it if it runs, which leaves guests running, as
+# the daemon that starts takes them over.
+
+set -e
+
+[ "$1" = configure ] || exit 0
+
+# Members of the dicer group can use the daemon's socket without sudo.
+if ! getent group dicer >/dev/null; then
+  groupadd --system dicer
+fi
+
+# Not in a container, which may not set it.
+sysctl -q -p /usr/lib/sysctl.d/60-dicer.conf 2>/dev/null || true
+
+# Only where systemd runs, as it may not when building an image.
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload
+  if [ -z "$2" ]; then
+    systemctl enable dicerd.service
+    systemctl start dicerd.service ||
+      echo "dicerd did not start: see journalctl -u dicerd" >&2
+  else
+    systemctl try-restart dicerd.service ||
+      echo "dicerd did not restart: see journalctl -u dicerd" >&2
+  fi
+fi

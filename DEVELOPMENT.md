@@ -116,6 +116,7 @@ docs/                   the documentation site
 tools/docgen/           generates the documentation's reference pages
 specs/                  the Cloud Hypervisor OpenAPI spec
 scripts/                the install and uninstall scripts
+build/                  the Linux packages, and their apt and dnf repository
 ```
 
 ## Documentation site

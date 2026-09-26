@@ -1,0 +1,47 @@
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+# The dicerd service, as the deb and rpm packages install it. Put changes of
+# your own in a drop-in, /etc/systemd/system/dicerd.service.d/, which an
+# upgrade leaves alone.
+
+[Unit]
+Description=Dicer Daemon
+Documentation=https://dicer.sh/docs/
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/dicerd serve --config /etc/dicerd/config.yaml
+Restart=on-failure
+RestartSec=5
+# Running VMs are separate processes and outlive the daemon; recovery
+# re-adopts them on the next start.
+KillMode=process
+
+# Set for both limits, so the hypervisors dicerd starts have them too: Go
+# raises only its own soft limit, and gives a child back the one it started
+# with.
+LimitNOFILE=65536
+
+# Creates and owns /run/dicer, which holds the API socket and runtime state.
+# Being a tmpfs, it is cleared on reboot -- which is correct, since no
+# instance survives one. It must survive the service stopping, though: it
+# holds the state of the VMs that outlive the daemon, which the next one
+# needs to adopt them. Without Preserve, systemd deletes it on every stop.
+RuntimeDirectory=dicer
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+
+# Creates /var/lib/dicer, root's alone as the daemon keeps it, and leaves it
+# writable below ProtectSystem. A data_dir moved elsewhere needs a drop-in
+# adding it to ReadWritePaths.
+StateDirectory=dicer
+StateDirectoryMode=0700
+
+# Security hardening
+ProtectSystem=strict
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

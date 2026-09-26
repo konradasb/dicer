@@ -10,8 +10,10 @@ related:
 ---
 
 Dicer runs on one Linux host, as a daemon, `dicerd`, managed by systemd, with
-the `dicer` command line beside it. The install script builds both from
-source and sets the daemon up.
+the `dicer` command line beside it. On Debian, Ubuntu, Fedora, RHEL and its
+rebuilds, and openSUSE, install the `dicer` package, which has both and the
+service; elsewhere, the install script builds them from source and sets the
+daemon up.
 
 ## Requirements
 
@@ -24,7 +26,9 @@ source and sets the daemon up.
   `mke2fs`.
 - `iptables`.
 
-**To build**
+The package brings the last three with it.
+
+**To build**, for the install script
 
 - Go 1.25 or later, `git`, `make` and `curl`.
 
@@ -72,7 +76,53 @@ $ ls -l /dev/kvm
 crw-rw---- 1 root kvm 10, 232 Sep 24 09:12 /dev/kvm
 ```
 
-## Install
+## Install from packages
+
+Releases are published to an apt and a dnf repository at `pkg.dicer.sh`,
+signed with Dicer's key. Add it, then install `dicer`:
+
+{{< tabs >}}
+  {{< tab name="Debian, Ubuntu" >}}
+  ```console
+  $ sudo install -d -m 0755 /etc/apt/keyrings
+  $ curl -fsSL https://pkg.dicer.sh/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/dicer.gpg
+  $ echo "deb [signed-by=/etc/apt/keyrings/dicer.gpg] https://pkg.dicer.sh/deb stable main" \
+      | sudo tee /etc/apt/sources.list.d/dicer.list
+  $ sudo apt update
+  $ sudo apt install dicer
+  ```
+
+  The daemon is enabled and started.
+  {{< /tab >}}
+  {{< tab name="Fedora, RHEL, Rocky, AlmaLinux" >}}
+  On RHEL and its rebuilds, turn [EPEL](https://docs.fedoraproject.org/en-US/epel/)
+  on first, for `erofs-utils`.
+
+  ```console
+  $ sudo curl -fsSL -o /etc/yum.repos.d/dicer.repo https://pkg.dicer.sh/rpm/dicer.repo
+  $ sudo dnf install dicer
+  $ sudo systemctl enable --now dicerd
+  ```
+
+  dnf asks you to accept the repository's key the first time.
+  {{< /tab >}}
+  {{< tab name="openSUSE" >}}
+  ```console
+  $ sudo zypper addrepo https://pkg.dicer.sh/rpm/dicer.repo
+  $ sudo zypper install dicer
+  $ sudo systemctl enable --now dicerd
+  ```
+
+  zypper asks you to trust the repository's key the first time.
+  {{< /tab >}}
+{{< /tabs >}}
+
+The package installs `dicer` and `dicerd` to `/usr/bin`, the service,
+`/etc/dicerd/config.yaml`, and a sysctl setting that turns IPv4 forwarding
+on, and creates the `dicer` group. The package files are also attached to
+each [release](https://github.com/konradasb/dicer/releases).
+
+## Install from source
 
 ```console
 $ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash
@@ -114,7 +164,7 @@ with `sudo`.
   much as root on the host. Add only whom you would give root.
 {{< /callout >}}
 
-## Check it
+## Verify
 
 ```console
 $ systemctl status dicerd
@@ -128,6 +178,6 @@ from another machine, see [Remote access](../../guides/remote-access).
 
 ## Upgrade and remove
 
-Running the install script again upgrades Dicer, without stopping the
-instances that are running. `uninstall.sh` removes it. See
+Upgrading the package, or running the install script again, upgrades Dicer
+without stopping the instances that are running. See
 [Operating the daemon](../../guides/operating-the-daemon#upgrading) for both.
