@@ -32,6 +32,10 @@ ADDLICENSE_VERSION    := v1.2.0
 GOLANGCI_LINT_VERSION := v2.8.0
 HUGO_VERSION          := v0.166.0
 PROTOC_GEN_DOC_VERSION := v1.5.1
+GOVULNCHECK_VERSION   := v1.8.0
+ACTIONLINT_VERSION    := v1.7.12
+# zizmor is not a Go tool; it runs through pipx, which fetches it on first use.
+ZIZMOR_VERSION        := 1.30.1
 
 BUF           := $(BIN_DIR)/buf-$(BUF_VERSION)
 OAPI_CODEGEN  := $(BIN_DIR)/oapi-codegen-$(OAPI_CODEGEN_VERSION)
@@ -39,6 +43,8 @@ ADDLICENSE    := $(BIN_DIR)/addlicense-$(ADDLICENSE_VERSION)
 GOLANGCI_LINT := $(BIN_DIR)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 HUGO          := $(BIN_DIR)/hugo-$(HUGO_VERSION)
 PROTOC_GEN_DOC := $(BIN_DIR)/protoc-gen-doc-$(PROTOC_GEN_DOC_VERSION)
+GOVULNCHECK   := $(BIN_DIR)/govulncheck-$(GOVULNCHECK_VERSION)
+ACTIONLINT    := $(BIN_DIR)/actionlint-$(ACTIONLINT_VERSION)
 
 # Embedded binaries. Each dicerd embeds only its own architecture's; see
 # internal/initrd/embed.go and internal/hypervisor/cloudhypervisor/embed.go.
@@ -146,6 +152,16 @@ lint: $(GOLANGCI_LINT) $(BUF) ## Run the linters
 # branch in CI.
 BUF_AGAINST ?= .git\#branch=main
 
+.PHONY: lint-workflows
+lint-workflows: $(ACTIONLINT) ## Lint the GitHub Actions workflows, for mistakes and for security
+	$(ACTIONLINT)
+	pipx run zizmor==$(ZIZMOR_VERSION) .
+
+# dicerd is built for Linux with the tags below, so that is the code checked.
+.PHONY: vuln
+vuln: $(GOVULNCHECK) ## Check for known vulnerabilities in the code the binaries call
+	GOOS=linux $(GOVULNCHECK) -tags containers_image_openpgp ./...
+
 .PHONY: breaking
 breaking: $(BUF) ## Check the API for changes that break its clients
 	$(BUF) breaking --against '$(BUF_AGAINST)'
@@ -235,11 +251,19 @@ $(HUGO): | $(BIN_DIR)
 	GOTOOLCHAIN=$(GO_TOOLCHAIN)+auto GOBIN=$(BIN_DIR) go install github.com/gohugoio/hugo@$(HUGO_VERSION)
 	mv $(BIN_DIR)/hugo $@
 
+$(GOVULNCHECK): | $(BIN_DIR)
+	GOTOOLCHAIN=$(GO_TOOLCHAIN)+auto GOBIN=$(BIN_DIR) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	mv $(BIN_DIR)/govulncheck $@
+
+$(ACTIONLINT): | $(BIN_DIR)
+	GOTOOLCHAIN=$(GO_TOOLCHAIN)+auto GOBIN=$(BIN_DIR) go install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
+	mv $(BIN_DIR)/actionlint $@
+
 $(BIN_DIR):
 	mkdir -p $@
 
 .PHONY: tools
-tools: $(BUF) $(OAPI_CODEGEN) $(ADDLICENSE) $(GOLANGCI_LINT) $(HUGO) $(PROTOC_GEN_DOC) ## Install the pinned development tools into bin/
+tools: $(BUF) $(OAPI_CODEGEN) $(ADDLICENSE) $(GOLANGCI_LINT) $(HUGO) $(PROTOC_GEN_DOC) $(GOVULNCHECK) $(ACTIONLINT) ## Install the pinned development tools into bin/
 
 ##@ Deployment
 
