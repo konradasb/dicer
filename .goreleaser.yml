@@ -177,21 +177,10 @@ checksum:
   name_template: "checksums.txt"
   algorithm: sha256
 
+# The release notes are written by hand, with Claude Code's /release-notes,
+# into the draft this makes; see RELEASES.md. The draft's body starts empty.
 changelog:
-  sort: asc
-  use: github
-  abbrev: 0
-  filters:
-    exclude:
-      - "chore:.*"
-      - "docs:.*"
-  groups:
-    - title: New Features
-      regexp: "^feat:.*"
-      order: 0
-    - title: Bug Fixes
-      regexp: "^fix:.*"
-      order: 1
+  disable: true
 
 release:
   github:
@@ -199,9 +188,3 @@ release:
     name: dicer
   draft: true
   replace_existing_draft: true
-  footer: |
-    {{- if .PreviousTag }}
-    **Full Changelog**: https://github.com/konradasb/dicer/compare/{{ .PreviousTag }}...{{ .Tag }}
-    {{- end }}
-
-    Thanks for using Dicer! If you have any questions or feedback, please let us know by opening an issue [here](https://github.com/konradasb/dicer/issues)

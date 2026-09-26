@@ -45,18 +45,30 @@ Releasing takes a maintainer, and `main` passing CI.
    The [release workflow](.github/workflows/release.yaml) builds a draft
    release with GoReleaser: `dicer` for Linux and macOS, `dicerd` for Linux,
    on amd64 and arm64, the `dicer` deb and rpm packages, with checksums
-   signed by cosign, SBOMs, and release notes from the PR titles.
+   signed by cosign, and SBOMs. Its notes are left empty.
 
-3. **Review the draft and publish it.** Check the release notes, and write up
-   any breaking change and what to do about it. For a pre-release, tick
-   *Set as a pre-release*.
+3. **Write the release notes.** In Claude Code, in this repository:
+
+   ```text
+   /release-notes v0.2.0
+   ```
+
+   The [skill](.claude/skills/release-notes/SKILL.md) reads the commits and
+   pull requests since the last release, writes the notes as its
+   [template](.claude/skills/release-notes/template.md) lays them out, and
+   shows them to you; once you approve them, it puts them in the draft.
+   Breaking changes come first, each with what to do about it. Running the
+   release workflow again replaces the draft, notes and all.
+
+4. **Review the draft and publish it.** Check the notes as GitHub shows
+   them. For a pre-release, tick *Set as a pre-release*.
 
    Publishing a release, not a pre-release, runs the
    [packages workflow](.github/workflows/packages.yaml), which adds its
    packages to the apt and dnf repository; [build](build/README.md) covers
    how, and setting it up. Check it succeeds.
 
-4. **Publish its documentation.** Add the release to `docs/versions`, below
+5. **Publish its documentation.** Add the release to `docs/versions`, below
    `dev`, in a pull request:
 
    ```text
