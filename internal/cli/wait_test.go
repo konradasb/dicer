@@ -36,7 +36,7 @@ func TestWaitOnAStoppedInstance(t *testing.T) {
 // A running instance is waited on, and the stop is noticed as it is
 // reported rather than by asking again and again.
 func TestWaitWaitsForARunningInstance(t *testing.T) {
-	d := newFakeInstanceDaemon(&dicerdv1.Instance{Name: "job", ImageRef: "alpine:3.21", State: stateRunning})
+	d := newFakeInstanceDaemon(&dicerdv1.Instance{Id: "id-job", Name: "job", ImageRef: "alpine:3.21", State: stateRunning})
 	serveInstanceDaemon(t, d)
 
 	done := make(chan string, 1)
@@ -64,7 +64,7 @@ func TestWaitWaitsForARunningInstance(t *testing.T) {
 // for its status afterwards, so the status its last event reported is the
 // answer.
 func TestWaitOnAnInstanceRemovedWhenItStopped(t *testing.T) {
-	d := newFakeInstanceDaemon(&dicerdv1.Instance{Name: "job", ImageRef: "alpine:3.21", State: stateRunning})
+	d := newFakeInstanceDaemon(&dicerdv1.Instance{Id: "id-job", Name: "job", ImageRef: "alpine:3.21", State: stateRunning})
 	serveInstanceDaemon(t, d)
 
 	done := make(chan string, 1)
