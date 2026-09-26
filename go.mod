@@ -9,7 +9,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/cyphar/filepath-securejoin v0.5.0
 	github.com/distribution/reference v0.6.0
-	github.com/docker/docker-credential-helpers v0.9.3
+	github.com/docker/docker-credential-helpers v0.9.9
 	github.com/docker/go-units v0.5.0
 	github.com/florianl/go-tc v0.4.7
 	github.com/google/go-containerregistry v0.20.7
