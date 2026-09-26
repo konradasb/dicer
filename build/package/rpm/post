@@ -1,0 +1,29 @@
+#!/bin/sh
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+# The dicer package's %post: $1 is 1 on an install, 2 on an upgrade. As RPM
+# distributions expect, an install leaves enabling the daemon to the
+# system's presets, and starts nothing; an upgrade restarts it if it runs,
+# which leaves guests running, as the daemon that starts takes them over.
+
+# Members of the dicer group can use the daemon's socket without sudo.
+if ! getent group dicer >/dev/null; then
+  groupadd --system dicer
+fi
+
+# Not in a container, which may not set it.
+sysctl -q -p /usr/lib/sysctl.d/60-dicer.conf 2>/dev/null || true
+
+# Only where systemd runs, as it may not when building an image.
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload || true
+  if [ "$1" -eq 1 ]; then
+    systemctl preset dicerd.service || true
+  else
+    systemctl try-restart dicerd.service ||
+      echo "dicerd did not restart: see journalctl -u dicerd" >&2
+  fi
+fi
+
+exit 0

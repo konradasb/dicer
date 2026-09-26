@@ -20,5 +20,6 @@ go.work.sum
 /docs/resources/
 /docs/.hugo_build.lock
 
-# GoReleaser output
+# GoReleaser output, and the completions it packages (make completions).
 /dist/
+/completions/

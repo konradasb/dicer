@@ -44,12 +44,17 @@ Releasing takes a maintainer, and `main` passing CI.
 
    The [release workflow](.github/workflows/release.yaml) builds a draft
    release with GoReleaser: `dicer` for Linux and macOS, `dicerd` for Linux,
-   on amd64 and arm64, with checksums signed by cosign, SBOMs, and release
-   notes from the PR titles.
+   on amd64 and arm64, the `dicer` deb and rpm packages, with checksums
+   signed by cosign, SBOMs, and release notes from the PR titles.
 
 3. **Review the draft and publish it.** Check the release notes, and write up
    any breaking change and what to do about it. For a pre-release, tick
    *Set as a pre-release*.
+
+   Publishing a release, not a pre-release, runs the
+   [packages workflow](.github/workflows/packages.yaml), which adds its
+   packages to the apt and dnf repository; [build](build/README.md) covers
+   how, and setting it up. Check it succeeds.
 
 4. **Publish its documentation.** Add the release to `docs/versions`, below
    `dev`, in a pull request:

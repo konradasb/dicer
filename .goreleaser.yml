@@ -11,6 +11,8 @@ before:
     # Builds the guest binaries and downloads the hypervisor binaries
     # for every architecture; each dicerd build embeds only its own.
     - make release-prep
+    # The shell completions the package installs.
+    - make completions
 
 builds:
   - id: dicer
@@ -66,6 +68,91 @@ archives:
     files:
       - LICENSE
       - README.md
+
+# The Linux package, published to the apt and dnf repository at pkg.dicer.sh
+# by .github/workflows/packages.yaml: the daemon and its service, with the
+# command line beside it, as install.sh sets a host up. build/package holds
+# what it installs besides the binaries. The command line alone, for a
+# machine that only talks to a remote daemon, comes from the archives.
+#
+# RPMs are signed when GPG_KEY_FILE names the repository's key, as it does in
+# the release workflow, as dnf checks each package's signature. apt checks
+# only the repository's, which the packages workflow signs.
+nfpms:
+  - id: dicer
+    package_name: dicer
+    ids:
+      - dicer
+      - dicerd
+    formats:
+      - deb
+      - rpm
+    vendor: Dicer Authors
+    homepage: https://dicer.sh
+    maintainer: Dicer Authors <maintainers@dicer.sh>
+    license: MIT
+    description: |-
+      Run virtual machines from container images, on one host
+      Dicer pulls an OCI image, converts it to a read-only root filesystem and
+      boots it as a VM under Cloud Hypervisor or Firecracker, which this
+      package carries. It is the daemon, dicerd, as a systemd service, and the
+      dicer command line. It needs KVM.
+    section: admin
+    bindir: /usr/bin
+    file_name_template: "{{ .ConventionalFileName }}"
+    dependencies:
+      - erofs-utils
+      - e2fsprogs
+      - iptables
+    contents:
+      - src: build/package/dicerd.service
+        dst: /usr/lib/systemd/system/dicerd.service
+      - src: build/package/config.yaml
+        dst: /etc/dicerd/config.yaml
+        type: config|noreplace
+        file_info:
+          mode: 0640
+      - src: build/package/sysctl.conf
+        dst: /usr/lib/sysctl.d/60-dicer.conf
+      - src: build/package/sysusers.conf
+        dst: /usr/lib/sysusers.d/dicer.conf
+      - src: completions/dicer.bash
+        dst: /usr/share/bash-completion/completions/dicer
+      - src: completions/dicer.fish
+        dst: /usr/share/fish/vendor_completions.d/dicer.fish
+      # Each family's zsh looks in its own directory.
+      - src: completions/_dicer
+        dst: /usr/share/zsh/vendor-completions/_dicer
+        packager: deb
+      - src: completions/_dicer
+        dst: /usr/share/zsh/site-functions/_dicer
+        packager: rpm
+      - src: LICENSE
+        dst: /usr/share/doc/dicer/copyright
+        packager: deb
+      - src: LICENSE
+        dst: /usr/share/licenses/dicer/LICENSE
+        packager: rpm
+    rpm:
+      signature:
+        key_file: '{{ if index .Env "GPG_KEY_FILE" }}{{ .Env.GPG_KEY_FILE }}{{ end }}'
+    overrides:
+      deb:
+        scripts:
+          postinstall: build/package/deb/postinst
+          preremove: build/package/deb/prerm
+          postremove: build/package/deb/postrm
+      rpm:
+        # iptables alone brings Fedora's and EPEL's legacy backend, as dnf
+        # prefers it, beside firewalld's nftables. Recommending iptables-nft
+        # gets the backend they default to instead, without replacing a
+        # legacy one already chosen. openSUSE's iptables keeps its own default.
+        recommends:
+          - iptables-nft
+        scripts:
+          postinstall: build/package/rpm/post
+          preremove: build/package/rpm/preun
+          postremove: build/package/rpm/postun
 
 # Generate SBOMs for every archive and the source tarball using syft
 sboms:

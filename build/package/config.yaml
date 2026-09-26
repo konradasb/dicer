@@ -1,0 +1,18 @@
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+# The dicerd configuration. Every setting is described at
+# https://dicer.sh/docs/reference/configuration/
+#
+# Check a change with `sudo dicerd validate`, then apply it with
+# `sudo systemctl restart dicerd`. An upgrade keeps this file as it is.
+
+data_dir: /var/lib/dicer
+run_dir: /run/dicer
+api:
+  socket:
+    path: /run/dicer/dicer.sock
+    mode: 0660
+    group: dicer
+
+log_level: info

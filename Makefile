@@ -34,6 +34,7 @@ HUGO_VERSION          := v0.166.0
 PROTOC_GEN_DOC_VERSION := v1.5.1
 GOVULNCHECK_VERSION   := v1.8.0
 ACTIONLINT_VERSION    := v1.7.12
+GORELEASER_VERSION    := v2.12.3
 # zizmor is not a Go tool; it runs through pipx, which fetches it on first use.
 ZIZMOR_VERSION        := 1.30.1
 
@@ -45,6 +46,7 @@ HUGO          := $(BIN_DIR)/hugo-$(HUGO_VERSION)
 PROTOC_GEN_DOC := $(BIN_DIR)/protoc-gen-doc-$(PROTOC_GEN_DOC_VERSION)
 GOVULNCHECK   := $(BIN_DIR)/govulncheck-$(GOVULNCHECK_VERSION)
 ACTIONLINT    := $(BIN_DIR)/actionlint-$(ACTIONLINT_VERSION)
+GORELEASER    := $(BIN_DIR)/goreleaser-$(GORELEASER_VERSION)
 
 # Embedded binaries. Each dicerd embeds only its own architecture's; see
 # internal/initrd/embed.go and internal/hypervisor/cloudhypervisor/embed.go.
@@ -64,7 +66,7 @@ FC_VERSIONS       := v1.17.0
 FC_MACHINE_amd64  := x86_64
 FC_MACHINE_arm64  := aarch64
 
-LICENSE_IGNORE := -ignore 'bin/**' -ignore '**/bin/**' -ignore 'specs/**' -ignore 'docs/public/**' -ignore 'docs/resources/**' -ignore 'docs/site/**'
+LICENSE_IGNORE := -ignore 'bin/**' -ignore '**/bin/**' -ignore 'specs/**' -ignore 'docs/public/**' -ignore 'docs/resources/**' -ignore 'docs/site/**' -ignore 'dist/**' -ignore 'completions/**'
 
 ##@ Building
 
@@ -119,6 +121,25 @@ $(foreach a,$(ARCHES),$(foreach v,$(FC_VERSIONS),$(eval $(call fc_download,$(a),
 
 .PHONY: release-prep
 release-prep: embedded-all hypervisor-binaries-all ## Prepare every architecture's embedded binaries (run by GoReleaser)
+
+COMPLETIONS_DIR := completions
+
+.PHONY: completions
+completions: ## Generate dicer's shell completions into completions/ (run by GoReleaser)
+	@mkdir -p $(COMPLETIONS_DIR)
+	go run ./cmd/dicer completion bash > $(COMPLETIONS_DIR)/dicer.bash
+	go run ./cmd/dicer completion zsh > $(COMPLETIONS_DIR)/_dicer
+	go run ./cmd/dicer completion fish > $(COMPLETIONS_DIR)/dicer.fish
+
+# The deb and rpm packages of every architecture, as a release builds them,
+# into dist/, unsigned. build/package holds what they install.
+.PHONY: packages
+packages: $(GORELEASER) ## Build the Linux packages into dist/, as a release does
+	$(GORELEASER) release --snapshot --clean --skip=sign,sbom,archive
+
+.PHONY: test-packages
+test-packages: packages ## Install the packages from a test repository on each distribution, in docker
+	build/test-packages.sh dist
 
 ##@ Testing
 
@@ -259,11 +280,15 @@ $(ACTIONLINT): | $(BIN_DIR)
 	GOTOOLCHAIN=$(GO_TOOLCHAIN)+auto GOBIN=$(BIN_DIR) go install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 	mv $(BIN_DIR)/actionlint $@
 
+$(GORELEASER): | $(BIN_DIR)
+	GOTOOLCHAIN=$(GO_TOOLCHAIN)+auto GOBIN=$(BIN_DIR) go install github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)
+	mv $(BIN_DIR)/goreleaser $@
+
 $(BIN_DIR):
 	mkdir -p $@
 
 .PHONY: tools
-tools: $(BUF) $(OAPI_CODEGEN) $(ADDLICENSE) $(GOLANGCI_LINT) $(HUGO) $(PROTOC_GEN_DOC) $(GOVULNCHECK) $(ACTIONLINT) ## Install the pinned development tools into bin/
+tools: $(BUF) $(OAPI_CODEGEN) $(ADDLICENSE) $(GOLANGCI_LINT) $(HUGO) $(PROTOC_GEN_DOC) $(GOVULNCHECK) $(ACTIONLINT) $(GORELEASER) ## Install the pinned development tools into bin/
 
 ##@ Deployment
 
@@ -294,7 +319,7 @@ deploy: ## Build dicer and dicerd for Linux and install them on DEPLOY_HOST, res
 
 .PHONY: clean
 clean: ## Remove build output and downloaded binaries
-	rm -rf $(BIN_DIR) $(GUEST_BIN) $(CH_BIN) $(FC_BIN)
+	rm -rf $(BIN_DIR) $(GUEST_BIN) $(CH_BIN) $(FC_BIN) $(COMPLETIONS_DIR)
 
 .PHONY: help
 help: ## Show this help

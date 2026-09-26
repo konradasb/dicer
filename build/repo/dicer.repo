@@ -1,0 +1,15 @@
+# Copyright 2026 Dicer Authors
+# SPDX-License-Identifier: MIT
+
+# The Dicer repository, for dnf and zypper:
+#
+#   sudo curl -fsSL -o /etc/yum.repos.d/dicer.repo https://pkg.dicer.sh/rpm/dicer.repo
+#   sudo zypper addrepo https://pkg.dicer.sh/rpm/dicer.repo
+
+[dicer]
+name=Dicer
+baseurl=https://pkg.dicer.sh/rpm
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://pkg.dicer.sh/gpg.key
