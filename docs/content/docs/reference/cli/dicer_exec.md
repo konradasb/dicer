@@ -4,10 +4,6 @@ title: "dicer exec"
 description: "Run a command inside a running instance"
 ---
 
-Run a command inside a running instance
-
-### Synopsis
-
 Runs a command inside a running instance, /bin/sh if none is given.
 
 A pseudo-TTY is allocated when this terminal is on both ends -- stdin and
@@ -15,38 +11,34 @@ stdout -- so a shell is interactive, and output piped elsewhere is not
 mangled by one. -t and -T force it on or off. Flags go before the name:
 everything after it is the command's.
 
-```
-dicer exec [flags] NAME [COMMAND [ARG...]]
-```
+## Usage
 
-### Examples
-
-```
-  dicer exec web
-  dicer exec web ls -la /srv
-  dicer exec -e DEBUG=1 -w /srv web ./check.sh
-  dicer exec -T web cat /var/log/app.log > app.log
+```console
+$ dicer exec [flags] NAME [COMMAND [ARG...]]
 ```
 
-### Options
+## Examples
 
-```
-  -t, --tty               Allocate a pseudo-TTY (default: when stdin and stdout are a terminal)
-  -T, --no-tty            Do not allocate a pseudo-TTY
-  -e, --env stringArray   Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable)
-  -w, --workdir string    Working directory inside the instance
-      --timeout int32     Kill the command after this many seconds (0: no limit)
-  -h, --help              help for exec
+```console
+$ dicer exec web
+$ dicer exec web ls -la /srv
+$ dicer exec -e DEBUG=1 -w /srv web ./check.sh
+$ dicer exec -T web cat /var/log/app.log > app.log
 ```
 
-### Options inherited from parent commands
+## Flags
 
-```
-  -D, --debug           Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string   Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-```
+| Flag | Description |
+|---|---|
+| `-e`, `--env stringArray` | Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable). |
+| `-T`, `--no-tty` | Do not allocate a pseudo-TTY. |
+| `--timeout int32` | Kill the command after this many seconds (0: no limit). |
+| `-t`, `--tty` | Allocate a pseudo-TTY (default: when stdin and stdout are a terminal). |
+| `-w`, `--workdir string` | Working directory inside the instance. |
 
-### SEE ALSO
+## Global flags
 
-* [dicer]({{< relref "/docs/reference/cli" >}})	 - Run virtual machines from container images
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |

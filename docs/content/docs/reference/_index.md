@@ -9,7 +9,8 @@ cascade:
         open: true
 ---
 
-Everything there is to look up. The command line, the API and the
-configuration are generated from the code, so they cannot drift from it.
+Everything there is to look up. The command line, the API, the
+configuration, the compose file and the metrics are generated from the code, so they cannot
+drift from it.
 
 {{< section-cards >}}

@@ -4,32 +4,30 @@ title: "dicer network create"
 description: "Create a network"
 ---
 
-Create a network
+Create a network.
 
-```
-dicer network create NAME [flags]
-```
+## Usage
 
-### Options
-
-```
-      --gateway string        Gateway address (default: the first address in the subnet)
-  -h, --help                  help for create
-      --isolated              Stop instances on the network reaching each other
-      --mtu int32             MTU (default: the daemon's)
-      --nameservers strings   DNS servers for guests, comma-separated (default: the daemon's)
-      --subnet string         Subnet in CIDR notation, e.g. 172.20.0.0/16 (required)
+```console
+$ dicer network create NAME [flags]
 ```
 
-### Options inherited from parent commands
+Also run as `dicer network new`.
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+## Flags
 
-### SEE ALSO
+| Flag | Description |
+|---|---|
+| `--gateway string` | Gateway address (default: the first address in the subnet). |
+| `--isolated` | Stop instances on the network reaching each other. |
+| `--mtu int32` | MTU (default: the daemon's). |
+| `--nameservers strings` | DNS servers for guests, comma-separated (default: the daemon's). |
+| `--subnet string` | Subnet in CIDR notation, e.g. 172.20.0.0/16 (required). |
 
-* [dicer network]({{< relref "/docs/reference/cli/dicer_network" >}})	 - Manage networks
+## Global flags
 
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

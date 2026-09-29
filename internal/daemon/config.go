@@ -44,40 +44,78 @@ const (
 	defaultGCInterval = time.Hour
 )
 
-// Config is the daemon configuration. The configuration reference in the
-// documentation, docs/content/docs/reference/configuration.md, shows every key.
+// Config is the daemon configuration. Every field's doc comment is its entry
+// in the configuration reference, which make docs-gen generates from them:
+// write them for someone configuring the daemon.
 type Config struct {
-	// DataDir holds definitions, images and disks. Persistent.
+	// DataDir is where the daemon keeps what persists: the definitions of
+	// instances, networks, volumes and kernels, the images, and the
+	// instances' disks. Unset is /var/lib/dicer.
 	DataDir string `yaml:"data_dir,omitempty"`
 
-	// RunDir holds runtime state. Expected to be a tmpfs.
+	// RunDir is where the daemon keeps runtime state: sockets, config disks
+	// and the record of what is running. It should be a tmpfs, so that a
+	// reboot clears it. Unset is /run/dicer.
 	RunDir string `yaml:"run_dir,omitempty"`
 
-	API       APIConfig       `yaml:"api"`
-	Resources ResourcesConfig `yaml:"resources"`
-	Network   NetworkConfig   `yaml:"network"`
-	Defaults  DefaultsConfig  `yaml:"defaults"`
-	Metrics   MetricsConfig   `yaml:"metrics"`
-	Images    ImagesConfig    `yaml:"images"`
-	Events    EventsConfig    `yaml:"events"`
+	// API is where the API is served: always on a Unix socket, and on TCP
+	// too if api.tcp.listen is set.
+	API APIConfig `yaml:"api"`
 
-	// Registries holds credentials for private registries, by host. Images
-	// from any other registry are pulled anonymously.
+	// Resources is how much CPU and memory instances may be given, all
+	// together: the host's CPUs times cpu_overcommit, and its memory less
+	// reserved_memory_bytes times memory_overcommit. A start that would take
+	// more is refused.
+	Resources ResourcesConfig `yaml:"resources"`
+
+	// Network is the host's networking.
+	Network NetworkConfig `yaml:"network"`
+
+	// Defaults is what an instance gets when its definition leaves something
+	// out.
+	Defaults DefaultsConfig `yaml:"defaults"`
+
+	// Metrics is the Prometheus endpoint, served at `/metrics` without
+	// authentication. Metrics are always recorded: this decides only whether
+	// they are served.
+	Metrics MetricsConfig `yaml:"metrics"`
+
+	// Images is image garbage collection, which removes only images no
+	// instance, running guest or snapshot uses. It is off while
+	// gc_max_unused_age and gc_max_size are both unset.
+	Images ImagesConfig `yaml:"images"`
+
+	// Events bounds the events log that dicer events shows.
+	Events EventsConfig `yaml:"events"`
+
+	// Registries are the credentials for private registries, by host as an
+	// image's name gives it: docker.io, ghcr.io, or a registry's host:port.
+	// Images from any other registry are pulled anonymously.
+	//
+	//	registries:
+	//	  ghcr.io:
+	//	    username: dicer-bot
+	//	    password_file: /etc/dicerd/secrets/ghcr-token
 	Registries map[string]RegistryConfig `yaml:"registries,omitempty"`
 
-	// LogLevel is debug, info, warn or error.
+	// LogLevel is debug, info, warn or error. Unset is info.
 	LogLevel string `yaml:"log_level,omitempty"`
 }
 
 // RegistryConfig is how the daemon logs in to one registry: with a username
 // and a password, given or read from a file, or through a credential helper.
 type RegistryConfig struct {
-	Username     string `yaml:"username,omitempty"`
+	// Username is the user to log in as.
+	Username string `yaml:"username,omitempty"`
+
+	// Password is the password or token to log in with, and PasswordFile a
+	// file holding it, readable only by root. Give one or the other.
 	Password     string `yaml:"password,omitempty"`
 	PasswordFile string `yaml:"password_file,omitempty"`
 
-	// CredentialHelper names a docker-credential-<name> program on the
-	// daemon's PATH, such as ecr-login.
+	// CredentialHelper names a `docker-credential-<name>` program on the
+	// daemon's PATH, such as ecr-login, that gives the credentials instead of
+	// username and password: for a registry whose tokens expire.
 	CredentialHelper string `yaml:"credential_helper,omitempty"`
 }
 
@@ -130,18 +168,28 @@ func (r RegistryConfig) auth() registry.Auth {
 // APIConfig controls where the API is served: always on a Unix socket, and
 // on TCP if Listen is set.
 type APIConfig struct {
+	// Socket is the local Unix socket. Anyone who can open it has full
+	// control of the daemon.
 	Socket SocketConfig `yaml:"socket"`
-	TCP    TCPConfig    `yaml:"tcp"`
+
+	// TCP is the network listener. Without tls it is unauthenticated and
+	// unencrypted: anyone who can reach it has root-equivalent access to
+	// this host.
+	TCP TCPConfig `yaml:"tcp"`
 }
 
 // SocketConfig controls the API socket. Access is controlled by its file
 // permissions.
 type SocketConfig struct {
+	// Path is the socket's path. Unset is /run/dicer/dicer.sock.
 	Path string `yaml:"path,omitempty"`
+
+	// Mode is the socket's permission bits. Unset is 0660.
 	Mode uint32 `yaml:"mode,omitempty"`
 
-	// Group is the group the socket belongs to, by name or ID, whose members
-	// have the access Mode gives the group. Empty leaves it root's.
+	// Group is the group the socket belongs to, by name or ID. Its members
+	// can use the API as far as mode lets the group, which is as much as root
+	// on this host. Unset leaves the socket root's alone.
 	Group string `yaml:"group,omitempty"`
 }
 
@@ -168,21 +216,29 @@ func (s SocketConfig) gid() (int, error) {
 // TCPConfig controls the network listener. Without TLS it is
 // unauthenticated and unencrypted.
 type TCPConfig struct {
-	// Listen is the host:port to serve on. Empty disables the listener.
+	// Listen is the host:port to serve on, such as 0.0.0.0:7443. Unset
+	// serves no listener.
 	Listen string `yaml:"listen,omitempty"`
 
+	// TLS is the listener's TLS.
 	TLS TLSConfig `yaml:"tls"`
 }
 
 // TLSConfig configures TLS on the network listener. The certificate and key
 // are reloaded when they change on disk; the client CA is read at startup.
 type TLSConfig struct {
-	// CertFile and KeyFile are the daemon's PEM certificate and key.
+	// CertFile is the daemon's PEM certificate, which must name the address
+	// clients connect to. It is reloaded when it changes on disk.
 	CertFile string `yaml:"cert_file,omitempty"`
-	KeyFile  string `yaml:"key_file,omitempty"`
+
+	// KeyFile is the PEM private key for CertFile. It is reloaded when it
+	// changes on disk.
+	KeyFile string `yaml:"key_file,omitempty"`
 
 	// ClientCAFile holds the PEM authorities client certificates must be
-	// issued by. Empty accepts every client.
+	// issued by. Set, every client must present a valid certificate; unset,
+	// any client is accepted. Use a CA dedicated to Dicer's clients. It is
+	// read at startup.
 	ClientCAFile string `yaml:"client_ca_file,omitempty"`
 }
 
@@ -222,9 +278,17 @@ func (t TCPConfig) Enabled() bool {
 // CPUs × CPUOvercommit, and (host memory − ReservedMemoryBytes) ×
 // MemoryOvercommit. A start that would exceed either is refused.
 type ResourcesConfig struct {
-	CPUOvercommit       float64 `yaml:"cpu_overcommit,omitempty"`
-	MemoryOvercommit    float64 `yaml:"memory_overcommit,omitempty"`
-	ReservedMemoryBytes int64   `yaml:"reserved_memory_bytes,omitempty"`
+	// CPUOvercommit is how many vCPUs instances may be given per host CPU.
+	// Unset is 4.
+	CPUOvercommit float64 `yaml:"cpu_overcommit,omitempty"`
+
+	// MemoryOvercommit multiplies the memory available to instances: 1 never
+	// promises more memory than the host has. Unset is 1.
+	MemoryOvercommit float64 `yaml:"memory_overcommit,omitempty"`
+
+	// ReservedMemoryBytes is the memory, in bytes, kept back for the host and
+	// the hypervisors' overhead. Unset is 1073741824, 1 GiB.
+	ReservedMemoryBytes int64 `yaml:"reserved_memory_bytes,omitempty"`
 }
 
 // validate reports whether the resource settings are usable.
@@ -261,23 +325,32 @@ func (r *ResourcesConfig) capacity(cpus int, memoryBytes int64) (types.Capacity,
 
 // NetworkConfig controls host networking.
 type NetworkConfig struct {
-	// UplinkInterface is the interface NAT traffic leaves by. Empty detects
+	// UplinkInterface is the interface NAT traffic leaves by. Unset detects
 	// it from the default route.
 	UplinkInterface string `yaml:"uplink_interface,omitempty"`
 
-	// UplinkCapacityBps caps per-instance bandwidth shaping.
+	// UplinkCapacityBps is the uplink's capacity in bits per second, the
+	// ceiling for per-instance bandwidth shaping. Unset sets no ceiling.
 	UplinkCapacityBps int64 `yaml:"uplink_capacity_bps,omitempty"`
 
-	// UploadBurstMultiplier and DownloadBurstMultiplier scale an instance's
-	// rate limit into its burst allowance.
-	UploadBurstMultiplier   int `yaml:"upload_burst_multiplier,omitempty"`
+	// UploadBurstMultiplier is how far an instance may briefly exceed its
+	// upload rate limit, as a multiple of it. Unset is 4.
+	UploadBurstMultiplier int `yaml:"upload_burst_multiplier,omitempty"`
+
+	// DownloadBurstMultiplier is how far an instance may briefly exceed its
+	// download rate limit, as a multiple of it. Unset is 4.
 	DownloadBurstMultiplier int `yaml:"download_burst_multiplier,omitempty"`
 }
 
 // DefaultsConfig names the kernel and network an instance gets when it names
 // none. Unset, an instance gets the only one there is.
 type DefaultsConfig struct {
-	Kernel  string `yaml:"kernel,omitempty"`
+	// Kernel is the kernel an instance boots when it names none. Unset is
+	// the only kernel, if there is exactly one.
+	Kernel string `yaml:"kernel,omitempty"`
+
+	// Network is the network an instance is attached to when it names none.
+	// Unset is the only network, if there is exactly one.
 	Network string `yaml:"network,omitempty"`
 }
 
@@ -299,7 +372,11 @@ func (d *DefaultsConfig) validate() error {
 // MetricsConfig controls the unauthenticated Prometheus endpoint. Metrics
 // are always recorded; this only decides whether they are served.
 type MetricsConfig struct {
-	Enable bool   `yaml:"enable,omitempty"`
+	// Enable serves the endpoint.
+	Enable bool `yaml:"enable,omitempty"`
+
+	// Listen is the host:port the endpoint is served on. Unset is
+	// 127.0.0.1:9101.
 	Listen string `yaml:"listen,omitempty"`
 }
 
@@ -307,9 +384,16 @@ type MetricsConfig struct {
 // images older than GCMaxUnusedAge, and the least recently used while the
 // store exceeds GCMaxSize. Zero limits disable it.
 type ImagesConfig struct {
+	// GCMaxUnusedAge removes images unused for longer than this, such as
+	// 168h. Unset is no limit.
 	GCMaxUnusedAge time.Duration `yaml:"gc_max_unused_age,omitempty"`
-	GCMaxSize      byteSize      `yaml:"gc_max_size,omitempty"`
-	GCInterval     time.Duration `yaml:"gc_interval,omitempty"`
+
+	// GCMaxSize removes the least recently used images while the store is
+	// larger than this, such as 50GiB. Unset is no limit.
+	GCMaxSize byteSize `yaml:"gc_max_size,omitempty"`
+
+	// GCInterval is how often garbage collection runs. Unset is 1h.
+	GCInterval time.Duration `yaml:"gc_interval,omitempty"`
 }
 
 func (i *ImagesConfig) validate() error {
@@ -350,8 +434,12 @@ func (b *byteSize) UnmarshalYAML(value *yaml.Node) error {
 
 // EventsConfig bounds the events log. A zero MaxAge means no age limit.
 type EventsConfig struct {
-	MaxCount int           `yaml:"max_count,omitempty"`
-	MaxAge   time.Duration `yaml:"max_age,omitempty"`
+	// MaxCount is how many of the most recent events are kept. Unset is
+	// 10000.
+	MaxCount int `yaml:"max_count,omitempty"`
+
+	// MaxAge drops events older than this, such as 720h. Unset is no limit.
+	MaxAge time.Duration `yaml:"max_age,omitempty"`
 }
 
 func (e *EventsConfig) validate() error {

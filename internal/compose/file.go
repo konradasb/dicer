@@ -19,84 +19,254 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// rawFile is a whole compose file.
+// rawFile is a whole compose file. Every field's doc comment is its entry in
+// the compose file reference, which make docs-gen generates from them: write
+// them for someone writing a compose file.
 type rawFile struct {
-	// Version is Docker's obsolete version key, accepted and ignored.
-	Version  string                 `yaml:"version"`
-	Name     string                 `yaml:"name"`
+	// Name is the project's name. `-p` or `$DICER_COMPOSE_PROJECT_NAME`
+	// overrides it. Unset is the file's directory's name, in lower case.
+	Name string `yaml:"name"`
+
+	// Version is accepted and ignored: it is Docker Compose's, and obsolete.
+	Version string `yaml:"version"`
+
+	// Services are the project's services, by name. Each is one instance.
+	// Required.
 	Services map[string]*rawService `yaml:"services"`
+
+	// Networks are the networks the services join, by name.
 	Networks map[string]*rawNetwork `yaml:"networks"`
-	Volumes  map[string]*rawVolume  `yaml:"volumes"`
+
+	// Volumes are the volumes the services mount, by name. A volume may be
+	// declared with nothing:
+	//
+	//	volumes:
+	//	  data:
+	Volumes map[string]*rawVolume `yaml:"volumes"`
 }
 
 // rawService is one entry under services.
 type rawService struct {
-	Image         string          `yaml:"image"`
-	ContainerName string          `yaml:"container_name"`
-	Hostname      string          `yaml:"hostname"`
-	Command       *shellCommand   `yaml:"command"`
-	Entrypoint    *shellCommand   `yaml:"entrypoint"`
-	Environment   keyValues       `yaml:"environment"`
-	EnvFile       stringList      `yaml:"env_file"`
-	Labels        keyValues       `yaml:"labels"`
-	Ports         []rawPort       `yaml:"ports"`
-	Volumes       []rawMount      `yaml:"volumes"`
-	Tmpfs         stringList      `yaml:"tmpfs"`
-	Networks      serviceNetworks `yaml:"networks"`
-	DependsOn     dependsOn       `yaml:"depends_on"`
-	Restart       string          `yaml:"restart"`
-	Healthcheck   *rawHealthcheck `yaml:"healthcheck"`
-	CPUs          *float64        `yaml:"cpus"`
-	VCPUs         *int32          `yaml:"vcpus"`
-	MemLimit      *byteSize       `yaml:"mem_limit"`
-	Memory        *byteSize       `yaml:"memory"`
-	Disk          *byteSize       `yaml:"disk"`
-	Kernel        string          `yaml:"kernel"`
-	KernelArgs    string          `yaml:"kernel_args"`
-	Hypervisor    string          `yaml:"hypervisor"`
-	HypervisorVer string          `yaml:"hypervisor_version"`
-	InitMode      string          `yaml:"init_mode"`
+	// Image is the image to boot. Required.
+	Image string `yaml:"image"`
+
+	// ContainerName is the instance's name, instead of `PROJECT-SERVICE`.
+	// Changing it replaces the instance at the next `dicer compose up`.
+	ContainerName string `yaml:"container_name"`
+
+	// Hostname is the guest's hostname. Unset is the instance's name.
+	Hostname string `yaml:"hostname"`
+
+	// Command is the command to run: a list, or a string split as a shell
+	// would split it. It replaces the image's ENTRYPOINT and CMD, as the
+	// command given to dicer run does.
+	Command *shellCommand `yaml:"command"`
+
+	// Entrypoint is put before `command`, and together they replace the
+	// image's ENTRYPOINT and CMD.
+	Entrypoint *shellCommand `yaml:"entrypoint"`
+
+	// Environment is the variables the command runs with. A `KEY` with no
+	// value takes this shell's, and is left out if it has none.
+	Environment keyValues `yaml:"environment"`
+
+	// EnvFile is files of `KEY=VALUE` lines, read in order, relative to the
+	// project directory. `environment` wins over them.
+	EnvFile stringList `yaml:"env_file"`
+
+	// Labels are the instance's labels. Those starting `dicer.compose.` are
+	// `dicer compose`'s own.
+	Labels keyValues `yaml:"labels"`
+
+	// Ports are the ports to publish on the host, each as
+	// `[HOST_IP:]HOST_PORT:GUEST_PORT[/tcp|udp]`, as `dicer run -p` takes it,
+	// or as a mapping. An IPv6 host address goes in brackets:
+	// `[::1]:8080:80`. A port must be published on a port of the host: `"80"`
+	// alone is refused, as are ranges.
+	Ports []rawPort `yaml:"ports"`
+
+	// Volumes are the volumes and host files to mount, each as
+	// `SOURCE:TARGET[:ro]` or as a mapping. A `SOURCE` that is a name is a
+	// volume, which must be declared under the file's `volumes`. One starting
+	// `/`, `.` or `~` is a host file, relative to the project directory: it must
+	// be a file, not a directory, and is copied into the guest each time
+	// the instance starts, as with `dicer run --mount type=file`. With a remote
+	// daemon, the path is on the daemon's host. A `TARGET` alone, an anonymous
+	// volume, is refused: name the volume.
+	Volumes []rawMount `yaml:"volumes"`
+
+	// Tmpfs is the paths to mount an empty tmpfs at. A tmpfs takes no
+	// options.
+	Tmpfs stringList `yaml:"tmpfs"`
+
+	// Networks is the network the instance joins: a list of one name, or a
+	// mapping of one name to its settings, which can give the instance a
+	// fixed address. Unset is the file's network called `default`, if it
+	// declares one, and otherwise the daemon's default network. Services
+	// have no DNS names: another service reaches one by its address.
+	//
+	//	networks:
+	//	  backend:
+	//	    ipv4_address: 172.30.0.10
+	Networks serviceNetworks `yaml:"networks"`
+
+	// DependsOn is the services to start first: a list of them, or a mapping
+	// of them to the condition to wait for. `service_started`, the default,
+	// waits until the service is running; `service_healthy` until it is
+	// healthy, for which it must have a health check, of its own or its
+	// image's; and `service_completed_successfully` until it has ended with
+	// exit code 0. A service is not started if one it depends on fails to
+	// come up, is unhealthy or ends with another code, and services that
+	// depend on each other in a cycle are refused.
+	//
+	//	depends_on:
+	//	  db:
+	//	    condition: service_healthy
+	DependsOn dependsOn `yaml:"depends_on"`
+
+	// Restart is `no`, `always`, `unless-stopped`, `on-failure` or `on-failure:N`:
+	// see [Restarts]({{< relref "/docs/guides/restarts" >}}). Unset is `no`.
+	Restart string `yaml:"restart"`
+
+	// Healthcheck is how the workload's health is checked: see [Health
+	// checks]({{< relref "/docs/guides/health-checks" >}}).
+	Healthcheck *rawHealthcheck `yaml:"healthcheck"`
+
+	// CPUs is taken for `vcpus`, if it is a whole number.
+	CPUs *float64 `yaml:"cpus"`
+
+	// VCPUs is the machine's vCPUs, as `dicer run --vcpus`. Unset is 1.
+	VCPUs *int32 `yaml:"vcpus"`
+
+	// MemLimit is taken for `memory`.
+	MemLimit *byteSize `yaml:"mem_limit"`
+
+	// Memory is the machine's memory, as `dicer run --memory`. Unset is
+	// 512MiB.
+	Memory *byteSize `yaml:"memory"`
+
+	// Disk is the size of the instance's disk, as `dicer run --disk`. Unset is
+	// 10GiB.
+	Disk *byteSize `yaml:"disk"`
+
+	// Kernel is the kernel to boot, as `dicer run --kernel`. Unset is the
+	// daemon's default.
+	Kernel string `yaml:"kernel"`
+
+	// KernelArgs is kernel command line arguments, as
+	// `dicer run --kernel-args`.
+	KernelArgs string `yaml:"kernel_args"`
+
+	// Hypervisor is `cloud-hypervisor` or `firecracker`, as
+	// `dicer run --hypervisor-type`. Unset is `cloud-hypervisor`.
+	Hypervisor string `yaml:"hypervisor"`
+
+	// HypervisorVer is a version of the hypervisor the daemon ships, as
+	// `dicer run --hypervisor-version`. Unset is the newest.
+	HypervisorVer string `yaml:"hypervisor_version"`
+
+	// InitMode is `auto`, `exec` or `systemd`, as `dicer run --init-mode`: see
+	// [Init modes]({{< relref "/docs/concepts/init-modes" >}}). Unset is `auto`.
+	InitMode string `yaml:"init_mode"`
 }
 
 // rawNetwork is one entry under networks. Its subnet may be given as Docker
 // gives it, under ipam.
 type rawNetwork struct {
-	Name        string     `yaml:"name"`
-	External    bool       `yaml:"external"`
-	Subnet      string     `yaml:"subnet"`
-	Gateway     string     `yaml:"gateway"`
-	MTU         int32      `yaml:"mtu"`
+	// Name is the daemon's name for the network, instead of `PROJECT-NAME`.
+	Name string `yaml:"name"`
+
+	// External uses a network that already exists, named by the key or `name`,
+	// and never creates or deletes it. It takes no other settings.
+	External bool `yaml:"external"`
+
+	// Subnet is the network's subnet, such as `172.30.0.0/24`. Required,
+	// unless the network is external.
+	Subnet string `yaml:"subnet"`
+
+	// Gateway is the network's gateway. Unset is the subnet's first address.
+	Gateway string `yaml:"gateway"`
+
+	// MTU is the network's MTU. Unset is 1500.
+	MTU int32 `yaml:"mtu"`
+
+	// Nameservers are the nameservers the network's instances use. Unset is
+	// `8.8.8.8`.
 	Nameservers stringList `yaml:"nameservers"`
-	Isolated    bool       `yaml:"isolated"`
-	IPAM        *rawIPAM   `yaml:"ipam"`
+
+	// Isolated stops the network's instances reaching each other.
+	Isolated bool `yaml:"isolated"`
+
+	// IPAM is another way of giving `subnet` and `gateway`, as Docker Compose
+	// does, with one entry.
+	//
+	//	ipam:
+	//	  config:
+	//	    - subnet: 172.30.0.0/24
+	IPAM *rawIPAM `yaml:"ipam"`
 }
 
 // rawIPAM is Docker's way of giving a network's addresses.
 type rawIPAM struct {
-	Config []struct {
-		Subnet  string `yaml:"subnet"`
-		Gateway string `yaml:"gateway"`
-	} `yaml:"config"`
+	// Config is the network's addresses: one entry.
+	Config []rawIPAMConfig `yaml:"config"`
+}
+
+// rawIPAMConfig is an entry of an ipam's config.
+type rawIPAMConfig struct {
+	// Subnet is the network's subnet.
+	Subnet string `yaml:"subnet"`
+
+	// Gateway is the network's gateway.
+	Gateway string `yaml:"gateway"`
 }
 
 // rawVolume is one entry under volumes.
 type rawVolume struct {
-	Name     string    `yaml:"name"`
-	External bool      `yaml:"external"`
-	Size     *byteSize `yaml:"size"`
+	// Name is the daemon's name for the volume, instead of `PROJECT-NAME`.
+	Name string `yaml:"name"`
+
+	// External uses a volume that already exists, named by the key or `name`,
+	// and never creates or deletes it.
+	External bool `yaml:"external"`
+
+	// Size is the volume's size. Unset is 10GiB.
+	Size *byteSize `yaml:"size"`
 }
 
 // rawHealthcheck is a service's healthcheck: Docker's, with http and tcp for
-// the probes the guest agent runs itself.
+// the probes the guest agent runs itself. Exactly one of test, http and tcp
+// is given.
 type rawHealthcheck struct {
-	Test        *healthTest   `yaml:"test"`
-	HTTP        string        `yaml:"http"`
-	TCP         uint32        `yaml:"tcp"`
-	Interval    time.Duration `yaml:"interval"`
-	Timeout     time.Duration `yaml:"timeout"`
+	// Test is a command to check health with: `["CMD", ARG...]` runs a
+	// command; `["CMD-SHELL", LINE]`, or a string, runs a line with
+	// `/bin/sh`; `["NONE"]` checks nothing, not even as the image says to.
+	Test *healthTest `yaml:"test"`
+
+	// HTTP is `PORT[/path]`: healthy when a GET in the guest answers 2xx or
+	// 3xx. It suits an image with no shell.
+	HTTP string `yaml:"http"`
+
+	// TCP is a port: healthy when a connection to it in the guest is
+	// accepted. It suits an image with no shell.
+	TCP uint32 `yaml:"tcp"`
+
+	// Interval is the time between checks. Unset is 10s.
+	Interval time.Duration `yaml:"interval"`
+
+	// Timeout is the time a check may take. Unset is 5s.
+	Timeout time.Duration `yaml:"timeout"`
+
+	// StartPeriod is the time after a start in which failed checks do not
+	// count.
 	StartPeriod time.Duration `yaml:"start_period"`
-	Retries     int32         `yaml:"retries"`
-	Disable     bool          `yaml:"disable"`
+
+	// Retries is how many failed checks in a row make the instance
+	// unhealthy. Unset is 3.
+	Retries int32 `yaml:"retries"`
+
+	// Disable checks nothing, as `test: ["NONE"]` does.
+	Disable bool `yaml:"disable"`
 }
 
 // stringList is a string or a list of them.
@@ -208,12 +378,22 @@ func (b *byteSize) UnmarshalYAML(n *yaml.Node) error {
 type rawPort struct {
 	Short string `yaml:"-"`
 
-	Target    uint32 `yaml:"target"`
+	// Target is the guest's port. Required.
+	Target uint32 `yaml:"target"`
+
+	// Published is the host's port. Required.
 	Published string `yaml:"published"`
-	HostIP    string `yaml:"host_ip"`
-	Protocol  string `yaml:"protocol"`
-	Mode      string `yaml:"mode"`
-	line      int
+
+	// HostIP is the host's address to publish on. Unset is every address.
+	HostIP string `yaml:"host_ip"`
+
+	// Protocol is `tcp` or `udp`. Unset is `tcp`.
+	Protocol string `yaml:"protocol"`
+
+	// Mode is accepted and ignored: it is Docker Swarm's.
+	Mode string `yaml:"mode"`
+
+	line int
 }
 
 func (p *rawPort) UnmarshalYAML(n *yaml.Node) error {
@@ -238,11 +418,20 @@ func (p *rawPort) UnmarshalYAML(n *yaml.Node) error {
 type rawMount struct {
 	Short string `yaml:"-"`
 
-	Type     string `yaml:"type"`
-	Source   string `yaml:"source"`
-	Target   string `yaml:"target"`
-	ReadOnly bool   `yaml:"read_only"`
-	line     int
+	// Type is `volume`, `bind`, for a host file, or `tmpfs`. Required.
+	Type string `yaml:"type"`
+
+	// Source is the volume's name, or the host file's path. A tmpfs has
+	// none.
+	Source string `yaml:"source"`
+
+	// Target is the path in the guest. Required.
+	Target string `yaml:"target"`
+
+	// ReadOnly mounts it read-only.
+	ReadOnly bool `yaml:"read_only"`
+
+	line int
 }
 
 func (m *rawMount) UnmarshalYAML(n *yaml.Node) error {

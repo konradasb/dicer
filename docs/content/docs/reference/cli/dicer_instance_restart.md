@@ -4,33 +4,20 @@ title: "dicer instance restart"
 description: "Stop one or more instances if they are running, then start them"
 ---
 
-Stop one or more instances if they are running, then start them
-
-### Synopsis
-
 Stops each instance if it is running or paused, then starts it. A stopped
 instance is just started. Restarting is how a changed file mount or an
 updated image takes effect.
 
-```
-dicer instance restart NAME... [flags]
-```
+## Usage
 
-### Options
-
-```
-  -h, --help   help for restart
+```console
+$ dicer instance restart NAME...
 ```
 
-### Options inherited from parent commands
+## Global flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
-
-### SEE ALSO
-
-* [dicer instance]({{< relref "/docs/reference/cli/dicer_instance" >}})	 - Manage instances
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

@@ -380,6 +380,12 @@ var unsupported = map[string]string{
 	"stop_signal":  "a stop shuts the guest down",
 }
 
+// Unsupported returns the service keys of Docker Compose's that dicer
+// compose refuses, and why, for the compose file reference to list.
+func Unsupported() map[string]string {
+	return maps.Clone(unsupported)
+}
+
 // refuseUnsupported fails on the first Docker Compose key dicer compose
 // knows of but cannot honour, saying why. Keys it does not know of at all
 // are refused as unknown when the file is decoded.

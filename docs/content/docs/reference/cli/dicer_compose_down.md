@@ -4,43 +4,35 @@ title: "dicer compose down"
 description: "Stop and delete the project's instances and networks"
 ---
 
-Stop and delete the project's instances and networks
-
-### Synopsis
-
 Stops and deletes the project's instances, in the reverse of the order they
 start in, then deletes the networks the file declares. Volumes are kept, so
-that their data outlives the instances, unless --volumes is given. External
+that their data outlives the instances, unless `--volumes` is given. External
 networks and volumes are never deleted.
 
-```
-dicer compose down [flags]
-```
+## Usage
 
-### Examples
-
-```
-  dicer compose down
-  dicer compose down --volumes --remove-orphans
+```console
+$ dicer compose down [flags]
 ```
 
-### Options
+## Examples
 
-```
-  -h, --help             help for down
-      --remove-orphans   Delete the project's instances whose service is no longer in the file too
-  -v, --volumes          Delete the volumes the file declares too, and the data on them
-```
-
-### Options inherited from parent commands
-
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
+```console
+$ dicer compose down
+$ dicer compose down --volumes --remove-orphans
 ```
 
-### SEE ALSO
+## Flags
 
-* [dicer compose]({{< relref "/docs/reference/cli/dicer_compose" >}})	 - Run a project of instances described in a compose file
+| Flag | Description |
+|---|---|
+| `--remove-orphans` | Delete the project's instances whose service is no longer in the file too. |
+| `-v`, `--volumes` | Delete the volumes the file declares too, and the data on them. |
 
+## Global flags
+
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

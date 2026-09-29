@@ -4,27 +4,20 @@ title: "dicer resume"
 description: "Resume one or more paused instances"
 ---
 
-Resume one or more paused instances
+Resume one or more paused instances.
 
-```
-dicer resume NAME... [flags]
-```
+## Usage
 
-### Options
-
-```
-  -h, --help   help for resume
+```console
+$ dicer resume NAME...
 ```
 
-### Options inherited from parent commands
+Also run as `dicer unpause`.
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+## Global flags
 
-### SEE ALSO
-
-* [dicer]({{< relref "/docs/reference/cli" >}})	 - Run virtual machines from container images
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

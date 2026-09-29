@@ -4,31 +4,13 @@ title: "dicer volume"
 description: "Manage volumes"
 ---
 
-Manage volumes
+Manage volumes.
 
-```
-dicer volume [flags]
-```
+## Commands
 
-### Options
-
-```
-  -h, --help   help for volume
-```
-
-### Options inherited from parent commands
-
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
-
-### SEE ALSO
-
-* [dicer]({{< relref "/docs/reference/cli" >}})	 - Run virtual machines from container images
-* [dicer volume create]({{< relref "/docs/reference/cli/dicer_volume_create" >}})	 - Create a volume
-* [dicer volume delete]({{< relref "/docs/reference/cli/dicer_volume_delete" >}})	 - Delete one or more volumes no instance uses
-* [dicer volume list]({{< relref "/docs/reference/cli/dicer_volume_list" >}})	 - List volumes
-* [dicer volume show]({{< relref "/docs/reference/cli/dicer_volume_show" >}})	 - Show a volume
-
+| Command | Description |
+|---|---|
+| [`dicer volume create`]({{< relref "/docs/reference/cli/dicer_volume_create" >}}) | Create a volume. |
+| [`dicer volume delete`]({{< relref "/docs/reference/cli/dicer_volume_delete" >}}) | Delete one or more volumes no instance uses. |
+| [`dicer volume list`]({{< relref "/docs/reference/cli/dicer_volume_list" >}}) | List volumes. |
+| [`dicer volume show`]({{< relref "/docs/reference/cli/dicer_volume_show" >}}) | Show a volume. |

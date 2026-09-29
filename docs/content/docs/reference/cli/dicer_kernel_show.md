@@ -4,28 +4,26 @@ title: "dicer kernel show"
 description: "Show a kernel"
 ---
 
-Show a kernel
+Show a kernel.
 
-```
-dicer kernel show NAME [flags]
-```
+## Usage
 
-### Options
-
-```
-      --format string   Output format: table, json, yaml, or a Go template, e.g. '{{.Name}}\t{{.State}}' (default "table")
-  -h, --help            help for show
+```console
+$ dicer kernel show NAME [flags]
 ```
 
-### Options inherited from parent commands
+Also run as `dicer kernel get`, `dicer kernel inspect`.
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+## Flags
 
-### SEE ALSO
+| Flag | Description |
+|---|---|
+| `--format string` | Output format: table, json, yaml, or a Go template, e.g. '{{.Name}}\t{{.State}}'. Default: `table`. |
 
-* [dicer kernel]({{< relref "/docs/reference/cli/dicer_kernel" >}})	 - Manage guest kernels
+## Global flags
 
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

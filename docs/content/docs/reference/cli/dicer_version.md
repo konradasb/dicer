@@ -4,33 +4,25 @@ title: "dicer version"
 description: "Show the client's version, and the daemon's"
 ---
 
-Show the client's version, and the daemon's
-
-### Synopsis
-
 Shows this client's version, and that of the daemon it talks to. The
 client's is shown even when the daemon cannot be reached.
 
-```
-dicer version [flags]
-```
+## Usage
 
-### Options
-
-```
-      --format string   Output format: table, json or yaml (default "table")
-  -h, --help            help for version
+```console
+$ dicer version [flags]
 ```
 
-### Options inherited from parent commands
+## Flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+| Flag | Description |
+|---|---|
+| `--format string` | Output format: table, json or yaml. Default: `table`. |
 
-### SEE ALSO
+## Global flags
 
-* [dicer]({{< relref "/docs/reference/cli" >}})	 - Run virtual machines from container images
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

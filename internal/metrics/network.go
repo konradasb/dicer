@@ -25,13 +25,22 @@ type networkCollector struct {
 	available *prometheus.Desc
 }
 
-func newNetworkCollector(source func() []NetworkStats) *networkCollector {
+func (m *Metrics) newNetworkCollector(source func() []NetworkStats) *networkCollector {
 	return &networkCollector{
 		source: source,
-		allocated: desc("network_addresses_allocated",
-			"Addresses currently assigned to instances on a network.", "network"),
-		available: desc("network_addresses_available",
-			"Assignable addresses still free on a network.", "network"),
+		allocated: m.desc(Description{
+			Name:   "dicer_network_addresses_allocated",
+			Labels: []string{"network"},
+			Help:   "Addresses currently assigned to instances on a network.",
+			Group:  GroupNetworks,
+		}),
+		available: m.desc(Description{
+			Name:   "dicer_network_addresses_available",
+			Labels: []string{"network"},
+			Help:   "Assignable addresses still free on a network.",
+			Doc:    "The network, broadcast and gateway addresses are not counted.",
+			Group:  GroupNetworks,
+		}),
 	}
 }
 

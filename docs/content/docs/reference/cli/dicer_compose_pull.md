@@ -4,33 +4,20 @@ title: "dicer compose pull"
 description: "Pull the services' images"
 ---
 
-Pull the services' images
-
-### Synopsis
-
 Pulls each service's image, even one the host already has, so that a tag
 that has moved is brought up to date. Instances pick a new image up when
-they are next created: see dicer compose up --force-recreate.
+they are next created: see `dicer compose up --force-recreate`.
 
-```
-dicer compose pull [SERVICE...] [flags]
-```
+## Usage
 
-### Options
-
-```
-  -h, --help   help for pull
+```console
+$ dicer compose pull [SERVICE...]
 ```
 
-### Options inherited from parent commands
+## Global flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
-
-### SEE ALSO
-
-* [dicer compose]({{< relref "/docs/reference/cli/dicer_compose" >}})	 - Run a project of instances described in a compose file
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

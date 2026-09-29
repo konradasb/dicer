@@ -18,28 +18,27 @@ type grpcMetrics struct {
 	duration *prometheus.HistogramVec
 }
 
-func newGRPCMetrics() grpcMetrics {
+func (m *Metrics) newGRPCMetrics() grpcMetrics {
 	return grpcMetrics{
-		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Namespace: namespace,
-			Name:      "grpc_requests_total",
-			Help:      "gRPC calls served, by full method and response code.",
-		}, []string{"method", "code"}),
+		requests: m.counterVec(Description{
+			Name:   "dicer_grpc_requests_total",
+			Labels: []string{"method", "code"},
+			Help:   "gRPC calls served, by full method and response code.",
+			Doc:    "`code` is the gRPC status code, such as `OK` or `NotFound`.",
+			Group:  GroupAPI,
+		}),
 
-		duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Namespace: namespace,
-			Name:      "grpc_request_duration_seconds",
-			Help:      "Time a gRPC call took, from the first byte to the final status.",
-			// Most calls are a file read and a reply; starting an instance
-			// and pulling an image are the long tail, and a log stream runs
-			// for as long as the client stays.
-			Buckets: prometheus.ExponentialBuckets(0.001, 4, 9),
-		}, []string{"method"}),
+		// Most calls are a file read and a reply; starting an instance and
+		// pulling an image are the long tail, and a log stream runs for as
+		// long as the client stays.
+		duration: m.histogramVec(Description{
+			Name:   "dicer_grpc_request_duration_seconds",
+			Labels: []string{"method"},
+			Help:   "Time a gRPC call took, from the first byte to the final status.",
+			Doc:    "For a stream, such as `dicer logs -f`, it is how long the client stayed.",
+			Group:  GroupAPI,
+		}, prometheus.ExponentialBuckets(0.001, 4, 9)),
 	}
-}
-
-func (gm grpcMetrics) collectors() []prometheus.Collector {
-	return []prometheus.Collector{gm.requests, gm.duration}
 }
 
 // UnaryServerInterceptor times unary calls and counts them by method and

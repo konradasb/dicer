@@ -4,10 +4,6 @@ title: "dicer info"
 description: "Show the daemon, and how much of its host is in use"
 ---
 
-Show the daemon, and how much of its host is in use
-
-### Synopsis
-
 Shows the daemon, how it is reached, and how much of its host's CPU,
 memory and disk is in use.
 
@@ -18,29 +14,25 @@ overcommit set in the daemon's configuration. Disk is reported, not
 enforced: disks are sparse, and what an instance has been given says
 little about what it will write.
 
-With --format json or yaml, prints the daemon's own records of the host
+With `--format` json or yaml, prints the daemon's own records of the host
 and its resources, for scripts.
 
-```
-dicer info [flags]
-```
+## Usage
 
-### Options
-
-```
-      --format string   Output format: table, json or yaml (default "table")
-  -h, --help            help for info
+```console
+$ dicer info [flags]
 ```
 
-### Options inherited from parent commands
+## Flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+| Flag | Description |
+|---|---|
+| `--format string` | Output format: table, json or yaml. Default: `table`. |
 
-### SEE ALSO
+## Global flags
 
-* [dicer]({{< relref "/docs/reference/cli" >}})	 - Run virtual machines from container images
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

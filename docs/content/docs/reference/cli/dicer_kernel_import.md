@@ -4,35 +4,27 @@ title: "dicer kernel import"
 description: "Record a kernel to boot instances with"
 ---
 
-Record a kernel to boot instances with
-
-### Synopsis
-
-Records a kernel by URL. It is downloaded, and verified against --sha256
+Records a kernel by URL. It is downloaded, and verified against `--sha`256
 if given, the first time an instance boots with it.
 
-```
-dicer kernel import NAME [flags]
-```
+## Usage
 
-### Options
-
-```
-      --arch string     Kernel architecture, e.g. x86_64 (required)
-  -h, --help            help for import
-      --sha256 string   Expected SHA-256 of the kernel, hex-encoded
-      --url string      Where to fetch the kernel: an http(s) URL, a file:// URL or an absolute path (required)
+```console
+$ dicer kernel import NAME [flags]
 ```
 
-### Options inherited from parent commands
+## Flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+| Flag | Description |
+|---|---|
+| `--arch string` | Kernel architecture, e.g. x86_64 (required). |
+| `--sha256 string` | Expected SHA-256 of the kernel, hex-encoded. |
+| `--url string` | Where to fetch the kernel: an http(s) URL, a file:// URL or an absolute path (required). |
 
-### SEE ALSO
+## Global flags
 
-* [dicer kernel]({{< relref "/docs/reference/cli/dicer_kernel" >}})	 - Manage guest kernels
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

@@ -4,28 +4,26 @@ title: "dicer image delete"
 description: "Delete one or more unused images"
 ---
 
-Delete one or more unused images
+Delete one or more unused images.
 
-```
-dicer image delete REF... [flags]
-```
+## Usage
 
-### Options
-
-```
-  -f, --force   Force deletion of an image that is in use by one or more instances
-  -h, --help    help for delete
+```console
+$ dicer image delete REF... [flags]
 ```
 
-### Options inherited from parent commands
+Also run as `dicer image rm`, `dicer image remove`.
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+## Flags
 
-### SEE ALSO
+| Flag | Description |
+|---|---|
+| `-f`, `--force` | Force deletion of an image that is in use by one or more instances. |
 
-* [dicer image]({{< relref "/docs/reference/cli/dicer_image" >}})	 - Manage images
+## Global flags
 
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

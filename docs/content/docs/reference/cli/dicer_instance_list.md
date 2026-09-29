@@ -4,45 +4,43 @@ title: "dicer instance list"
 description: "List instances"
 ---
 
-List instances
+List instances.
 
-```
-dicer instance list [flags]
-```
+## Usage
 
-### Examples
-
-```
-  dicer ps
-  dicer ps --filter state=running --filter label=team=web
-  dicer ps -c name,state,ip
-  dicer ps --format '{{.Name}}\t{{.IP}}'
-  dicer stop $(dicer ps -q --filter state=running)
-  dicer ps --watch
+```console
+$ dicer instance list [flags]
 ```
 
-### Options
+Also run as `dicer instance ls`, `dicer instance ps`.
 
-```
-  -c, --columns strings      Columns to display, comma-separated and in any case (default: all)
-  -f, --filter stringArray   Show only instances that match, as KEY=VALUE (repeatable); keys are name, state, image, network, label
-      --format string        Output format: table, json, yaml, or a Go template, e.g. '{{.Name}}\t{{.State}}' (default "table")
-  -h, --help                 help for list
-      --interval duration    How often --watch redraws (default 2s)
-  -q, --quiet                Only display names, one a line
-  -w, --watch                Keep the list on screen, redrawn as it changes, until Ctrl+C
-      --wide                 Show every column, not just name, image, status, address and ports
-```
+## Examples
 
-### Options inherited from parent commands
-
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
+```console
+$ dicer ps
+$ dicer ps --filter state=running --filter label=team=web
+$ dicer ps -c name,state,ip
+$ dicer ps --format '{{.Name}}\t{{.IP}}'
+$ dicer stop $(dicer ps -q --filter state=running)
+$ dicer ps --watch
 ```
 
-### SEE ALSO
+## Flags
 
-* [dicer instance]({{< relref "/docs/reference/cli/dicer_instance" >}})	 - Manage instances
+| Flag | Description |
+|---|---|
+| `-c`, `--columns strings` | Columns to display, comma-separated and in any case (default: all). |
+| `-f`, `--filter stringArray` | Show only instances that match, as KEY=VALUE (repeatable); keys are name, state, image, network, label. |
+| `--format string` | Output format: table, json, yaml, or a Go template, e.g. '{{.Name}}\t{{.State}}'. Default: `table`. |
+| `--interval duration` | How often `--watch` redraws. Default: `2s`. |
+| `-q`, `--quiet` | Only display names, one a line. |
+| `-w`, `--watch` | Keep the list on screen, redrawn as it changes, until Ctrl+C. |
+| `--wide` | Show every column, not just name, image, status, address and ports. |
 
+## Global flags
+
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

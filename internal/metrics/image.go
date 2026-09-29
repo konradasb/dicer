@@ -33,58 +33,54 @@ type imageMetrics struct {
 	gcReclaimed     prometheus.Counter
 }
 
-func newImageMetrics() imageMetrics {
+func (m *Metrics) newImageMetrics() imageMetrics {
 	return imageMetrics{
-		pulls: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Namespace: namespace,
-			Name:      "image_pulls_total",
-			Help:      "Image pulls that reached a registry, by outcome. Cache hits are not pulls.",
-		}, []string{"outcome"}),
-
-		pullDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Namespace: namespace,
-			Name:      "image_pull_duration_seconds",
-			Help:      "Time a pull took, from resolving the reference to a bootable disk.",
-			Buckets:   prometheus.ExponentialBuckets(0.5, 2, 12),
+		pulls: m.counterVec(Description{
+			Name:   "dicer_image_pulls_total",
+			Labels: []string{"outcome"},
+			Help:   "Image pulls that reached a registry, by outcome. Cache hits are not pulls.",
+			Doc:    "`outcome` is `success` or `error`.",
+			Group:  GroupImages,
 		}),
 
-		downloadedBytes: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: namespace,
-			Name:      "image_downloaded_bytes_total",
-			Help:      "Compressed layer bytes downloaded from registries.",
+		pullDuration: m.histogram(Description{
+			Name:  "dicer_image_pull_duration_seconds",
+			Help:  "Time a pull took, from resolving the reference to a bootable disk.",
+			Group: GroupImages,
+		}, prometheus.ExponentialBuckets(0.5, 2, 12)),
+
+		downloadedBytes: m.counter(Description{
+			Name:  "dicer_image_downloaded_bytes_total",
+			Help:  "Compressed layer bytes downloaded from registries.",
+			Group: GroupImages,
 		}),
 
-		convertDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Namespace: namespace,
-			Name:      "image_conversion_duration_seconds",
-			Help:      "Time spent packing an unpacked image into its EROFS disk.",
-			Buckets:   prometheus.ExponentialBuckets(0.25, 2, 12),
+		convertDuration: m.histogram(Description{
+			Name:  "dicer_image_conversion_duration_seconds",
+			Help:  "Time spent packing an unpacked image into its EROFS disk.",
+			Group: GroupImages,
+		}, prometheus.ExponentialBuckets(0.25, 2, 12)),
+
+		cacheLookups: m.counterVec(Description{
+			Name:   "dicer_image_cache_lookups_total",
+			Labels: []string{"result"},
+			Help:   "Image lookups by whether this host already held the image.",
+			Doc:    "`result` is `hit` or `miss`.",
+			Group:  GroupImages,
 		}),
 
-		cacheLookups: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Namespace: namespace,
-			Name:      "image_cache_lookups_total",
-			Help:      "Image lookups by whether this host already held the image.",
-		}, []string{"result"}),
-
-		collected: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Namespace: namespace,
-			Name:      "image_gc_collected_total",
-			Help:      "Images garbage collection removed, by reason (unused, size).",
-		}, []string{"reason"}),
-
-		gcReclaimed: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: namespace,
-			Name:      "image_gc_reclaimed_bytes_total",
-			Help:      "Disk image garbage collection gave back: bootable disks and cached layers.",
+		collected: m.counterVec(Description{
+			Name:   "dicer_image_gc_collected_total",
+			Labels: []string{"reason"},
+			Help:   "Images garbage collection removed, by reason (unused, size).",
+			Group:  GroupImages,
 		}),
-	}
-}
 
-func (im imageMetrics) collectors() []prometheus.Collector {
-	return []prometheus.Collector{
-		im.pulls, im.pullDuration, im.downloadedBytes, im.convertDuration, im.cacheLookups,
-		im.collected, im.gcReclaimed,
+		gcReclaimed: m.counter(Description{
+			Name:  "dicer_image_gc_reclaimed_bytes_total",
+			Help:  "Disk image garbage collection gave back: bootable disks and cached layers.",
+			Group: GroupImages,
+		}),
 	}
 }
 
@@ -121,12 +117,19 @@ type imageCollector struct {
 	bytes *prometheus.Desc
 }
 
-func newImageCollector(source func() ImageStats) *imageCollector {
+func (m *Metrics) newImageCollector(source func() ImageStats) *imageCollector {
 	return &imageCollector{
 		source: source,
-		count:  desc("images", "Images held on this host."),
-		bytes: desc("image_disk_bytes",
-			"Total size of the bootable disks those images were converted to."),
+		count: m.desc(Description{
+			Name:  "dicer_images",
+			Help:  "Images held on this host.",
+			Group: GroupImages,
+		}),
+		bytes: m.desc(Description{
+			Name:  "dicer_image_disk_bytes",
+			Help:  "Total size of the bootable disks those images were converted to.",
+			Group: GroupImages,
+		}),
 	}
 }
 

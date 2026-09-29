@@ -10,64 +10,64 @@ cascade:
         open: false
 ---
 
-Run virtual machines from container images
+`dicer` is the command line for `dicerd`. It talks to the daemon on this host, through its socket, unless `--remote` names another, or a remote of `dicer remote` is current: see [Remote access]({{< relref "/docs/guides/remote-access" >}}). Whoever can use the socket can do anything the daemon can, which is as much as root: run `dicer` as root, or as a member of the socket's group.
 
-### Synopsis
+The common commands are shortcuts for the management commands most used: `dicer run` is `dicer instance run`, `dicer ps` is `dicer instance list`.
 
-Dicer runs virtual machines from container images on a single host.
+## Commands
 
-```
-dicer [flags]
-```
+### Common commands
 
-### Examples
+| Command | Description |
+|---|---|
+| [`dicer cp`]({{< relref "/docs/reference/cli/dicer_cp" >}}) | Copy files between this machine and a running instance. |
+| [`dicer create`]({{< relref "/docs/reference/cli/dicer_create" >}}) | Define an instance without starting it. |
+| [`dicer exec`]({{< relref "/docs/reference/cli/dicer_exec" >}}) | Run a command inside a running instance. |
+| [`dicer images`]({{< relref "/docs/reference/cli/dicer_images" >}}) | List pulled images. |
+| [`dicer inspect`]({{< relref "/docs/reference/cli/dicer_inspect" >}}) | Show everything about one or more instances. |
+| [`dicer logs`]({{< relref "/docs/reference/cli/dicer_logs" >}}) | Show an instance's console output. |
+| [`dicer pause`]({{< relref "/docs/reference/cli/dicer_pause" >}}) | Pause one or more running instances. |
+| [`dicer ps`]({{< relref "/docs/reference/cli/dicer_ps" >}}) | List instances. |
+| [`dicer pull`]({{< relref "/docs/reference/cli/dicer_pull" >}}) | Pull an image and convert it to a bootable disk. |
+| [`dicer rename`]({{< relref "/docs/reference/cli/dicer_rename" >}}) | Rename a stopped instance. |
+| [`dicer restart`]({{< relref "/docs/reference/cli/dicer_restart" >}}) | Stop one or more instances if they are running, then start them. |
+| [`dicer resume`]({{< relref "/docs/reference/cli/dicer_resume" >}}) | Resume one or more paused instances. |
+| [`dicer rm`]({{< relref "/docs/reference/cli/dicer_rm" >}}) | Delete one or more instances. |
+| [`dicer rmi`]({{< relref "/docs/reference/cli/dicer_rmi" >}}) | Delete one or more unused images. |
+| [`dicer run`]({{< relref "/docs/reference/cli/dicer_run" >}}) | Create an instance from an image and start it. |
+| [`dicer start`]({{< relref "/docs/reference/cli/dicer_start" >}}) | Start one or more defined instances. |
+| [`dicer stop`]({{< relref "/docs/reference/cli/dicer_stop" >}}) | Stop one or more running instances, keeping their definitions and disks. |
+| [`dicer update`]({{< relref "/docs/reference/cli/dicer_update" >}}) | Change a stopped instance's definition. |
+| [`dicer wait`]({{< relref "/docs/reference/cli/dicer_wait" >}}) | Wait until one or more instances stop, and print their exit codes. |
 
-```
-  dicer run -d --name web -p 8080:80 nginx:1.27
-  dicer ps
-  dicer exec web -- nginx -t
-  dicer logs -f web
-  dicer rm -f web
-```
+### Management commands
 
-### Options
+| Command | Description |
+|---|---|
+| [`dicer compose`]({{< relref "/docs/reference/cli/dicer_compose" >}}) | Run a project of instances described in a compose file. |
+| [`dicer image`]({{< relref "/docs/reference/cli/dicer_image" >}}) | Manage images. |
+| [`dicer instance`]({{< relref "/docs/reference/cli/dicer_instance" >}}) | Manage instances. |
+| [`dicer kernel`]({{< relref "/docs/reference/cli/dicer_kernel" >}}) | Manage guest kernels. |
+| [`dicer network`]({{< relref "/docs/reference/cli/dicer_network" >}}) | Manage networks. |
+| [`dicer remote`]({{< relref "/docs/reference/cli/dicer_remote" >}}) | Manage the daemons this client talks to. |
+| [`dicer volume`]({{< relref "/docs/reference/cli/dicer_volume" >}}) | Manage volumes. |
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -h, --help               help for dicer
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+### System commands
 
-### SEE ALSO
+| Command | Description |
+|---|---|
+| [`dicer events`]({{< relref "/docs/reference/cli/dicer_events" >}}) | Show what has happened to the instances and images on the host. |
+| [`dicer info`]({{< relref "/docs/reference/cli/dicer_info" >}}) | Show the daemon, and how much of its host is in use. |
+| [`dicer version`]({{< relref "/docs/reference/cli/dicer_version" >}}) | Show the client's version, and the daemon's. |
 
-* [dicer compose]({{< relref "/docs/reference/cli/dicer_compose" >}})	 - Run a project of instances described in a compose file
-* [dicer cp]({{< relref "/docs/reference/cli/dicer_cp" >}})	 - Copy files between this machine and a running instance
-* [dicer create]({{< relref "/docs/reference/cli/dicer_create" >}})	 - Define an instance without starting it
-* [dicer events]({{< relref "/docs/reference/cli/dicer_events" >}})	 - Show what has happened to the instances and images on the host
-* [dicer exec]({{< relref "/docs/reference/cli/dicer_exec" >}})	 - Run a command inside a running instance
-* [dicer image]({{< relref "/docs/reference/cli/dicer_image" >}})	 - Manage images
-* [dicer images]({{< relref "/docs/reference/cli/dicer_images" >}})	 - List pulled images
-* [dicer info]({{< relref "/docs/reference/cli/dicer_info" >}})	 - Show the daemon, and how much of its host is in use
-* [dicer inspect]({{< relref "/docs/reference/cli/dicer_inspect" >}})	 - Show everything about one or more instances
-* [dicer instance]({{< relref "/docs/reference/cli/dicer_instance" >}})	 - Manage instances
-* [dicer kernel]({{< relref "/docs/reference/cli/dicer_kernel" >}})	 - Manage guest kernels
-* [dicer logs]({{< relref "/docs/reference/cli/dicer_logs" >}})	 - Show an instance's console output
-* [dicer network]({{< relref "/docs/reference/cli/dicer_network" >}})	 - Manage networks
-* [dicer pause]({{< relref "/docs/reference/cli/dicer_pause" >}})	 - Pause one or more running instances
-* [dicer ps]({{< relref "/docs/reference/cli/dicer_ps" >}})	 - List instances
-* [dicer pull]({{< relref "/docs/reference/cli/dicer_pull" >}})	 - Pull an image and convert it to a bootable disk
-* [dicer remote]({{< relref "/docs/reference/cli/dicer_remote" >}})	 - Manage the daemons this client talks to
-* [dicer rename]({{< relref "/docs/reference/cli/dicer_rename" >}})	 - Rename a stopped instance
-* [dicer restart]({{< relref "/docs/reference/cli/dicer_restart" >}})	 - Stop one or more instances if they are running, then start them
-* [dicer resume]({{< relref "/docs/reference/cli/dicer_resume" >}})	 - Resume one or more paused instances
-* [dicer rm]({{< relref "/docs/reference/cli/dicer_rm" >}})	 - Delete one or more instances
-* [dicer rmi]({{< relref "/docs/reference/cli/dicer_rmi" >}})	 - Delete one or more unused images
-* [dicer run]({{< relref "/docs/reference/cli/dicer_run" >}})	 - Create an instance from an image and start it
-* [dicer start]({{< relref "/docs/reference/cli/dicer_start" >}})	 - Start one or more defined instances
-* [dicer stop]({{< relref "/docs/reference/cli/dicer_stop" >}})	 - Stop one or more running instances, keeping their definitions and disks
-* [dicer update]({{< relref "/docs/reference/cli/dicer_update" >}})	 - Change a stopped instance's definition
-* [dicer version]({{< relref "/docs/reference/cli/dicer_version" >}})	 - Show the client's version, and the daemon's
-* [dicer volume]({{< relref "/docs/reference/cli/dicer_volume" >}})	 - Manage volumes
-* [dicer wait]({{< relref "/docs/reference/cli/dicer_wait" >}})	 - Wait until one or more instances stop, and print their exit codes
+## Global flags
 
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |
+
+Every command takes them, and `-h`, `--help`.
+
+`dicer --version` prints the version, as `dicer version` does.

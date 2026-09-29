@@ -4,40 +4,27 @@ title: "dicer cp"
 description: "Copy files between this machine and a running instance"
 ---
 
-Copy files between this machine and a running instance
-
-### Synopsis
-
 Copy a file or directory between this machine and a running instance. A path in an instance is written NAME:PATH; a relative one is taken from the guest's root.
 
 What is copied lands as cp -r would put it: into DEST if it is a directory, in its place if it is a file, and at it if nothing is there. Modes, times and symlinks are kept; ownership is not, so what is copied belongs to whoever receives it.
 
-```
-dicer cp SRC DEST [flags]
-```
+## Usage
 
-### Examples
-
-```
-  dicer instance cp ./app web:/srv
-  dicer instance cp web:/var/log/app.log .
+```console
+$ dicer cp SRC DEST
 ```
 
-### Options
+## Examples
 
-```
-  -h, --help   help for cp
-```
-
-### Options inherited from parent commands
-
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
+```console
+$ dicer instance cp ./app web:/srv
+$ dicer instance cp web:/var/log/app.log .
 ```
 
-### SEE ALSO
+## Global flags
 
-* [dicer]({{< relref "/docs/reference/cli" >}})	 - Run virtual machines from container images
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

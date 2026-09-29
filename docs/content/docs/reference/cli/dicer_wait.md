@@ -4,49 +4,41 @@ title: "dicer wait"
 description: "Wait until one or more instances stop, and print their exit codes"
 ---
 
-Wait until one or more instances stop, and print their exit codes
-
-### Synopsis
-
 Waits until each instance stops and prints the status its guest ended with,
 a line for each: the workload's exit code, 0 for a guest that powered
 itself off, or 125 for one that ended without saying how.
 
 An instance that has already stopped is not waited for; its last status is
-reported at once, even if --rm has deleted it since. An instance its
+reported at once, even if `--rm` has deleted it since. An instance its
 restart policy starts again has not stopped, so the wait goes on.
 
 As with docker wait, the statuses are printed, not exited with: the command
 fails only for an instance it cannot wait for.
 
-```
-dicer wait NAME... [flags]
-```
+## Usage
 
-### Examples
-
-```
-  dicer wait web
-  dicer wait job1 job2
-  dicer wait --timeout 30s web
-  status=$(dicer wait job)
+```console
+$ dicer wait NAME... [flags]
 ```
 
-### Options
+## Examples
 
-```
-  -h, --help               help for wait
-      --timeout duration   Give up after this long (0: wait indefinitely)
-```
-
-### Options inherited from parent commands
-
-```
-  -D, --debug           Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string   Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
+```console
+$ dicer wait web
+$ dicer wait job1 job2
+$ dicer wait --timeout 30s web
+$ status=$(dicer wait job)
 ```
 
-### SEE ALSO
+## Flags
 
-* [dicer]({{< relref "/docs/reference/cli" >}})	 - Run virtual machines from container images
+| Flag | Description |
+|---|---|
+| `--timeout duration` | Give up after this long (0: wait indefinitely). |
 
+## Global flags
+
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |

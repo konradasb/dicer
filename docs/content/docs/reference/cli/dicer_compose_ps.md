@@ -4,39 +4,35 @@ title: "dicer compose ps"
 description: "List the project's instances"
 ---
 
-List the project's instances
+List the project's instances.
 
-```
-dicer compose ps [SERVICE...] [flags]
-```
+## Usage
 
-### Examples
-
-```
-  dicer compose ps
-  dicer compose ps -q web
-  dicer compose ps --format json
+```console
+$ dicer compose ps [SERVICE...] [flags]
 ```
 
-### Options
+## Examples
 
-```
-  -c, --columns strings   Columns to display, comma-separated and in any case (default: all)
-      --format string     Output format: table, json, yaml, or a Go template, e.g. '{{.Name}}\t{{.State}}' (default "table")
-  -h, --help              help for ps
-  -q, --quiet             Only display names, one a line
-      --wide              Show every column
+```console
+$ dicer compose ps
+$ dicer compose ps -q web
+$ dicer compose ps --format json
 ```
 
-### Options inherited from parent commands
+## Flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+| Flag | Description |
+|---|---|
+| `-c`, `--columns strings` | Columns to display, comma-separated and in any case (default: all). |
+| `--format string` | Output format: table, json, yaml, or a Go template, e.g. '{{.Name}}\t{{.State}}'. Default: `table`. |
+| `-q`, `--quiet` | Only display names, one a line. |
+| `--wide` | Show every column. |
 
-### SEE ALSO
+## Global flags
 
-* [dicer compose]({{< relref "/docs/reference/cli/dicer_compose" >}})	 - Run a project of instances described in a compose file
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

@@ -4,44 +4,31 @@ title: "dicer instance"
 description: "Manage instances"
 ---
 
-Manage instances
+Manage instances.
 
-```
-dicer instance [flags]
-```
+## Commands
 
-### Options
-
-```
-  -h, --help   help for instance
-```
-
-### Options inherited from parent commands
-
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
-
-### SEE ALSO
-
-* [dicer]({{< relref "/docs/reference/cli" >}})	 - Run virtual machines from container images
-* [dicer instance cp]({{< relref "/docs/reference/cli/dicer_instance_cp" >}})	 - Copy files between this machine and a running instance
-* [dicer instance create]({{< relref "/docs/reference/cli/dicer_instance_create" >}})	 - Define an instance without starting it
-* [dicer instance delete]({{< relref "/docs/reference/cli/dicer_instance_delete" >}})	 - Delete one or more instances
-* [dicer instance exec]({{< relref "/docs/reference/cli/dicer_instance_exec" >}})	 - Run a command inside a running instance
-* [dicer instance list]({{< relref "/docs/reference/cli/dicer_instance_list" >}})	 - List instances
-* [dicer instance logs]({{< relref "/docs/reference/cli/dicer_instance_logs" >}})	 - Show an instance's console output
-* [dicer instance pause]({{< relref "/docs/reference/cli/dicer_instance_pause" >}})	 - Pause one or more running instances
-* [dicer instance rename]({{< relref "/docs/reference/cli/dicer_instance_rename" >}})	 - Rename a stopped instance
-* [dicer instance restart]({{< relref "/docs/reference/cli/dicer_instance_restart" >}})	 - Stop one or more instances if they are running, then start them
-* [dicer instance resume]({{< relref "/docs/reference/cli/dicer_instance_resume" >}})	 - Resume one or more paused instances
-* [dicer instance run]({{< relref "/docs/reference/cli/dicer_instance_run" >}})	 - Create an instance from an image and start it
-* [dicer instance show]({{< relref "/docs/reference/cli/dicer_instance_show" >}})	 - Show everything about one or more instances
-* [dicer instance snapshot]({{< relref "/docs/reference/cli/dicer_instance_snapshot" >}})	 - Freeze instances to disk and put them back
-* [dicer instance start]({{< relref "/docs/reference/cli/dicer_instance_start" >}})	 - Start one or more defined instances
-* [dicer instance stop]({{< relref "/docs/reference/cli/dicer_instance_stop" >}})	 - Stop one or more running instances, keeping their definitions and disks
-* [dicer instance update]({{< relref "/docs/reference/cli/dicer_instance_update" >}})	 - Change a stopped instance's definition
-* [dicer instance wait]({{< relref "/docs/reference/cli/dicer_instance_wait" >}})	 - Wait until one or more instances stop, and print their exit codes
-
+| Command | Description |
+|---|---|
+| [`dicer instance cp`]({{< relref "/docs/reference/cli/dicer_instance_cp" >}}) | Copy files between this machine and a running instance. |
+| [`dicer instance create`]({{< relref "/docs/reference/cli/dicer_instance_create" >}}) | Define an instance without starting it. |
+| [`dicer instance delete`]({{< relref "/docs/reference/cli/dicer_instance_delete" >}}) | Delete one or more instances. |
+| [`dicer instance exec`]({{< relref "/docs/reference/cli/dicer_instance_exec" >}}) | Run a command inside a running instance. |
+| [`dicer instance list`]({{< relref "/docs/reference/cli/dicer_instance_list" >}}) | List instances. |
+| [`dicer instance logs`]({{< relref "/docs/reference/cli/dicer_instance_logs" >}}) | Show an instance's console output. |
+| [`dicer instance pause`]({{< relref "/docs/reference/cli/dicer_instance_pause" >}}) | Pause one or more running instances. |
+| [`dicer instance rename`]({{< relref "/docs/reference/cli/dicer_instance_rename" >}}) | Rename a stopped instance. |
+| [`dicer instance restart`]({{< relref "/docs/reference/cli/dicer_instance_restart" >}}) | Stop one or more instances if they are running, then start them. |
+| [`dicer instance resume`]({{< relref "/docs/reference/cli/dicer_instance_resume" >}}) | Resume one or more paused instances. |
+| [`dicer instance run`]({{< relref "/docs/reference/cli/dicer_instance_run" >}}) | Create an instance from an image and start it. |
+| [`dicer instance show`]({{< relref "/docs/reference/cli/dicer_instance_show" >}}) | Show everything about one or more instances. |
+| [`dicer instance snapshot`]({{< relref "/docs/reference/cli/dicer_instance_snapshot" >}}) | Freeze instances to disk and put them back. |
+| [`dicer instance snapshot create`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_create" >}}) | Snapshot a running or paused instance. |
+| [`dicer instance snapshot delete`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_delete" >}}) | Delete a snapshot. |
+| [`dicer instance snapshot list`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_list" >}}) | List an instance's snapshots. |
+| [`dicer instance snapshot restore`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_restore" >}}) | Restore a stopped instance from a snapshot and resume it. |
+| [`dicer instance snapshot show`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_show" >}}) | Show a snapshot. |
+| [`dicer instance start`]({{< relref "/docs/reference/cli/dicer_instance_start" >}}) | Start one or more defined instances. |
+| [`dicer instance stop`]({{< relref "/docs/reference/cli/dicer_instance_stop" >}}) | Stop one or more running instances, keeping their definitions and disks. |
+| [`dicer instance update`]({{< relref "/docs/reference/cli/dicer_instance_update" >}}) | Change a stopped instance's definition. |
+| [`dicer instance wait`]({{< relref "/docs/reference/cli/dicer_instance_wait" >}}) | Wait until one or more instances stop, and print their exit codes. |

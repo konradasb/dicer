@@ -4,47 +4,39 @@ title: "dicer instance logs"
 description: "Show an instance's console output"
 ---
 
-Show an instance's console output
-
-### Synopsis
-
 Shows the guest's serial console: the kernel's boot messages, dicer-init's,
 and whatever the workload writes to the console. It is kept with the
 instance, so it can be read after a stop to explain one.
 
-Use --source hypervisor for the VMM's own log, which explains a guest that
+Use `--source` hypervisor for the VMM's own log, which explains a guest that
 never got as far as booting. That one is discarded when the instance stops.
 
-```
-dicer instance logs NAME [flags]
-```
+## Usage
 
-### Examples
-
-```
-  dicer logs -f web
-  dicer logs -n 50 web
-  dicer logs --source hypervisor web
+```console
+$ dicer instance logs NAME [flags]
 ```
 
-### Options
+## Examples
 
-```
-  -f, --follow          Keep writing new output until the instance stops
-  -n, --tail int32      Show only the last lines (default: all)
-      --source string   Which log to read: guest or hypervisor (default "guest")
-  -h, --help            help for logs
-```
-
-### Options inherited from parent commands
-
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
+```console
+$ dicer logs -f web
+$ dicer logs -n 50 web
+$ dicer logs --source hypervisor web
 ```
 
-### SEE ALSO
+## Flags
 
-* [dicer instance]({{< relref "/docs/reference/cli/dicer_instance" >}})	 - Manage instances
+| Flag | Description |
+|---|---|
+| `-f`, `--follow` | Keep writing new output until the instance stops. |
+| `--source string` | Which log to read: guest or hypervisor. Default: `guest`. |
+| `-n`, `--tail int32` | Show only the last lines (default: all). |
 
+## Global flags
+
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

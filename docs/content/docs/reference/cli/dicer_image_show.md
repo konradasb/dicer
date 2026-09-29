@@ -4,28 +4,26 @@ title: "dicer image show"
 description: "Show a pulled image"
 ---
 
-Show a pulled image
+Show a pulled image.
 
-```
-dicer image show REF [flags]
-```
+## Usage
 
-### Options
-
-```
-      --format string   Output format: table, json, yaml, or a Go template, e.g. '{{.Name}}\t{{.State}}' (default "table")
-  -h, --help            help for show
+```console
+$ dicer image show REF [flags]
 ```
 
-### Options inherited from parent commands
+Also run as `dicer image get`, `dicer image inspect`.
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+## Flags
 
-### SEE ALSO
+| Flag | Description |
+|---|---|
+| `--format string` | Output format: table, json, yaml, or a Go template, e.g. '{{.Name}}\t{{.State}}'. Default: `table`. |
 
-* [dicer image]({{< relref "/docs/reference/cli/dicer_image" >}})	 - Manage images
+## Global flags
 
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

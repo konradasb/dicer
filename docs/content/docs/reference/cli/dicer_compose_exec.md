@@ -4,45 +4,37 @@ title: "dicer compose exec"
 description: "Run a command inside a service's running instance"
 ---
 
-Run a command inside a service's running instance
-
-### Synopsis
-
 Runs a command inside a service's instance, /bin/sh if none is given, as
-dicer exec does. Flags go before the service: everything after it is the
+`dicer exec` does. Flags go before the service: everything after it is the
 command's.
 
-```
-dicer compose exec [flags] SERVICE [COMMAND [ARG...]]
-```
+## Usage
 
-### Examples
-
-```
-  dicer compose exec db
-  dicer compose exec db psql -U postgres
-  dicer compose exec -T web cat /etc/nginx/nginx.conf > nginx.conf
+```console
+$ dicer compose exec [flags] SERVICE [COMMAND [ARG...]]
 ```
 
-### Options
+## Examples
 
-```
-  -t, --tty               Allocate a pseudo-TTY (default: when stdin and stdout are a terminal)
-  -T, --no-tty            Do not allocate a pseudo-TTY
-  -e, --env stringArray   Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable)
-  -w, --workdir string    Working directory inside the instance
-      --timeout int32     Kill the command after this many seconds (0: no limit)
-  -h, --help              help for exec
+```console
+$ dicer compose exec db
+$ dicer compose exec db psql -U postgres
+$ dicer compose exec -T web cat /etc/nginx/nginx.conf > nginx.conf
 ```
 
-### Options inherited from parent commands
+## Flags
 
-```
-  -D, --debug           Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string   Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-```
+| Flag | Description |
+|---|---|
+| `-e`, `--env stringArray` | Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable). |
+| `-T`, `--no-tty` | Do not allocate a pseudo-TTY. |
+| `--timeout int32` | Kill the command after this many seconds (0: no limit). |
+| `-t`, `--tty` | Allocate a pseudo-TTY (default: when stdin and stdout are a terminal). |
+| `-w`, `--workdir string` | Working directory inside the instance. |
 
-### SEE ALSO
+## Global flags
 
-* [dicer compose]({{< relref "/docs/reference/cli/dicer_compose" >}})	 - Run a project of instances described in a compose file
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |

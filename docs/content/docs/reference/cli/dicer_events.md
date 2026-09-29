@@ -4,53 +4,45 @@ title: "dicer events"
 description: "Show what has happened to the instances and images on the host"
 ---
 
-Show what has happened to the instances and images on the host
-
-### Synopsis
-
 Shows what has happened on the host: instances created, started, stopped,
 crashed and restarted, health checks failing and recovering, images pulled
 and collected. The daemon keeps them, so they explain what happened while
 nobody was looking, and they survive it restarting.
 
 Like logs, it prints what is kept and exits; -f keeps following new
-events. With --format json it prints one JSON object a line, for scripts.
+events. With `--format` json it prints one JSON object a line, for scripts.
 
-```
-dicer events [flags]
-```
+## Usage
 
-### Examples
-
-```
-  dicer events
-  dicer events -f
-  dicer events --name web --since 1h
-  dicer events --kind image -n 20
-  dicer events -f --format json | jq -r 'select(.action == "died") | .name'
+```console
+$ dicer events [flags]
 ```
 
-### Options
+## Examples
 
-```
-  -f, --follow          Keep writing new events as they happen
-  -n, --tail int32      Show only the last events (default: all kept)
-      --since string    Show only events since a time, or for a duration: 2026-09-22, 10:30, 1h
-      --kind string     Show only events about one kind of resource: instance or image
-      --name string     Show only events about the resource with this name
-      --format string   Output format: text or json (default "text")
-  -h, --help            help for events
+```console
+$ dicer events
+$ dicer events -f
+$ dicer events --name web --since 1h
+$ dicer events --kind image -n 20
+$ dicer events -f --format json | jq -r 'select(.action == "died") | .name'
 ```
 
-### Options inherited from parent commands
+## Flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+| Flag | Description |
+|---|---|
+| `-f`, `--follow` | Keep writing new events as they happen. |
+| `--format string` | Output format: text or json. Default: `text`. |
+| `--kind string` | Show only events about one kind of resource: instance or image. |
+| `--name string` | Show only events about the resource with this name. |
+| `--since string` | Show only events since a time, or for a duration: 2026-09-22, 10:30, 1h. |
+| `-n`, `--tail int32` | Show only the last events (default: all kept). |
 
-### SEE ALSO
+## Global flags
 
-* [dicer]({{< relref "/docs/reference/cli" >}})	 - Run virtual machines from container images
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

@@ -4,27 +4,18 @@ title: "dicer image pull"
 description: "Pull an image and convert it to a bootable disk"
 ---
 
-Pull an image and convert it to a bootable disk
+Pull an image and convert it to a bootable disk.
 
-```
-dicer image pull REF [flags]
-```
+## Usage
 
-### Options
-
-```
-  -h, --help   help for pull
+```console
+$ dicer image pull REF
 ```
 
-### Options inherited from parent commands
+## Global flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
-
-### SEE ALSO
-
-* [dicer image]({{< relref "/docs/reference/cli/dicer_image" >}})	 - Manage images
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

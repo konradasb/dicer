@@ -40,34 +40,32 @@ type instanceMetrics struct {
 	restarts   prometheus.Counter
 }
 
-func newInstanceMetrics() instanceMetrics {
+func (m *Metrics) newInstanceMetrics() instanceMetrics {
 	return instanceMetrics{
-		operations: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Namespace: namespace,
-			Name:      "instance_operations_total",
+		operations: m.counterVec(Description{
+			Name:   "dicer_instance_operations_total",
+			Labels: []string{"operation", "outcome"},
 			Help: "Instance lifecycle operations by operation " +
 				"(start, stop, pause, resume, delete, create_snapshot, restore_snapshot, delete_snapshot) and outcome.",
-		}, []string{"operation", "outcome"}),
+			Doc:   "`outcome` is `success` or `error`.",
+			Group: GroupInstances,
+		}),
 
-		duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Namespace: namespace,
-			Name:      "instance_operation_duration_seconds",
-			Help:      "Time an instance lifecycle operation took.",
-			// A start pulls an image and boots a guest; a stop waits on an
-			// ACPI shutdown. Seconds, not milliseconds, is the right scale.
-			Buckets: prometheus.ExponentialBuckets(0.05, 2, 12),
-		}, []string{"operation"}),
+		// A start pulls an image and boots a guest; a stop waits on an ACPI
+		// shutdown. Seconds, not milliseconds, is the right scale.
+		duration: m.histogramVec(Description{
+			Name:   "dicer_instance_operation_duration_seconds",
+			Labels: []string{"operation"},
+			Help:   "Time an instance lifecycle operation took.",
+			Group:  GroupInstances,
+		}, prometheus.ExponentialBuckets(0.05, 2, 12)),
 
-		restarts: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: namespace,
-			Name:      "instance_restarts_total",
-			Help:      "Instances started again by their restart policy after they ended.",
+		restarts: m.counter(Description{
+			Name:  "dicer_instance_restarts_total",
+			Help:  "Instances started again by their restart policy after they ended.",
+			Group: GroupInstances,
 		}),
 	}
-}
-
-func (im instanceMetrics) collectors() []prometheus.Collector {
-	return []prometheus.Collector{im.operations, im.duration, im.restarts}
 }
 
 // RecordInstanceOperation records a finished lifecycle operation and how long
@@ -97,21 +95,43 @@ type instanceCollector struct {
 	allocatableMemory *prometheus.Desc
 }
 
-func newInstanceCollector(source func() InstanceStats) *instanceCollector {
+func (m *Metrics) newInstanceCollector(source func() InstanceStats) *instanceCollector {
 	return &instanceCollector{
 		source: source,
-		count: desc("instances",
-			"Instances defined on this host, by lifecycle state.", "state"),
-		health: desc("instances_health",
-			"Running instances whose health is checked, by what the check has found.", "status"),
-		vcpus: desc("instances_vcpus",
-			"vCPUs committed to instances that are starting, running or paused."),
-		memory: desc("instances_memory_bytes",
-			"Guest memory committed to instances that are starting, running or paused."),
-		allocatableVCPUs: desc("instances_vcpus_allocatable",
-			"vCPUs instances may be committed in total; a start beyond it is refused."),
-		allocatableMemory: desc("instances_memory_allocatable_bytes",
-			"Guest memory instances may be committed in total; a start beyond it is refused."),
+		count: m.desc(Description{
+			Name:   "dicer_instances",
+			Labels: []string{"state"},
+			Help:   "Instances defined on this host, by lifecycle state.",
+			Doc:    "Every state is present, at 0 if none.",
+			Group:  GroupInstances,
+		}),
+		health: m.desc(Description{
+			Name:   "dicer_instances_health",
+			Labels: []string{"status"},
+			Help:   "Running instances whose health is checked, by what the check has found.",
+			Doc:    "`status` is `starting`, `healthy` or `unhealthy`.",
+			Group:  GroupInstances,
+		}),
+		vcpus: m.desc(Description{
+			Name:  "dicer_instances_vcpus",
+			Help:  "vCPUs committed to instances that are starting, running or paused.",
+			Group: GroupInstances,
+		}),
+		memory: m.desc(Description{
+			Name:  "dicer_instances_memory_bytes",
+			Help:  "Guest memory committed to instances that are starting, running or paused.",
+			Group: GroupInstances,
+		}),
+		allocatableVCPUs: m.desc(Description{
+			Name:  "dicer_instances_vcpus_allocatable",
+			Help:  "vCPUs instances may be committed in total; a start beyond it is refused.",
+			Group: GroupInstances,
+		}),
+		allocatableMemory: m.desc(Description{
+			Name:  "dicer_instances_memory_allocatable_bytes",
+			Help:  "Guest memory instances may be committed in total; a start beyond it is refused.",
+			Group: GroupInstances,
+		}),
 	}
 }
 

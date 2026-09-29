@@ -4,28 +4,10 @@ title: "dicer network allocation"
 description: "Inspect the addresses assigned on a network"
 ---
 
-Inspect the addresses assigned on a network
+Inspect the addresses assigned on a network.
 
-```
-dicer network allocation [flags]
-```
+## Commands
 
-### Options
-
-```
-  -h, --help   help for allocation
-```
-
-### Options inherited from parent commands
-
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
-
-### SEE ALSO
-
-* [dicer network]({{< relref "/docs/reference/cli/dicer_network" >}})	 - Manage networks
-* [dicer network allocation list]({{< relref "/docs/reference/cli/dicer_network_allocation_list" >}})	 - List the addresses assigned on a network
-
+| Command | Description |
+|---|---|
+| [`dicer network allocation list`]({{< relref "/docs/reference/cli/dicer_network_allocation_list" >}}) | List the addresses assigned on a network. |

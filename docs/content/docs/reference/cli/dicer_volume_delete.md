@@ -4,27 +4,20 @@ title: "dicer volume delete"
 description: "Delete one or more volumes no instance uses"
 ---
 
-Delete one or more volumes no instance uses
+Delete one or more volumes no instance uses.
 
-```
-dicer volume delete NAME... [flags]
-```
+## Usage
 
-### Options
-
-```
-  -h, --help   help for delete
+```console
+$ dicer volume delete NAME...
 ```
 
-### Options inherited from parent commands
+Also run as `dicer volume rm`, `dicer volume remove`.
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+## Global flags
 
-### SEE ALSO
-
-* [dicer volume]({{< relref "/docs/reference/cli/dicer_volume" >}})	 - Manage volumes
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

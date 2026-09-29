@@ -4,10 +4,6 @@ title: "dicer compose up"
 description: "Create and start the project's instances"
 ---
 
-Create and start the project's instances
-
-### Synopsis
-
 Creates the networks and volumes the services use, pulls the images the host
 does not have, and brings each service's instance up to date with the file:
 creating the missing ones, recreating those whose definition has changed, and
@@ -20,40 +16,36 @@ The instances' consoles are written out until they all stop, each line
 marked with its instance's name. Ctrl+C stops them; a second Ctrl+C stops
 waiting. With -d they run in the background instead.
 
-```
-dicer compose up [SERVICE...] [flags]
-```
+## Usage
 
-### Examples
-
-```
-  dicer compose up -d
-  dicer compose up -d --wait
-  dicer compose up web
-  dicer compose up -d --force-recreate --remove-orphans
+```console
+$ dicer compose up [SERVICE...] [flags]
 ```
 
-### Options
+## Examples
 
-```
-  -d, --detach           Run in the background: return once the instances have started
-      --wait             Return once every instance is running, and healthy if it is checked (implies -d)
-      --force-recreate   Recreate every instance, even those whose definition has not changed
-      --no-recreate      Leave instances that already exist as they are, even if their definition has changed
-      --remove-orphans   Delete the project's instances whose service is no longer in the file
-      --pull string      When to pull images: missing, always or never (default "missing")
-  -h, --help             help for up
+```console
+$ dicer compose up -d
+$ dicer compose up -d --wait
+$ dicer compose up web
+$ dicer compose up -d --force-recreate --remove-orphans
 ```
 
-### Options inherited from parent commands
+## Flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+| Flag | Description |
+|---|---|
+| `-d`, `--detach` | Run in the background: return once the instances have started. |
+| `--force-recreate` | Recreate every instance, even those whose definition has not changed. |
+| `--no-recreate` | Leave instances that already exist as they are, even if their definition has changed. |
+| `--pull string` | When to pull images: missing, always or never. Default: `missing`. |
+| `--remove-orphans` | Delete the project's instances whose service is no longer in the file. |
+| `--wait` | Return once every instance is running, and healthy if it is checked (implies -d). |
 
-### SEE ALSO
+## Global flags
 
-* [dicer compose]({{< relref "/docs/reference/cli/dicer_compose" >}})	 - Run a project of instances described in a compose file
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

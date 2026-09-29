@@ -4,10 +4,6 @@ title: "dicer rename"
 description: "Rename a stopped instance"
 ---
 
-Rename a stopped instance
-
-### Synopsis
-
 Renames a stopped instance. It keeps its ID, its disks, its snapshots and
 the address it holds: only what you call it changes.
 
@@ -15,32 +11,23 @@ A running instance is refused. Its name is where its files are kept on the
 host, and its guest took its hostname from the old name when it booted, so
 a rename could not fully take effect until it is started again.
 
-```
-dicer rename NAME NEW_NAME [flags]
-```
+## Usage
 
-### Examples
-
-```
-  dicer rename web web-old
-  dicer instance rename api api-v2
+```console
+$ dicer rename NAME NEW_NAME
 ```
 
-### Options
+## Examples
 
-```
-  -h, --help   help for rename
-```
-
-### Options inherited from parent commands
-
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
+```console
+$ dicer rename web web-old
+$ dicer instance rename api api-v2
 ```
 
-### SEE ALSO
+## Global flags
 
-* [dicer]({{< relref "/docs/reference/cli" >}})	 - Run virtual machines from container images
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

@@ -4,51 +4,43 @@ title: "dicer compose config"
 description: "Check the compose file and show it resolved"
 ---
 
-Check the compose file and show it resolved
-
-### Synopsis
-
-Checks the compose file, and shows it as dicer compose reads it: with its
+Checks the compose file, and shows it as `dicer compose` reads it: with its
 anchors expanded and its x- extensions left out. It does not talk to the
 daemon.
 
-Variables are shown as they are written, ${DB_PASSWORD}, so that the output
+Variables are shown as they are written, ${`DB_PASSWORD`}, so that the output
 can be shared without the values in .env or the environment: they are
-still substituted to check the file. --interpolate shows the values.
+still substituted to check the file. `--interpolate` shows the values.
 
-```
-dicer compose config [flags]
-```
+## Usage
 
-### Examples
-
-```
-  dicer compose config
-  dicer compose config --interpolate
-  dicer compose config --services
-  dicer compose -f staging.yaml config -q && echo valid
+```console
+$ dicer compose config [flags]
 ```
 
-### Options
+## Examples
 
-```
-  -h, --help          help for config
-      --interpolate   Show variables' values, from .env and the environment, instead of the variables
-      --networks      List the networks, one a line
-  -q, --quiet         Only check the file; print nothing
-      --services      List the services, one a line
-      --volumes       List the volumes, one a line
+```console
+$ dicer compose config
+$ dicer compose config --interpolate
+$ dicer compose config --services
+$ dicer compose -f staging.yaml config -q && echo valid
 ```
 
-### Options inherited from parent commands
+## Flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+| Flag | Description |
+|---|---|
+| `--interpolate` | Show variables' values, from .env and the environment, instead of the variables. |
+| `--networks` | List the networks, one a line. |
+| `-q`, `--quiet` | Only check the file; print nothing. |
+| `--services` | List the services, one a line. |
+| `--volumes` | List the volumes, one a line. |
 
-### SEE ALSO
+## Global flags
 
-* [dicer compose]({{< relref "/docs/reference/cli/dicer_compose" >}})	 - Run a project of instances described in a compose file
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

@@ -4,32 +4,24 @@ title: "dicer image prune"
 description: "Delete every unused image"
 ---
 
-Delete every unused image
-
-### Synopsis
-
 Deletes every unused image, and the cached layers that make them bootable. Images that are in use by one or more instances are not deleted. Use -f to skip confirmation.
 
-```
-dicer image prune [flags]
-```
+## Usage
 
-### Options
-
-```
-  -f, --force   Do not ask for confirmation
-  -h, --help    help for prune
+```console
+$ dicer image prune [flags]
 ```
 
-### Options inherited from parent commands
+## Flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+| Flag | Description |
+|---|---|
+| `-f`, `--force` | Do not ask for confirmation. |
 
-### SEE ALSO
+## Global flags
 
-* [dicer image]({{< relref "/docs/reference/cli/dicer_image" >}})	 - Manage images
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

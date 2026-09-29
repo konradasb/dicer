@@ -4,13 +4,9 @@ title: "dicer run"
 description: "Create an instance from an image and start it"
 ---
 
-Create an instance from an image and start it
-
-### Synopsis
-
 Defines an instance from an image and boots it, pulling the image first if
 it is not on the host yet. The instance is named after the image unless
---name is given.
+`--name` is given.
 
 A command after the image replaces its ENTRYPOINT and CMD. Flags go before
 the image: everything after it is the command's.
@@ -20,61 +16,57 @@ stops, and the command exits with the status it ended with. Ctrl+C stops
 the instance; a second Ctrl+C stops waiting for it. With -d the instance
 runs in the background instead.
 
-```
-dicer run [flags] IMAGE [COMMAND [ARG...]]
-```
+## Usage
 
-### Examples
-
-```
-  dicer run --rm alpine:3.21 echo hello
-  dicer run -d --name web -p 8080:80 --memory 1GiB nginx:1.27
-  dicer run -d --vcpus 2 alpine:3.21 sleep infinity
+```console
+$ dicer run [flags] IMAGE [COMMAND [ARG...]]
 ```
 
-### Options
+## Examples
 
-```
-  -d, --detach                         Run in the background: print nothing of the console and return once started
-      --name string                    Instance name (default: the image's name and a random suffix)
-      --kernel string                  Kernel to boot with
-      --kernel-args string             Kernel command line arguments
-      --hypervisor-type string         Hypervisor: cloud-hypervisor or firecracker (default: cloud-hypervisor)
-      --hypervisor-version string      Hypervisor version (default: the newest available)
-      --vcpus int32                    Number of virtual CPUs (default 1)
-  -m, --memory string                  Memory, e.g. 512MiB or 2GiB (default "512MiB")
-      --disk string                    Overlay disk size, e.g. 10GiB (default "10GiB")
-      --network string                 Network to attach to
-      --ip string                      Static IP address (default: assigned from the subnet)
-  -p, --publish stringArray            Publish a guest port on the host, as [hostIP:]hostPort:guestPort[/tcp|udp] (repeatable)
-      --mount stringArray              Mount a volume, host file or tmpfs, as [type=volume|file|tmpfs,][source=...,]target=/path[,readonly] (repeatable)
-  -e, --env stringArray                Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable)
-      --env-file stringArray           Read environment variables from a file of KEY=VALUE lines (repeatable)
-  -l, --label stringArray              Label as KEY=VALUE (repeatable)
-      --hostname string                Guest hostname (default: the instance name)
-      --restart string                 Restart policy when the instance ends on its own: no, on-failure[:max-retries], unless-stopped or always (default no)
-      --rm                             Delete the instance once it stops, the daemon doing the deleting
-      --health-cmd string              Command to check health with, run by /bin/sh in the guest
-      --health-http string             Check health with an HTTP GET in the guest, as PORT[/path]; 2xx or 3xx is healthy
-      --health-tcp int                 Check health by connecting to a TCP port in the guest
-      --health-interval duration       Time between health checks (default 10s)
-      --health-timeout duration        Time a health check may take (default 5s)
-      --health-start-period duration   Time after a start in which failed checks do not count (default none)
-      --health-retries int32           Failed checks in a row that make the instance unhealthy (default 3)
-      --no-healthcheck                 Check no health, not even as the image says to
-      --init-mode string               How the guest starts the command: auto, exec (as PID 1 of its own PID namespace) or systemd (default auto)
-  -h, --help                           help for run
+```console
+$ dicer run --rm alpine:3.21 echo hello
+$ dicer run -d --name web -p 8080:80 --memory 1GiB nginx:1.27
+$ dicer run -d --vcpus 2 alpine:3.21 sleep infinity
 ```
 
-### Options inherited from parent commands
+## Flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+| Flag | Description |
+|---|---|
+| `-d`, `--detach` | Run in the background: print nothing of the console and return once started. |
+| `--disk string` | Overlay disk size, e.g. 10GiB. Default: `10GiB`. |
+| `-e`, `--env stringArray` | Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable). |
+| `--env-file stringArray` | Read environment variables from a file of KEY=VALUE lines (repeatable). |
+| `--health-cmd string` | Command to check health with, run by /bin/sh in the guest. |
+| `--health-http string` | Check health with an HTTP GET in the guest, as PORT[/path]; 2xx or 3xx is healthy. |
+| `--health-interval duration` | Time between health checks (default 10s). |
+| `--health-retries int32` | Failed checks in a row that make the instance unhealthy (default 3). |
+| `--health-start-period duration` | Time after a start in which failed checks do not count (default none). |
+| `--health-tcp int` | Check health by connecting to a TCP port in the guest. |
+| `--health-timeout duration` | Time a health check may take (default 5s). |
+| `--hostname string` | Guest hostname (default: the instance name). |
+| `--hypervisor-type string` | Hypervisor: cloud-hypervisor or firecracker (default: cloud-hypervisor). |
+| `--hypervisor-version string` | Hypervisor version (default: the newest available). |
+| `--init-mode string` | How the guest starts the command: auto, exec (as PID 1 of its own PID namespace) or systemd (default auto). |
+| `--ip string` | Static IP address (default: assigned from the subnet). |
+| `--kernel string` | Kernel to boot with. |
+| `--kernel-args string` | Kernel command line arguments. |
+| `-l`, `--label stringArray` | Label as KEY=VALUE (repeatable). |
+| `-m`, `--memory string` | Memory, e.g. 512MiB or 2GiB. Default: `512MiB`. |
+| `--mount stringArray` | Mount a volume, host file or tmpfs, as [type=volume\|file\|tmpfs,][source=...,]target=/path[,readonly] (repeatable). |
+| `--name string` | Instance name (default: the image's name and a random suffix). |
+| `--network string` | Network to attach to. |
+| `--no-healthcheck` | Check no health, not even as the image says to. |
+| `-p`, `--publish stringArray` | Publish a guest port on the host, as [hostIP:]hostPort:guestPort[/tcp\|udp] (repeatable). |
+| `--restart string` | Restart policy when the instance ends on its own: no, on-failure[:max-retries], unless-stopped or always (default no). |
+| `--rm` | Delete the instance once it stops, the daemon doing the deleting. |
+| `--vcpus int32` | Number of virtual CPUs. Default: `1`. |
 
-### SEE ALSO
+## Global flags
 
-* [dicer]({{< relref "/docs/reference/cli" >}})	 - Run virtual machines from container images
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

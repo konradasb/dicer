@@ -224,8 +224,9 @@ update-hypervisor-spec: ## Download the Cloud Hypervisor OpenAPI spec
 # docs/go.mod; Hugo fetches it on the first build.
 DOCS_DIR := $(CURDIR)/docs
 
-# The reference pages generated from the code: the command line and the
-# configuration by tools/docgen, the API by protoc-gen-doc with its template.
+# The reference pages generated from the code: the command line, the
+# configuration, the compose file and the metrics by tools/docgen, the API by protoc-gen-doc
+# with its template.
 # They are committed, and CI checks they are current.
 DOCS_API_TEMPLATE := {"version":"v2","plugins":[{"local":"$(PROTOC_GEN_DOC)","out":"docs/content/docs/reference","opt":["tools/docgen/api.md.tmpl,api.md"]}]}
 

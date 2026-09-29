@@ -4,27 +4,18 @@ title: "dicer instance stop"
 description: "Stop one or more running instances, keeping their definitions and disks"
 ---
 
-Stop one or more running instances, keeping their definitions and disks
+Stop one or more running instances, keeping their definitions and disks.
 
-```
-dicer instance stop NAME... [flags]
-```
+## Usage
 
-### Options
-
-```
-  -h, --help   help for stop
+```console
+$ dicer instance stop NAME...
 ```
 
-### Options inherited from parent commands
+## Global flags
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
-
-### SEE ALSO
-
-* [dicer instance]({{< relref "/docs/reference/cli/dicer_instance" >}})	 - Manage instances
-
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

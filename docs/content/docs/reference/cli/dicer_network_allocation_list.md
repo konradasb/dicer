@@ -4,30 +4,28 @@ title: "dicer network allocation list"
 description: "List the addresses assigned on a network"
 ---
 
-List the addresses assigned on a network
+List the addresses assigned on a network.
 
-```
-dicer network allocation list NETWORK [flags]
-```
+## Usage
 
-### Options
-
-```
-  -c, --columns strings   Columns to display, comma-separated and in any case (default: all)
-      --format string     Output format: table, json, yaml, or a Go template, e.g. '{{.Name}}\t{{.State}}' (default "table")
-  -h, --help              help for list
-  -q, --quiet             Only display names, one a line
+```console
+$ dicer network allocation list NETWORK [flags]
 ```
 
-### Options inherited from parent commands
+Also run as `dicer network allocation ls`.
 
-```
-  -D, --debug              Trace every call to the daemon on stderr (or set $DICER_DEBUG)
-  -r, --remote string      Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default $DICER_REMOTE, then the current remote, then local)
-      --timeout duration   Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded)
-```
+## Flags
 
-### SEE ALSO
+| Flag | Description |
+|---|---|
+| `-c`, `--columns strings` | Columns to display, comma-separated and in any case (default: all). |
+| `--format string` | Output format: table, json, yaml, or a Go template, e.g. '{{.Name}}\t{{.State}}'. Default: `table`. |
+| `-q`, `--quiet` | Only display names, one a line. |
 
-* [dicer network allocation]({{< relref "/docs/reference/cli/dicer_network_allocation" >}})	 - Inspect the addresses assigned on a network
+## Global flags
 
+| Flag | Description |
+|---|---|
+| `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
+| `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--timeout duration` | Give up on a call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |
