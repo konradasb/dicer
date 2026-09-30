@@ -6,13 +6,21 @@
 package daemon
 
 import (
+	"context"
 	"net"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"testing"
+	"time"
+
+	"google.golang.org/grpc"
+
+	"github.com/konradasb/dicer"
+	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
 func TestListenSocketSetsItsMode(t *testing.T) {
@@ -98,4 +106,71 @@ func TestListenSocketRefusesALiveOne(t *testing.T) {
 		_ = l.Close()
 		t.Fatal("listenSocket took over a socket another daemon is serving on")
 	}
+}
+
+// TestKeepaliveLetsClientsPing checks that the daemon's default keepalive
+// lets a client ping as often as gRPC allows, between calls too, without
+// being disconnected, as gRPC's own defaults would after a few pings.
+func TestKeepaliveLetsClientsPing(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits for several keepalive pings, which gRPC sends 10s apart at the soonest")
+	}
+
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	counted := &countingListener{Listener: ln}
+
+	s := grpc.NewServer(keepaliveOptions(defaultConfig().API.Keepalive)...)
+	dicerdv1.RegisterDaemonServiceServer(s, hostInfoServer{})
+	go func() { _ = s.Serve(counted) }()
+	t.Cleanup(s.Stop)
+
+	c, err := dicer.NewClient(dicer.WithAddress(ln.Addr().String()), dicer.WithKeepalive(10*time.Second, 5*time.Second))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+
+	call := func() {
+		t.Helper()
+		if _, err := c.GetHostInfo(t.Context(), &dicerdv1.GetHostInfoRequest{}); err != nil {
+			t.Fatalf("GetHostInfo: %v", err)
+		}
+	}
+
+	call()
+	// Long enough for three pings, which gRPC's defaults disconnect for.
+	time.Sleep(35 * time.Second)
+	call()
+
+	// A client that was disconnected reconnects without its caller seeing,
+	// so it shows only in the connections the daemon accepted.
+	if n := counted.accepted.Load(); n != 1 {
+		t.Errorf("the daemon accepted %d connections, want the client kept on 1", n)
+	}
+}
+
+// hostInfoServer answers GetHostInfo at once.
+type hostInfoServer struct {
+	dicerdv1.UnimplementedDaemonServiceServer
+}
+
+func (hostInfoServer) GetHostInfo(context.Context, *dicerdv1.GetHostInfoRequest) (*dicerdv1.GetHostInfoResponse, error) {
+	return &dicerdv1.GetHostInfoResponse{}, nil
+}
+
+// countingListener counts the connections it accepts.
+type countingListener struct {
+	net.Listener
+	accepted atomic.Int32
+}
+
+func (l *countingListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err == nil {
+		l.accepted.Add(1)
+	}
+	return conn, err
 }

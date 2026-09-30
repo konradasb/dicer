@@ -146,6 +146,21 @@ daemon's host.
 or `HOST:PORT`. An address alone carries no TLS settings, so it suits only a
 socket or a daemon without TLS.
 
+## Connections that go quiet
+
+A daemon whose host loses power, or whose network drops, closes nothing: to
+the client its connection is still there. So a remote client pings the
+daemon every 30 seconds while the connection carries nothing, and gives it up
+if no answer comes within 10, failing the calls on it rather than leaving
+them to wait. The daemon does the same for its clients, as
+[`api.keepalive`](../../reference/configuration#api-keepalive) says, and lets
+a client ping as often as every 10 seconds; one that pings more often is
+disconnected. A program using the Go package sets its own with
+`dicer.WithKeepalive`.
+
+A connection over the host's socket is never pinged: the kernel closes it if
+either end goes.
+
 ## Take a client's access away
 
 The daemon trusts every certificate its authority has made until it

@@ -18,6 +18,7 @@ import (
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/konradasb/dicer/internal/grpcapi"
 	"github.com/konradasb/dicer/internal/version"
@@ -139,10 +140,12 @@ func (d *daemon) apiCredentials() ([]grpc.ServerOption, error) {
 
 // newGRPCServer builds an API server with metrics and audit interceptors,
 // which see the status each call ends with, and innermost the conversion of
-// handlers' errors to statuses.
+// handlers' errors to statuses. It keeps connections alive as
+// api.keepalive says.
 func (d *daemon) newGRPCServer(api *grpcapi.Server, opts ...grpc.ServerOption) *grpc.Server {
 	audit := grpcapi.NewAudit(d.logger)
 
+	opts = append(opts, keepaliveOptions(d.cfg.API.Keepalive)...)
 	s := grpc.NewServer(append(opts,
 		grpc.ChainUnaryInterceptor(
 			d.metrics.UnaryServerInterceptor(),
@@ -158,6 +161,17 @@ func (d *daemon) newGRPCServer(api *grpcapi.Server, opts ...grpc.ServerOption) *
 	api.Register(s)
 
 	return s
+}
+
+// keepaliveOptions returns the server options that ping quiet clients and
+// let clients ping, as cfg says.
+func keepaliveOptions(cfg KeepaliveConfig) []grpc.ServerOption {
+	opts := []grpc.ServerOption{
+		grpc.KeepaliveParams(keepalive.ServerParameters{Time: cfg.Interval, Timeout: cfg.Timeout}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{MinTime: cfg.MinClientInterval, PermitWithoutStream: true}),
+	}
+
+	return opts
 }
 
 // listenSocket opens the API socket, removing a stale one left by a previous

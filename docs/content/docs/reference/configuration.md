@@ -113,6 +113,30 @@ The daemon's own settings. The sections after them are the API, resources, netwo
 
 `client_ca_file` holds the PEM authorities client certificates must be issued by. Set, every client must present a valid certificate; unset, any client is accepted. Use a CA dedicated to Dicer's clients. It is read at startup.
 
+## `api.keepalive` {#api-keepalive}
+
+*mapping*
+
+`keepalive` is how the daemon finds clients that have gone without closing their connection, because their host lost power or the network between dropped, and how often clients may check the same of it. Such a connection otherwise lasts until the kernel gives up on it, which can take a quarter of an hour.
+
+### `api.keepalive.interval` {#api-keepalive-interval}
+
+*duration, such as 30s or 5m*
+
+`interval` is how long a connection may carry nothing before the daemon pings the client. Unset is 30s.
+
+### `api.keepalive.timeout` {#api-keepalive-timeout}
+
+*duration, such as 30s or 5m*
+
+`timeout` is how long the daemon waits for the answer to a ping before closing the connection. Unset is 10s.
+
+### `api.keepalive.min_client_interval` {#api-keepalive-min-client-interval}
+
+*duration, such as 30s or 5m*
+
+`min_client_interval` is how often a client may ping the daemon at most, even with no call in flight. A client pinging more often is disconnected. Dicer's clients ping every 30s unless told otherwise. Unset is 10s.
+
 ## `resources` {#resources}
 
 *mapping*

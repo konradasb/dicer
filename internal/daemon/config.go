@@ -42,6 +42,12 @@ const (
 	defaultReservedMemoryBytes = 1 << 30
 
 	defaultGCInterval = time.Hour
+
+	// The keepalive defaults leave room for a client's default interval,
+	// dicer.DefaultKeepaliveInterval, above the daemon's minimum.
+	defaultKeepaliveInterval          = 30 * time.Second
+	defaultKeepaliveTimeout           = 10 * time.Second
+	defaultKeepaliveMinClientInterval = 10 * time.Second
 )
 
 // Config is the daemon configuration. Every field's doc comment is its entry
@@ -176,6 +182,43 @@ type APIConfig struct {
 	// unencrypted: anyone who can reach it has root-equivalent access to
 	// this host.
 	TCP TCPConfig `yaml:"tcp"`
+
+	// Keepalive is how the daemon finds clients that have gone without
+	// closing their connection, because their host lost power or the network
+	// between dropped, and how often clients may check the same of it. Such
+	// a connection otherwise lasts until the kernel gives up on it, which
+	// can take a quarter of an hour.
+	Keepalive KeepaliveConfig `yaml:"keepalive"`
+}
+
+// KeepaliveConfig is how the daemon and its clients check that the other is
+// still there.
+type KeepaliveConfig struct {
+	// Interval is how long a connection may carry nothing before the daemon
+	// pings the client. Unset is 30s.
+	Interval time.Duration `yaml:"interval,omitempty"`
+
+	// Timeout is how long the daemon waits for the answer to a ping before
+	// closing the connection. Unset is 10s.
+	Timeout time.Duration `yaml:"timeout,omitempty"`
+
+	// MinClientInterval is how often a client may ping the daemon at most,
+	// even with no call in flight. A client pinging more often is
+	// disconnected. Dicer's clients ping every 30s unless told otherwise.
+	// Unset is 10s.
+	MinClientInterval time.Duration `yaml:"min_client_interval,omitempty"`
+}
+
+func (k *KeepaliveConfig) validate() error {
+	switch {
+	case k.Interval <= 0:
+		return errors.New("api.keepalive.interval must be positive")
+	case k.Timeout <= 0:
+		return errors.New("api.keepalive.timeout must be positive")
+	case k.MinClientInterval <= 0:
+		return errors.New("api.keepalive.min_client_interval must be positive")
+	}
+	return nil
 }
 
 // SocketConfig controls the API socket. Access is controlled by its file
@@ -493,6 +536,9 @@ func (a *APIConfig) validate() error {
 	if _, err := a.Socket.gid(); err != nil {
 		return err
 	}
+	if err := a.Keepalive.validate(); err != nil {
+		return err
+	}
 
 	if !a.TCP.Enabled() {
 		return nil
@@ -538,6 +584,11 @@ func defaultConfig() Config {
 		RunDir:  defaults.RunDir,
 		API: APIConfig{
 			Socket: SocketConfig{Path: defaults.Socket, Mode: defaultSocketMode},
+			Keepalive: KeepaliveConfig{
+				Interval:          defaultKeepaliveInterval,
+				Timeout:           defaultKeepaliveTimeout,
+				MinClientInterval: defaultKeepaliveMinClientInterval,
+			},
 		},
 		Resources: ResourcesConfig{
 			CPUOvercommit:       defaultCPUOvercommit,

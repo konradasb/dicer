@@ -138,6 +138,9 @@ func TestValidate(t *testing.T) {
 		{name: "tcp without port", mutate: func(c *Config) { c.API.TCP.Listen = "0.0.0.0" }, wantErr: true},
 		{name: "socket group by id", mutate: func(c *Config) { c.API.Socket.Group = "0" }},
 		{name: "unknown socket group", mutate: func(c *Config) { c.API.Socket.Group = "no-such-group" }, wantErr: true},
+		{name: "no keepalive interval", mutate: func(c *Config) { c.API.Keepalive.Interval = 0 }, wantErr: true},
+		{name: "negative keepalive timeout", mutate: func(c *Config) { c.API.Keepalive.Timeout = -time.Second }, wantErr: true},
+		{name: "no keepalive client interval", mutate: func(c *Config) { c.API.Keepalive.MinClientInterval = 0 }, wantErr: true},
 		{name: "registry password", mutate: func(c *Config) {
 			c.Registries = map[string]RegistryConfig{"ghcr.io": {Username: "bot", Password: "x"}}
 		}},
@@ -364,6 +367,23 @@ func TestLoadConfigRejectsBadImageGC(t *testing.T) {
 		if _, err := loadConfig(writeConfig(t, body)); err == nil {
 			t.Errorf("loadConfig accepted %q", body)
 		}
+	}
+}
+
+// A keepalive setting given replaces its default and leaves the others.
+func TestLoadConfigKeepalive(t *testing.T) {
+	cfg, err := loadConfig(writeConfig(t, "api:\n  keepalive:\n    interval: 1m\n"))
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+
+	want := KeepaliveConfig{
+		Interval:          time.Minute,
+		Timeout:           defaultKeepaliveTimeout,
+		MinClientInterval: defaultKeepaliveMinClientInterval,
+	}
+	if cfg.API.Keepalive != want {
+		t.Errorf("keepalive = %+v, want %+v", cfg.API.Keepalive, want)
 	}
 }
 
