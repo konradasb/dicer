@@ -4,9 +4,9 @@ title: "dicer run"
 description: "Create an instance from an image and start it"
 ---
 
-Defines an instance from an image and boots it, pulling the image first if
-it is not on the host yet. The instance is named after the image unless
-`--name` is given.
+Defines an instance from an image and boots it, pulling the image first as
+`--pull` says: by default, only if the host does not hold it. The instance is
+named after the image unless `--name` is given.
 
 A command after the image replaces its ENTRYPOINT and CMD. Flags go before
 the image: everything after it is the command's.
@@ -59,6 +59,7 @@ $ dicer run -d --vcpus 2 alpine:3.21 sleep infinity
 | `--network string` | Network to attach to. |
 | `--no-healthcheck` | Check no health, not even as the image says to. |
 | `-p`, `--publish stringArray` | Publish a guest port on the host, as [hostIP:]hostPort:guestPort[/tcp\|udp] (repeatable). |
+| `--pull string` | When to pull the image: missing, always or never. Default: `missing`. |
 | `--restart string` | Restart policy when the instance ends on its own: no, on-failure[:max-retries], unless-stopped or always (default no). |
 | `--rm` | Delete the instance once it stops, the daemon doing the deleting. |
 | `--vcpus int32` | Number of virtual CPUs. Default: `1`. |

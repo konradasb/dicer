@@ -25,7 +25,9 @@ Instance web started in 1.1s (172.20.61.102)
 ```
 
 `dicer run` pulls the image if the host does not have it, defines the
-instance and boots it. With `-d` it returns once the guest is running,
+instance and boots it. `--pull always` pulls it even if the host has it, to
+follow a tag that has moved, and `--pull never` uses only the image the host
+holds; see [Managing images](../managing-images#choose-when-an-image-is-pulled). With `-d` it returns once the guest is running,
 leaving the instance in the background. Without `--name`, the instance is
 named after the image, with a random suffix.
 

@@ -156,8 +156,9 @@ func newInstanceCreateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create [NAME] [-- COMMAND [ARG...]]",
 		Short: "Define an instance without starting it",
-		Long: "Records an instance definition. Nothing is booted until you run\n" +
-			"'dicer start', unless --start is given.\n\n" +
+		Long: "Records an instance definition, pulling the image first as --pull says:\n" +
+			"by default, only if the host does not hold it. Nothing is booted until\n" +
+			"you run 'dicer start', unless --start is given.\n\n" +
 			"A command after -- replaces the image's ENTRYPOINT and CMD.",
 		Example: "  dicer instance create web -i nginx:1.27 --network default -p 8080:80\n" +
 			"  dicer instance create web -i nginx:1.27 --start\n" +
@@ -178,6 +179,7 @@ func newInstanceCreateCommand() *cobra.Command {
 	cmd.Flags().StringP("image", "i", "", "Container image reference, e.g. docker.io/library/ubuntu:24.04")
 	_ = cmd.RegisterFlagCompletionFunc("image", complete(0, listImages))
 	addInstanceSpecFlags(cmd, true)
+	addPullFlag(cmd, "When to pull the image")
 	cmd.Flags().Bool("start", false, "Start the instance immediately after defining it")
 
 	return cmd
@@ -187,9 +189,9 @@ func newInstanceRunCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run [flags] IMAGE [COMMAND [ARG...]]",
 		Short: "Create an instance from an image and start it",
-		Long: "Defines an instance from an image and boots it, pulling the image first if\n" +
-			"it is not on the host yet. The instance is named after the image unless\n" +
-			"--name is given.\n\n" +
+		Long: "Defines an instance from an image and boots it, pulling the image first as\n" +
+			"--pull says: by default, only if the host does not hold it. The instance is\n" +
+			"named after the image unless --name is given.\n\n" +
 			"A command after the image replaces its ENTRYPOINT and CMD. Flags go before\n" +
 			"the image: everything after it is the command's.\n\n" +
 			"As with docker run, the guest's console is written out until the instance\n" +
@@ -227,6 +229,7 @@ func newInstanceRunCommand() *cobra.Command {
 	cmd.Flags().BoolP("detach", "d", false, "Run in the background: print nothing of the console and return once started")
 	cmd.Flags().String("name", "", "Instance name (default: the image's name and a random suffix)")
 	addInstanceSpecFlags(cmd, true)
+	addPullFlag(cmd, "When to pull the image")
 
 	return cmd
 }
@@ -279,14 +282,19 @@ func newInstanceUpdateCommand() *cobra.Command {
 	return cmd
 }
 
-// createInstance sends a create request and reports the result. For a start,
-// the image is pulled first so its progress shows.
+// createInstance sends a create request and reports the result. The image
+// is pulled first, as the request's pull policy says, so that its progress
+// shows.
 func createInstance(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) error {
 	client, cleanup, err := newClient(cmd)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
+
+	if req.PullPolicy, err = pullAsPolicy(cmd, client, req.GetImageRef(), req.GetPullPolicy()); err != nil {
+		return err
+	}
 
 	if !req.GetStart() {
 		inst, err := client.CreateInstance(cmd.Context(), req)
@@ -296,10 +304,6 @@ func createInstance(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) err
 		succeeded(cmd, "Instance %s created. Start it with: dicer start %s", inst.GetName(), inst.GetName())
 
 		return nil
-	}
-
-	if err := ensureImage(cmd, client, req.GetImageRef()); err != nil {
-		return err
 	}
 
 	err = runTask(cmd, "Starting "+req.GetName(), func() (*dicerdv1.Instance, error) {
@@ -317,6 +321,28 @@ func createInstance(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) err
 	}
 
 	return nil
+}
+
+// pullAsPolicy pulls an image as policy says, showing its progress, since
+// the daemon's own pull shows none. It returns the policy to create the
+// instance with: once pulled here, the daemon need only find the image.
+func pullAsPolicy(
+	cmd *cobra.Command, client *dicer.Client, ref string, policy dicerdv1.PullPolicy,
+) (dicerdv1.PullPolicy, error) {
+	var err error
+	switch policy {
+	case dicerdv1.PullPolicy_PULL_POLICY_NEVER:
+		return policy, nil
+	case dicerdv1.PullPolicy_PULL_POLICY_ALWAYS:
+		err = pullShowingProgress(cmd, client, ref)
+	default:
+		err = ensureImage(cmd, client, ref)
+	}
+	if err != nil {
+		return policy, err
+	}
+
+	return dicerdv1.PullPolicy_PULL_POLICY_MISSING, nil
 }
 
 // ensureImage pulls an image the host does not hold, showing progress.

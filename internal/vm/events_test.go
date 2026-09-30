@@ -35,7 +35,7 @@ func TestLifecycleIsRecorded(t *testing.T) {
 	ctx := t.Context()
 
 	created := types.InstanceSpec{ID: "new-id", Name: "new", ImageRef: "alpine"}
-	if err := h.mgr.Create(ctx, created); err != nil {
+	if err := h.mgr.Create(ctx, created, types.PullMissing); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	h.start(t)

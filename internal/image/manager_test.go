@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/image/reference"
@@ -734,5 +735,96 @@ func TestManager_DeleteAfterTagMoved(t *testing.T) {
 	}
 	if _, ok := manager.index.get(img.Digest); ok {
 		t.Errorf("image %s still present after Delete()", img.Digest)
+	}
+}
+
+// TestEnsureFollowsThePullPolicy checks when Ensure asks a registry, and that
+// PullNever refuses an image the host does not hold rather than fetching it.
+func TestEnsureFollowsThePullPolicy(t *testing.T) {
+	tests := []struct {
+		name         string
+		policy       types.PullPolicy
+		held         bool
+		wantRegistry bool
+		wantErr      error
+	}{
+		{name: "missing pulls an image the host lacks", policy: types.PullMissing, wantRegistry: true},
+		{name: "missing uses the image held", policy: types.PullMissing, held: true},
+		{name: "unset is missing", policy: "", held: true},
+		{name: "always asks the registry for an image held", policy: types.PullAlways, held: true, wantRegistry: true},
+		{name: "never uses the image held", policy: types.PullNever, held: true},
+		{name: "never refuses an image the host lacks", policy: types.PullNever, wantErr: errdefs.ErrNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager, err := NewManager(Config{DataDir: t.TempDir(), Logger: discardLogger})
+			if err != nil {
+				t.Fatalf("NewManager() error = %v", err)
+			}
+			manager.packer = &mockPacker{}
+
+			asked := 0
+			manager.registry = &mockRegistryClient{
+				resolveFunc: func(context.Context, *reference.Ref) (string, error) {
+					asked++
+					return "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", nil
+				},
+			}
+
+			if tt.held {
+				if _, err := manager.Pull(t.Context(), "alpine:latest", nil); err != nil {
+					t.Fatalf("Pull() error = %v", err)
+				}
+				asked = 0
+			}
+
+			img, err := manager.Ensure(t.Context(), "alpine:latest", tt.policy)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("Ensure() error = %v, want %v", err, tt.wantErr)
+				}
+			} else if err != nil || img == nil {
+				t.Fatalf("Ensure() = %v, %v, want the image", img, err)
+			}
+
+			if got := asked > 0; got != tt.wantRegistry {
+				t.Errorf("registry asked %d times, want asked = %t", asked, tt.wantRegistry)
+			}
+		})
+	}
+}
+
+// TestEnsureMarksTheImageUsed checks that an image held is marked used, so
+// that garbage collection spares it until the instance it is for is defined.
+func TestEnsureMarksTheImageUsed(t *testing.T) {
+	for _, policy := range []types.PullPolicy{types.PullMissing, types.PullAlways, types.PullNever} {
+		t.Run(string(policy), func(t *testing.T) {
+			manager, err := NewManager(Config{DataDir: t.TempDir(), Logger: discardLogger})
+			if err != nil {
+				t.Fatalf("NewManager() error = %v", err)
+			}
+			manager.registry = &mockRegistryClient{}
+			manager.packer = &mockPacker{}
+
+			img, err := manager.Pull(t.Context(), "alpine:latest", nil)
+			if err != nil {
+				t.Fatalf("Pull() error = %v", err)
+			}
+			stale := time.Now().Add(-24 * time.Hour)
+			manager.index.images[img.Digest].LastUsedAt = stale
+
+			if _, err := manager.Ensure(t.Context(), "alpine:latest", policy); err != nil {
+				t.Fatalf("Ensure() error = %v", err)
+			}
+
+			got, ok := manager.index.get(img.Digest)
+			if !ok {
+				t.Fatal("image gone after Ensure()")
+			}
+			if !got.LastUsedAt.After(stale) {
+				t.Errorf("LastUsedAt = %v, want it moved on from %v", got.LastUsedAt, stale)
+			}
+		})
 	}
 }

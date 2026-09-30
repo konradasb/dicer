@@ -44,8 +44,21 @@ What an image needs to be a machine rather than a container, a
 
 ## Pulling
 
-An image is pulled when an instance first needs it, or ahead of time with
+An image is pulled when an instance is created from it, or ahead of time with
 `dicer pull`. Pulls of the same image share one download.
+
+When creating an instance pulls its image is its **pull policy**, as with
+`docker run --pull`:
+
+- `missing`, the default, pulls the image only if the host does not hold it.
+- `always` pulls it even if the host holds it, so that a tag that has moved
+  is followed. Nothing is downloaded if the host already has what the tag
+  points at.
+- `never` uses the image the host holds, and refuses to create the instance
+  if it holds none. Creating the instance then asks no registry anything.
+
+An instance whose image the host has not held since, because it was deleted
+with `--force`, pulls it again at its next start.
 
 ## Keeping and removing images
 

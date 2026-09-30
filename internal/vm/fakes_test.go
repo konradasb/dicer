@@ -17,7 +17,6 @@ import (
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/hypervisor"
-	"github.com/konradasb/dicer/internal/image"
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/process"
 	"github.com/konradasb/dicer/internal/types"
@@ -335,7 +334,14 @@ func (f *fakeImages) Get(ref string) (*types.Image, error) {
 	return f.held, nil
 }
 
-func (f *fakeImages) Pull(context.Context, string, image.ProgressFunc) (*types.Image, error) {
+func (f *fakeImages) Ensure(_ context.Context, ref string, policy types.PullPolicy) (*types.Image, error) {
+	if f.held != nil && policy != types.PullAlways {
+		return f.held, nil
+	}
+	if policy == types.PullNever {
+		return nil, errdefs.NotFound("no image %q", ref)
+	}
+
 	f.pulls++
 	return &types.Image{
 		Name:       "docker.io/library/alpine:3.21",

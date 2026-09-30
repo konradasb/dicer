@@ -175,6 +175,8 @@ func (m *Manager) Pull(ctx context.Context, ref string, onProgress ProgressFunc)
 	img, hit := m.index.get(digest)
 	m.metrics.RecordImageCacheLookup(hit)
 	if hit {
+		// Pulled again, though nothing was fetched: that is a use.
+		m.markUsed(digest, time.Now())
 		return img, nil
 	}
 
@@ -202,6 +204,30 @@ func (m *Manager) Get(ref string) (*types.Image, error) {
 	if !ok {
 		return nil, errdefs.NotFound("no image %q", ref)
 	}
+
+	return img, nil
+}
+
+// Ensure returns the image ref names for an instance to boot from, pulling
+// it as policy says. It marks the image used, so that garbage collection
+// spares it until the instance is defined. With PullNever, an image the host
+// does not hold is an errdefs.ErrNotFound error.
+func (m *Manager) Ensure(ctx context.Context, ref string, policy types.PullPolicy) (*types.Image, error) {
+	if policy == types.PullAlways {
+		return m.Pull(ctx, ref, nil)
+	}
+
+	img, err := m.Get(ref)
+	switch {
+	case errors.Is(err, errdefs.ErrNotFound) && policy == types.PullNever:
+		return nil, errdefs.NotFound("image %q is not on this host, and the pull policy is never: pull it first", ref)
+	case errors.Is(err, errdefs.ErrNotFound):
+		return m.Pull(ctx, ref, nil)
+	case err != nil:
+		return nil, err
+	}
+
+	m.markUsed(img.Digest, time.Now())
 
 	return img, nil
 }

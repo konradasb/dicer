@@ -583,6 +583,10 @@ func TestComposeUpPulls(t *testing.T) {
 	if slices.ContainsFunc(d.calledWith(), func(c string) bool { return strings.HasPrefix(c, "pull") }) {
 		t.Errorf("--pull never pulled: %q", d.calledWith())
 	}
+	// Nor may the daemon pull, as it would for an image the host lacks.
+	if got := d.created.GetPullPolicy(); got != dicerdv1.PullPolicy_PULL_POLICY_NEVER {
+		t.Errorf("created with pull policy %v, want never", got)
+	}
 
 	d.calls = nil
 	if out, err := runCompose(t, file, "up", "-d", "--pull", "always"); err != nil {

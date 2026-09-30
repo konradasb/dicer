@@ -30,6 +30,23 @@ type Image struct {
 	LastUsedAt time.Time `json:"last_used_at,omitzero"`
 }
 
+// PullPolicy says when creating an instance pulls its image, as docker run
+// --pull does. The zero value behaves as PullMissing.
+type PullPolicy string
+
+const (
+	// PullMissing pulls the image only if the host does not hold it.
+	PullMissing PullPolicy = "missing"
+
+	// PullAlways pulls the image even if the host holds it, so that a tag
+	// that has moved is followed. Nothing is downloaded if the host already
+	// has what the tag points at.
+	PullAlways PullPolicy = "always"
+
+	// PullNever uses the image the host holds, and fails if it holds none.
+	PullNever PullPolicy = "never"
+)
+
 // PullStage is the part of a pull that is currently working.
 type PullStage string
 

@@ -29,8 +29,9 @@ type instanceHandler struct {
 	logger      *slog.Logger
 }
 
-// CreateInstance records an instance definition. It does not boot anything
-// unless the request asks for it.
+// CreateInstance records an instance definition, pulling its image as the
+// request's pull policy says. It does not boot anything unless the request
+// asks for it.
 func (h *instanceHandler) CreateInstance(
 	ctx context.Context, req *dicerdv1.CreateInstanceRequest,
 ) (*dicerdv1.Instance, error) {
@@ -38,8 +39,12 @@ func (h *instanceHandler) CreateInstance(
 	if err != nil {
 		return nil, err
 	}
+	pull, err := pullPolicies.fromProto(req.GetPullPolicy())
+	if err != nil {
+		return nil, err
+	}
 
-	if err := h.instances.Create(ctx, inst); err != nil {
+	if err := h.instances.Create(ctx, inst, pull); err != nil {
 		return nil, err
 	}
 

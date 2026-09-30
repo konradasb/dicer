@@ -9,15 +9,16 @@ related:
   - /docs/reference/configuration
 ---
 
-An image is pulled the first time an instance needs it, and kept. This guide
-covers pulling ahead of time, private registries, updating what a tag
-means, and getting the disk space back. See [Images](../../concepts/images)
+An image is pulled when an instance is created from it, and kept. This guide
+covers pulling ahead of time, choosing when images are pulled, private
+registries, updating what a tag means, and getting the disk space back. See [Images](../../concepts/images)
 for what an image becomes on the host.
 
 ## Pull ahead of time
 
-A start that needs an image it does not have pulls it first, which can take
-a while for a large image. Pull it beforehand to make starts quick:
+Creating an instance from an image the host does not have pulls it first,
+which can take a while for a large image. Pull it beforehand to make
+creating instances quick:
 
 ```console
 $ dicer pull postgres:17
@@ -31,6 +32,23 @@ Images are pulled for the host's architecture: `linux/amd64` on an x86_64
 host, `linux/arm64` on an aarch64 one. An image with no build for it cannot
 be pulled.
 
+
+## Choose when an image is pulled
+
+`--pull` on `dicer run`, `dicer create` and `dicer compose up` says when the
+image is pulled, as with `docker run --pull`:
+
+```console
+$ dicer run -d --pull always nginx:1.27    # follow the tag if it has moved
+$ dicer run -d --pull never nginx:1.27     # use only what the host holds
+```
+
+`missing`, the default, pulls only an image the host does not hold. `never`
+refuses to create an instance whose image the host does not hold, and asks
+no registry anything, so the create takes only as long as defining the
+instance and booting it. That makes it the one to use where a create must be
+quick, with the image pulled beforehand. Over the API, it is the create
+request's `pull_policy`.
 ## See what is held
 
 ```console
@@ -41,8 +59,9 @@ docker.io/library/nginx:1.27    71.2 MiB   3 weeks ago    3 weeks ago
 ```
 
 Names are shown in full, with the registry. `CREATED` is when the image was
-pulled to this host. `LAST USED` is when [garbage collection](#reclaim-space-automatically)
-last found it in use; while that is off, it stays at the pull. The
+pulled to this host. `LAST USED` is when it was last pulled, or an instance
+was created or started from it, or [garbage collection](#reclaim-space-automatically)
+last found it in use. The
 `DIGEST` column, left out above, tells apart images pulled under the same
 name. `dicer info` shows how full the disk holding them is.
 
@@ -78,7 +97,8 @@ credentials for the cloud, such as an instance role.
 
 A tag such as `nginx:1.27` or `latest` means the image most recently pulled
 under it on this host. Starting an instance never asks the registry
-whether the tag has moved; pulling does:
+whether the tag has moved; pulling does, and so does creating one with
+`--pull always`:
 
 ```console
 $ dicer pull nginx:1.27          # the tag now means the new image

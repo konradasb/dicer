@@ -47,7 +47,7 @@ was, and whose message says it for a person:
 
 | Method | Request | Response | Description |
 |---|---|---|---|
-| `CreateInstance` | [`CreateInstanceRequest`](#createinstancerequest) | [`Instance`](#instance) | CreateInstance records an instance definition without starting it, unless start is set. |
+| `CreateInstance` | [`CreateInstanceRequest`](#createinstancerequest) | [`Instance`](#instance) | CreateInstance records an instance definition without starting it, unless start is set. It first pulls the image as the request's pull policy says, reporting no progress: to show a pull's progress, call PullImage first. Nothing is recorded if the image cannot be had. |
 | `UpdateInstance` | [`UpdateInstanceRequest`](#updateinstancerequest) | [`Instance`](#instance) | UpdateInstance modifies the definition of a stopped instance. |
 | `RenameInstance` | [`RenameInstanceRequest`](#renameinstancerequest) | [`Instance`](#instance) | RenameInstance changes a stopped instance's name. The instance keeps its ID, its disks and its address; only what people call it changes. |
 | `StartInstance` | [`StartInstanceRequest`](#startinstancerequest) | [`Instance`](#instance) | StartInstance boots a defined instance. |
@@ -143,6 +143,7 @@ CopyToInstanceStart is the first message on a CopyToInstance stream.
 | `restart_policy` | [`RestartPolicy`](#restartpolicy) |  |
 | `health_check` | [`HealthCheck`](#healthcheck) |  |
 | `init_mode` | [`InitMode`](#initmode) | How the guest starts the command. Unspecified means auto. |
+| `pull_policy` | [`PullPolicy`](#pullpolicy) | When the image is pulled; see PullPolicy. |
 | `start` | `bool` | Boots the instance immediately after defining it. |
 | `ports` | repeated [`PortMapping`](#portmapping) |  |
 | `remove_on_exit` | `bool` | Deletes the instance once it stops, whether its guest ended on its own or someone stopped it. The daemon does the deleting, so it happens even if whoever asked for it has gone. An instance that its restart policy will start again is not deleted. |
@@ -981,6 +982,18 @@ Protocol is the transport a port mapping forwards.
 | `PROTOCOL_UNSPECIFIED` | 0 | Means TCP. |
 | `PROTOCOL_TCP` | 1 |  |
 | `PROTOCOL_UDP` | 2 |  |
+
+### PullPolicy
+
+PullPolicy is when creating an instance pulls its image, as docker run
+--pull says.
+
+| Value | Number | Description |
+|---|---|---|
+| `PULL_POLICY_UNSPECIFIED` | 0 | Means missing. |
+| `PULL_POLICY_MISSING` | 1 | Pull the image only if the host does not hold it. |
+| `PULL_POLICY_ALWAYS` | 2 | Pull the image even if the host holds it, so that a tag that has moved is followed. Nothing is downloaded if the host already has what the tag points at. |
+| `PULL_POLICY_NEVER` | 3 | Use the image the host holds, and fail with NOT_FOUND if it holds none. Creating the instance then asks no registry anything, so it takes as long as defining it, and booting it if start is set. |
 
 ### PullStage
 

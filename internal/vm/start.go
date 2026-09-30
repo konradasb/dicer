@@ -6,7 +6,6 @@ package vm
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -186,10 +185,7 @@ func (m *Manager) resolveBoot(ctx context.Context, inst types.InstanceSpec, star
 // image returns the image an instance boots from, pulling it only if it is
 // not held locally.
 func (m *Manager) image(ctx context.Context, inst types.InstanceSpec) (*types.Image, error) {
-	img, err := m.images.Get(inst.ImageRef)
-	if errors.Is(err, errdefs.ErrNotFound) {
-		img, err = m.images.Pull(ctx, inst.ImageRef, nil)
-	}
+	img, err := m.images.Ensure(ctx, inst.ImageRef, types.PullMissing)
 	if err != nil {
 		return nil, fmt.Errorf("get image %q: %w", inst.ImageRef, err)
 	}

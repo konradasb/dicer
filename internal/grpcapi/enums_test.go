@@ -27,6 +27,7 @@ func TestEnumsRoundTrip(t *testing.T) {
 	roundTrips(t, eventActions)
 	roundTrips(t, logSources)
 	roundTrips(t, pullStages)
+	roundTrips(t, pullPolicies)
 }
 
 func roundTrips[T comparable, P ~int32](t *testing.T, e enum[T, P]) {

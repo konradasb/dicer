@@ -19,7 +19,6 @@ import (
 	"github.com/konradasb/dicer/internal/defaults"
 	"github.com/konradasb/dicer/internal/guest"
 	"github.com/konradasb/dicer/internal/hypervisor"
-	"github.com/konradasb/dicer/internal/image"
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/process"
 	"github.com/konradasb/dicer/internal/types"
@@ -54,7 +53,7 @@ type Addresses interface {
 // Images provides the bootable disk for an image reference.
 type Images interface {
 	Get(ref string) (*types.Image, error)
-	Pull(ctx context.Context, ref string, onProgress image.ProgressFunc) (*types.Image, error)
+	Ensure(ctx context.Context, ref string, policy types.PullPolicy) (*types.Image, error)
 }
 
 // Kernels provides the local path of a kernel, fetching it if needed.

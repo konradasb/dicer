@@ -86,6 +86,23 @@ func addInstanceSpecFlags(cmd *cobra.Command, withDefaults bool) {
 	_ = cmd.MarkFlagFilename("env-file")
 }
 
+// addPullFlag adds --pull, which says when the image is pulled, as docker
+// run's does.
+func addPullFlag(cmd *cobra.Command, usage string) {
+	cmd.Flags().String("pull", "missing", usage+": missing, always or never")
+	_ = cmd.RegisterFlagCompletionFunc("pull", fixedCompletions("missing", "always", "never"))
+}
+
+// pullPolicyFlag returns the pull policy --pull names.
+func pullPolicyFlag(cmd *cobra.Command) (dicerdv1.PullPolicy, error) {
+	v, _ := cmd.Flags().GetString("pull")
+	policy, err := parseEnum[dicerdv1.PullPolicy]("--pull", v)
+	if err != nil {
+		return 0, usagef(cmd, "%s", err)
+	}
+	return policy, nil
+}
+
 // createArgs accepts at most one argument, the name, before a -- that
 // introduces the command.
 func createArgs(cmd *cobra.Command, args []string) error {
@@ -129,6 +146,11 @@ func buildCreateRequest(cmd *cobra.Command, args []string) (*dicerdv1.CreateInst
 	}
 	req.Start, _ = cmd.Flags().GetBool("start")
 
+	var err error
+	if req.PullPolicy, err = pullPolicyFlag(cmd); err != nil {
+		return nil, err
+	}
+
 	if req.GetName() == "" {
 		return nil, usagef(cmd, "%s needs an instance name", cmd.CommandPath())
 	}
@@ -152,6 +174,11 @@ func buildRunRequest(cmd *cobra.Command, args []string) (*dicerdv1.CreateInstanc
 
 	if err := applySpecFlags(cmd, req); err != nil {
 		return nil, usagef(cmd, "%s", err)
+	}
+
+	var err error
+	if req.PullPolicy, err = pullPolicyFlag(cmd); err != nil {
+		return nil, err
 	}
 
 	return req, nil

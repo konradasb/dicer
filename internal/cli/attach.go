@@ -43,7 +43,7 @@ func runAttached(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) error 
 	}
 	defer cleanup()
 
-	if err := ensureImage(cmd, client, req.GetImageRef()); err != nil {
+	if req.PullPolicy, err = pullAsPolicy(cmd, client, req.GetImageRef(), req.GetPullPolicy()); err != nil {
 		return err
 	}
 

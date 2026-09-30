@@ -665,6 +665,7 @@ func TestRun(t *testing.T) {
 		DiskBytes:   10 << 30,
 		Env:         map[string]string{"A": "1,2"},
 		Ports:       []*dicerdv1.PortMapping{{HostPort: 8080, GuestPort: 80}},
+		PullPolicy:  dicerdv1.PullPolicy_PULL_POLICY_MISSING,
 	}
 	if !proto.Equal(req, want) {
 		t.Errorf("request = %v\nwant      %v", req, want)
@@ -680,6 +681,88 @@ func TestRun(t *testing.T) {
 	}
 	if !strings.Contains(out, "Image nginx:1.27 pulled in") {
 		t.Errorf("a download should be reported: %q", out)
+	}
+}
+
+// TestPullFlagSaysWhenTheImageIsPulled checks that run and create pull the
+// image themselves as --pull says, so that its progress shows, and leave the
+// daemon only to find it; and that --pull never leaves the daemon to refuse
+// an image the host lacks.
+func TestPullFlagSaysWhenTheImageIsPulled(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		cached    bool
+		wantCalls []string
+		wantPull  dicerdv1.PullPolicy
+	}{
+		{
+			name:      "missing pulls an image the host lacks",
+			args:      []string{"run", "-d", "--name", "web", "nginx:1.27"},
+			wantCalls: []string{"pull nginx:1.27"},
+			wantPull:  dicerdv1.PullPolicy_PULL_POLICY_MISSING,
+		},
+		{
+			name:     "missing uses the image held",
+			args:     []string{"run", "-d", "--name", "web", "--pull", "missing", "nginx:1.27"},
+			cached:   true,
+			wantPull: dicerdv1.PullPolicy_PULL_POLICY_MISSING,
+		},
+		{
+			name:      "always pulls the image held",
+			args:      []string{"run", "-d", "--name", "web", "--pull", "always", "nginx:1.27"},
+			cached:    true,
+			wantCalls: []string{"pull nginx:1.27"},
+			wantPull:  dicerdv1.PullPolicy_PULL_POLICY_MISSING,
+		},
+		{
+			name:     "never leaves it to the daemon",
+			args:     []string{"run", "-d", "--name", "web", "--pull", "never", "nginx:1.27"},
+			wantPull: dicerdv1.PullPolicy_PULL_POLICY_NEVER,
+		},
+		{
+			name:      "create pulls too",
+			args:      []string{"create", "web", "-i", "nginx:1.27"},
+			wantCalls: []string{"pull nginx:1.27"},
+			wantPull:  dicerdv1.PullPolicy_PULL_POLICY_MISSING,
+		},
+		{
+			name:     "create honours never",
+			args:     []string{"create", "web", "-i", "nginx:1.27", "--pull", "never"},
+			wantPull: dicerdv1.PullPolicy_PULL_POLICY_NEVER,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := newFakeInstanceDaemon()
+			d.cached["nginx:1.27"] = tt.cached
+			serveInstanceDaemon(t, d)
+
+			if out, err := run(t, tt.args...); err != nil {
+				t.Fatalf("%s: %v\n%s", tt.args[0], err, out)
+			}
+
+			if !slices.Equal(d.calls, tt.wantCalls) {
+				t.Errorf("calls = %q, want %q", d.calls, tt.wantCalls)
+			}
+			if got := d.created.GetPullPolicy(); got != tt.wantPull {
+				t.Errorf("created with pull policy %v, want %v", got, tt.wantPull)
+			}
+		})
+	}
+}
+
+func TestPullFlagRefusesAnUnknownPolicy(t *testing.T) {
+	d := newFakeInstanceDaemon()
+	serveInstanceDaemon(t, d)
+
+	out, err := run(t, "run", "-d", "--pull", "sometimes", "nginx:1.27")
+	if err == nil || !strings.Contains(err.Error(), `invalid --pull "sometimes": want missing, always or never`) {
+		t.Fatalf("run = %v, want --pull refused\n%s", err, out)
+	}
+	if d.created != nil {
+		t.Error("an instance was created with an unknown pull policy")
 	}
 }
 

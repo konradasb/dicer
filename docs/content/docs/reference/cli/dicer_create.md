@@ -4,8 +4,9 @@ title: "dicer create"
 description: "Define an instance without starting it"
 ---
 
-Records an instance definition. Nothing is booted until you run
-`dicer start`, unless `--start` is given.
+Records an instance definition, pulling the image first as `--pull` says:
+by default, only if the host does not hold it. Nothing is booted until
+you run `dicer start`, unless `--start` is given.
 
 A command after -- replaces the image's ENTRYPOINT and CMD.
 
@@ -51,6 +52,7 @@ $ dicer instance create worker -i alpine:3.21 -e QUEUE=jobs -- /bin/worker --ver
 | `--network string` | Network to attach to. |
 | `--no-healthcheck` | Check no health, not even as the image says to. |
 | `-p`, `--publish stringArray` | Publish a guest port on the host, as [hostIP:]hostPort:guestPort[/tcp\|udp] (repeatable). |
+| `--pull string` | When to pull the image: missing, always or never. Default: `missing`. |
 | `--restart string` | Restart policy when the instance ends on its own: no, on-failure[:max-retries], unless-stopped or always (default no). |
 | `--rm` | Delete the instance once it stops, the daemon doing the deleting. |
 | `--start` | Start the instance immediately after defining it. |

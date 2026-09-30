@@ -43,7 +43,9 @@ option go_package = "github.com/konradasb/dicer/proto/dicerd/v1;dicerdv1";
 // - `INTERNAL`: anything else: the daemon failed.
 service DaemonService {
   // CreateInstance records an instance definition without starting it,
-  // unless start is set.
+  // unless start is set. It first pulls the image as the request's pull
+  // policy says, reporting no progress: to show a pull's progress, call
+  // PullImage first. Nothing is recorded if the image cannot be had.
   rpc CreateInstance(CreateInstanceRequest) returns (Instance);
   // UpdateInstance modifies the definition of a stopped instance.
   rpc UpdateInstance(UpdateInstanceRequest) returns (Instance);
@@ -198,6 +200,23 @@ enum InitMode {
   INIT_MODE_EXEC = 2;
   // The command, systemd, is the machine's PID 1.
   INIT_MODE_SYSTEMD = 3;
+}
+
+// PullPolicy is when creating an instance pulls its image, as docker run
+// --pull says.
+enum PullPolicy {
+  // Means missing.
+  PULL_POLICY_UNSPECIFIED = 0;
+  // Pull the image only if the host does not hold it.
+  PULL_POLICY_MISSING = 1;
+  // Pull the image even if the host holds it, so that a tag that has moved
+  // is followed. Nothing is downloaded if the host already has what the tag
+  // points at.
+  PULL_POLICY_ALWAYS = 2;
+  // Use the image the host holds, and fail with NOT_FOUND if it holds none.
+  // Creating the instance then asks no registry anything, so it takes as
+  // long as defining it, and booting it if start is set.
+  PULL_POLICY_NEVER = 3;
 }
 
 // RestartMode is when an instance that ended without being asked to is
@@ -481,6 +500,8 @@ message CreateInstanceRequest {
   HealthCheck health_check = 22;
   // How the guest starts the command. Unspecified means auto.
   InitMode init_mode = 23;
+  // When the image is pulled; see PullPolicy.
+  PullPolicy pull_policy = 26;
   // Boots the instance immediately after defining it.
   bool start = 19;
   repeated PortMapping ports = 20;

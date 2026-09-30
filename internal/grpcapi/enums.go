@@ -55,6 +55,12 @@ var instanceStates = enum[types.InstanceState, dicerdv1.InstanceState]{"instance
 	types.StateFailed:     dicerdv1.InstanceState_INSTANCE_STATE_FAILED,
 }}
 
+var pullPolicies = enum[types.PullPolicy, dicerdv1.PullPolicy]{"pull policy", map[types.PullPolicy]dicerdv1.PullPolicy{
+	types.PullMissing: dicerdv1.PullPolicy_PULL_POLICY_MISSING,
+	types.PullAlways:  dicerdv1.PullPolicy_PULL_POLICY_ALWAYS,
+	types.PullNever:   dicerdv1.PullPolicy_PULL_POLICY_NEVER,
+}}
+
 var initModes = enum[types.InitMode, dicerdv1.InitMode]{"init mode", map[types.InitMode]dicerdv1.InitMode{
 	types.ModeAuto:    dicerdv1.InitMode_INIT_MODE_AUTO,
 	types.ModeExec:    dicerdv1.InitMode_INIT_MODE_EXEC,

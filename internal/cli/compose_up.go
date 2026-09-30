@@ -53,9 +53,8 @@ func newComposeUpCommand() *cobra.Command {
 	flags.Bool("force-recreate", false, "Recreate every instance, even those whose definition has not changed")
 	flags.Bool("no-recreate", false, "Leave instances that already exist as they are, even if their definition has changed")
 	flags.Bool("remove-orphans", false, "Delete the project's instances whose service is no longer in the file")
-	flags.String("pull", "missing", "When to pull images: missing, always or never")
+	addPullFlag(cmd, "When to pull images")
 	cmd.MarkFlagsMutuallyExclusive("force-recreate", "no-recreate")
-	_ = cmd.RegisterFlagCompletionFunc("pull", fixedCompletions("missing", "always", "never"))
 
 	return cmd
 }
@@ -65,7 +64,7 @@ type upOptions struct {
 	forceRecreate bool
 	noRecreate    bool
 	removeOrphans bool
-	pull          string
+	pull          dicerdv1.PullPolicy
 }
 
 func runComposeUp(cmd *cobra.Command, args []string) error {
@@ -74,9 +73,9 @@ func runComposeUp(cmd *cobra.Command, args []string) error {
 	opts.forceRecreate, _ = flags.GetBool("force-recreate")
 	opts.noRecreate, _ = flags.GetBool("no-recreate")
 	opts.removeOrphans, _ = flags.GetBool("remove-orphans")
-	opts.pull, _ = flags.GetString("pull")
-	if !slices.Contains([]string{"missing", "always", "never"}, opts.pull) {
-		return usagef(cmd, "invalid --pull %q: want missing, always or never", opts.pull)
+	var err error
+	if opts.pull, err = pullPolicyFlag(cmd); err != nil {
+		return err
 	}
 	detach, _ := flags.GetBool("detach")
 	wait, _ := flags.GetBool("wait")
@@ -97,7 +96,7 @@ func runComposeUp(cmd *cobra.Command, args []string) error {
 	defer cleanup()
 
 	u := &upper{
-		cmd: cmd, client: client, project: p, opts: opts,
+		cmd: cmd, client: client, project: p, opts: opts, pull: opts.pull,
 		out: &lines{out: cmd.ErrOrStderr()},
 	}
 	if err := u.prepare(services); err != nil {
@@ -124,6 +123,10 @@ type upper struct {
 	project *compose.Project
 	opts    upOptions
 	out     *lines
+
+	// pull is the pull policy instances are created with: --pull's, until
+	// ensureImages has pulled as it says.
+	pull dicerdv1.PullPolicy
 
 	// existing are the project's instances before up began, by name.
 	existing map[string]*dicerdv1.Instance
@@ -230,10 +233,6 @@ func (u *upper) ensureVolumes(services []*compose.Service) error {
 // ensureImages pulls the services' images as --pull says, one at a time so
 // that each one's progress can be shown.
 func (u *upper) ensureImages(services []*compose.Service) error {
-	if u.opts.pull == "never" {
-		return nil
-	}
-
 	var refs []string
 	for _, s := range services {
 		if ref := s.Instance.GetImageRef(); !slices.Contains(refs, ref) {
@@ -242,15 +241,11 @@ func (u *upper) ensureImages(services []*compose.Service) error {
 	}
 
 	for _, ref := range refs {
-		var err error
-		if u.opts.pull == "always" {
-			err = pullShowingProgress(u.cmd, u.client, ref)
-		} else {
-			err = ensureImage(u.cmd, u.client, ref)
-		}
+		pull, err := pullAsPolicy(u.cmd, u.client, ref, u.opts.pull)
 		if err != nil {
 			return fmt.Errorf("pull %s: %w", ref, err)
 		}
+		u.pull = pull
 	}
 	return nil
 }
@@ -371,6 +366,7 @@ func (u *upper) create(s *compose.Service, done string) error {
 		return errors.New("clone instance definition")
 	}
 	req.Start = true
+	req.PullPolicy = u.pull
 
 	start := time.Now()
 	inst, err := u.client.CreateInstance(u.ctx(), req)

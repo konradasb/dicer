@@ -101,7 +101,9 @@ const (
 //   - `INTERNAL`: anything else: the daemon failed.
 type DaemonServiceClient interface {
 	// CreateInstance records an instance definition without starting it,
-	// unless start is set.
+	// unless start is set. It first pulls the image as the request's pull
+	// policy says, reporting no progress: to show a pull's progress, call
+	// PullImage first. Nothing is recorded if the image cannot be had.
 	CreateInstance(ctx context.Context, in *CreateInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
 	// UpdateInstance modifies the definition of a stopped instance.
 	UpdateInstance(ctx context.Context, in *UpdateInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
@@ -695,7 +697,9 @@ type DaemonService_GetEventsClient = grpc.ServerStreamingClient[GetEventsRespons
 //   - `INTERNAL`: anything else: the daemon failed.
 type DaemonServiceServer interface {
 	// CreateInstance records an instance definition without starting it,
-	// unless start is set.
+	// unless start is set. It first pulls the image as the request's pull
+	// policy says, reporting no progress: to show a pull's progress, call
+	// PullImage first. Nothing is recorded if the image cannot be had.
 	CreateInstance(context.Context, *CreateInstanceRequest) (*Instance, error)
 	// UpdateInstance modifies the definition of a stopped instance.
 	UpdateInstance(context.Context, *UpdateInstanceRequest) (*Instance, error)
