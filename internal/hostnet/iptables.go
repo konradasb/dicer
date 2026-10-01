@@ -94,8 +94,10 @@ func isolationS2Comment(bridge string) string { return "dicer-isolation-s2-" + b
 func inputAcceptComment(bridge string) string { return "dicer-input-accept-" + bridge }
 func inputDropComment(bridge string) string   { return "dicer-input-drop-" + bridge }
 
-// setupIPTables ensures NAT, forwarding, isolation, and input rules are in place for the given bridge and subnet.
-func (h *Host) setupIPTables(ctx context.Context, bridge, subnetCIDR, gatewayIP string) error {
+// setupIPTables ensures NAT, forwarding and isolation rules are in place for
+// the given bridge and subnet. Input rules are gateway access's: see
+// ensureGatewayAccess.
+func (h *Host) setupIPTables(ctx context.Context, bridge, subnetCIDR string) error {
 	h.rulesMu.Lock()
 	defer h.rulesMu.Unlock()
 
@@ -125,9 +127,6 @@ func (h *Host) setupIPTables(ctx context.Context, bridge, subnetCIDR, gatewayIP 
 	if err := ensureIsolationRules(ctx, bridge); err != nil {
 		return fmt.Errorf("setup isolation rules: %w", err)
 	}
-	if err := ensureInputRules(ctx, bridge, gatewayIP); err != nil {
-		return fmt.Errorf("setup input rules: %w", err)
-	}
 
 	h.logger.InfoContext(ctx, "iptables configured",
 		"subnet", subnetCIDR, "uplink", uplink)
@@ -148,9 +147,6 @@ func (h *Host) teardownIPTables(ctx context.Context, bridge string) {
 	}
 	if err := removeIsolationRules(ctx, bridge); err != nil {
 		h.logger.WarnContext(ctx, "failed to remove isolation rules", "bridge", bridge, "error", err)
-	}
-	if err := removeInputRules(ctx, bridge); err != nil {
-		h.logger.WarnContext(ctx, "failed to remove input rules", "bridge", bridge, "error", err)
 	}
 
 	h.logger.DebugContext(ctx, "iptables rules removed",

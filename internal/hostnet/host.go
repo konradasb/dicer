@@ -13,6 +13,8 @@ import (
 	"sync"
 
 	"github.com/vishvananda/netlink"
+
+	"github.com/konradasb/dicer/internal/types"
 )
 
 // DefaultBurstMultiplier is the upload and download burst multiplier used
@@ -46,17 +48,39 @@ type Host struct {
 	config Config
 	logger *slog.Logger
 
+	// firewalld is nil where there is no system bus to reach it on.
+	firewalld *firewalld
+
 	// rulesMu serialises check-then-edit changes to iptables rules.
 	rulesMu sync.Mutex
+
+	// mu guards networks, those whose bridges are set up, by bridge.
+	mu       sync.Mutex
+	networks map[string]types.Network
 }
 
-// NewHost creates a host network configurator.
+// NewHost creates a host network configurator. Close releases it.
 func NewHost(cfg Config) *Host {
 	cfg.applyDefaults()
 
-	return &Host{
-		config: cfg,
-		logger: cfg.Logger.With("component", "hostnet"),
+	h := &Host{
+		config:   cfg,
+		logger:   cfg.Logger.With("component", "hostnet"),
+		networks: make(map[string]types.Network),
+	}
+	firewalld, err := connectFirewalld()
+	if err != nil {
+		h.logger.Debug("not managing firewalld", "error", err)
+	} else {
+		h.firewalld = firewalld
+	}
+	return h
+}
+
+// Close releases the host's connection to firewalld.
+func (h *Host) Close() {
+	if h.firewalld != nil {
+		h.firewalld.close()
 	}
 }
 

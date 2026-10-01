@@ -25,8 +25,11 @@ daemon up.
 - `erofs-utils`, for `mkfs.erofs`, and `e2fsprogs`, for `mkfs.ext4` and
   `mke2fs`.
 - `iptables`.
+- With firewalld (Fedora, RHEL and its rebuilds, openSUSE), its `dicer`
+  zone, which the package and the install script install: see
+  [Networking](../../concepts/networking#firewalld).
 
-The package brings the last three with it.
+The package brings `erofs-utils`, `e2fsprogs` and `iptables` with it.
 
 **To build**, for the install script
 

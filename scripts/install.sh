@@ -271,6 +271,20 @@ ReadWritePaths=${DATA_DIR}
 WantedBy=multi-user.target
 EOF
 
+# =============================================================================
+# Install the firewalld zone
+# =============================================================================
+
+# dicerd binds each network's bridge to the dicer zone where firewalld runs,
+# which reads it when it reloads.
+if [ -d /etc/firewalld/zones ]; then
+  info "Installing the dicer firewalld zone..."
+  $SUDO install -m 644 "${TMP_DIR}/dicer/build/package/firewalld-zone.xml" /etc/firewalld/zones/dicer.xml
+  if $SUDO firewall-cmd --state >/dev/null 2>&1; then
+    $SUDO firewall-cmd --reload >/dev/null
+  fi
+fi
+
 info "Reloading systemd..."
 $SUDO systemctl daemon-reload
 

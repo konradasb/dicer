@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
@@ -74,6 +75,34 @@ func TestRecoverAdoptsLiveInstance(t *testing.T) {
 	}
 	if mgr.vmm(inst.ID) != vmm {
 		t.Error("adopted VMM is not supervised")
+	}
+}
+
+// Recovery sets up the networks of adopted instances again, and only
+// theirs, so that the host network knows their bridges.
+func TestRecoverSetsUpTheNetworksOfAdoptedInstances(t *testing.T) {
+	mgr, definitions, hostNetwork := newTestManager(t)
+
+	inst := seedInstance(t, definitions, "web")
+	vmm := startAdoptable(t, mgr)
+	pid := vmm.PID()
+	if err := mgr.writeRuntime(types.InstanceStatus{
+		InstanceID: inst.ID, State: types.StateRunning, HypervisorPID: &pid,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A stopped instance on another network does not need its bridge.
+	stopped := seedInstance(t, definitions, "idle")
+	stopped.NetworkName = "quiet"
+	definitions.instances["idle"] = stopped
+	definitions.networks["quiet"] = types.Network{Name: "quiet", Bridge: "dicer-quiet", Subnet: "10.2.0.0/24", Gateway: "10.2.0.1"}
+
+	if err := mgr.Recover(context.Background()); err != nil {
+		t.Fatalf("Recover: %v", err)
+	}
+
+	if want := []string{definitions.networks["default"].Bridge}; !slices.Equal(hostNetwork.setUpBridges, want) {
+		t.Errorf("bridges set up = %q, want %q", hostNetwork.setUpBridges, want)
 	}
 }
 

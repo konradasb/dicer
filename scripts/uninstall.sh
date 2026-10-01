@@ -161,6 +161,14 @@ if getent group dicer >/dev/null 2>&1; then
   $SUDO groupdel dicer
 fi
 
+if [ -f /etc/firewalld/zones/dicer.xml ]; then
+  info "Removing the dicer firewalld zone..."
+  $SUDO rm -f /etc/firewalld/zones/dicer.xml
+  if $SUDO firewall-cmd --state >/dev/null 2>&1; then
+    $SUDO firewall-cmd --reload >/dev/null
+  fi
+fi
+
 if [ -f /etc/sysctl.d/99-dicer.conf ]; then
   info "Removing /etc/sysctl.d/99-dicer.conf..."
   $SUDO rm -f /etc/sysctl.d/99-dicer.conf

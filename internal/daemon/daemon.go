@@ -90,6 +90,7 @@ func (d *daemon) Run(ctx context.Context) error {
 	// Deferred first so it runs last: the instance manager records events
 	// until it is closed.
 	defer func() { _ = d.events.Close() }()
+	defer d.hostnet.Close()
 
 	// Reconcile recorded state with what is running before serving.
 	if err := d.instances.Recover(ctx); err != nil {
@@ -125,6 +126,8 @@ func (d *daemon) Run(ctx context.Context) error {
 			metricsErr <- err
 		}
 	})
+
+	background.Go(func() { d.hostnet.WatchFirewalld(ctx) })
 
 	// Started after the API is up so slow boots do not delay it.
 	background.Go(func() { d.instances.StartOnBoot(ctx) })

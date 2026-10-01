@@ -116,6 +116,9 @@ nfpms:
         dst: /usr/lib/sysctl.d/60-dicer.conf
       - src: build/package/sysusers.conf
         dst: /usr/lib/sysusers.d/dicer.conf
+      # dicerd binds each network's bridge to it where firewalld runs.
+      - src: build/package/firewalld-zone.xml
+        dst: /usr/lib/firewalld/zones/dicer.xml
       - src: completions/dicer.bash
         dst: /usr/share/bash-completion/completions/dicer
       - src: completions/dicer.fish

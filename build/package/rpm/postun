@@ -11,4 +11,11 @@ if [ "$1" -eq 0 ] && [ -d /run/systemd/system ]; then
   systemctl daemon-reload || true
 fi
 
+if [ "$1" -eq 0 ]; then
+  # firewalld forgets the dicer zone, now gone, when it reloads.
+  if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+    firewall-cmd --reload >/dev/null || true
+  fi
+fi
+
 exit 0

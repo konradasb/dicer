@@ -191,6 +191,23 @@ it stops.
   host with several, set `network.uplink_interface` in the configuration.
 - Names are resolved with `8.8.8.8` unless the network says otherwise. If
   your network blocks it, create the network with `--nameservers`.
+- On a host that runs firewalld (Fedora, RHEL and its rebuilds, openSUSE),
+  check that the network's bridge is in the `dicer` zone:
+
+  ```console
+  $ sudo firewall-cmd --get-zone-of-interface=dicer-default
+  dicer
+  ```
+
+  If it is not, the daemon's log says why. Most often firewalld has no
+  `dicer` zone, as when Dicer was built from source without the install
+  script; install it, and the daemon puts the bridges in it as firewalld
+  reloads:
+
+  ```console
+  $ sudo cp build/package/firewalld-zone.xml /etc/firewalld/zones/dicer.xml
+  $ sudo firewall-cmd --reload
+  ```
 
 **A published port cannot be reached.**
 

@@ -15,6 +15,12 @@ fi
 # Not in a container, which may not set it.
 sysctl -q -p /usr/lib/sysctl.d/60-dicer.conf 2>/dev/null || true
 
+# firewalld reads its zones, the dicer zone among them, when it starts or
+# reloads; dicerd binds its bridges to the zone again when it does.
+if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+  firewall-cmd --reload >/dev/null || true
+fi
+
 # Only where systemd runs, as it may not when building an image.
 if [ -d /run/systemd/system ]; then
   systemctl daemon-reload || true

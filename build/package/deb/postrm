@@ -14,6 +14,10 @@ remove)
   if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
   fi
+  # firewalld forgets the dicer zone, now gone, when it reloads.
+  if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+    firewall-cmd --reload >/dev/null || true
+  fi
   ;;
 purge)
   rm -rf /etc/dicerd

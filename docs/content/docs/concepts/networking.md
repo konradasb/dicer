@@ -61,6 +61,23 @@ reach its gateway and, through NAT, the outside.
 Dicer's firewall rules are in chains of their own. Rules of yours go in
 `DICER-USER`, which is consulted first and which Dicer leaves alone.
 
+## firewalld
+
+On a host that runs firewalld, the daemon puts each network's bridge in the
+`dicer` zone, which the package and the install script install. As
+libvirt's zone does, it lets guests' traffic be forwarded, as Dicer's own
+rules allow, and lets guests reach the host itself only by ICMP. firewalld
+flushes Dicer's rules and forgets the bridges whenever it starts or
+reloads; the daemon sets them up again each time.
+
+To let guests reach a service on the host, at their network's gateway, add
+it to the `dicer` zone, which only Dicer's bridges are in:
+
+```console
+$ sudo firewall-cmd --permanent --zone=dicer --add-port=8000/tcp
+$ sudo firewall-cmd --reload
+```
+
 ## Publishing ports
 
 A guest's port is reached from outside the host by publishing it on a host

@@ -57,6 +57,8 @@ func (m *Manager) Recover(ctx context.Context) error {
 		m.logger.WarnContext(ctx, "failed to reconcile address allocations", "error", err)
 	}
 
+	m.restoreAdoptedNetworks(ctx, instances)
+
 	m.logger.InfoContext(ctx, "recovery complete",
 		"instances", len(instances),
 		"adopted", adopted,
@@ -139,6 +141,41 @@ func (m *Manager) recoverInstance(ctx context.Context, inst types.InstanceSpec) 
 	m.record(inst, types.ActionDied, "Instance failed: "+cause.Error(), nil)
 
 	return recoveryCleaned
+}
+
+// restoreAdoptedNetworks sets up again the networks whose instances
+// survived a daemon restart: their bridges are up, as they were left, but
+// the host network has to know them, to set them up again when firewalld
+// reloads.
+func (m *Manager) restoreAdoptedNetworks(ctx context.Context, instances []types.InstanceSpec) {
+	restored := make(map[string]bool)
+	for _, inst := range instances {
+		if restored[inst.NetworkName] {
+			continue
+		}
+		rt, err := m.Runtime(inst)
+		if err != nil || !rt.State.IsActive() {
+			continue
+		}
+		nw, err := m.definitions.GetNetwork(inst.NetworkName)
+		if err != nil {
+			continue
+		}
+		restored[inst.NetworkName] = true
+		m.restoreNetwork(ctx, nw)
+	}
+}
+
+// restoreNetwork sets an adopted network up again, under its lock.
+func (m *Manager) restoreNetwork(ctx context.Context, nw types.Network) {
+	lock := m.networkLock(nw.Name)
+	lock.Lock()
+	defer lock.Unlock()
+
+	if err := m.hostNetwork.SetupBridge(ctx, &nw); err != nil {
+		m.logger.WarnContext(ctx, "cannot set up an adopted network's bridge again",
+			"network", nw.Name, "error", err)
+	}
 }
 
 // operationOf names the operation an in-progress state belongs to.
