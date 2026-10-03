@@ -55,11 +55,13 @@ volumes.
 
 ## Other mounts
 
-Besides volumes, an instance can mount a copy of a file from the host, and an
-empty in-memory filesystem. See [Files and volumes](../../guides/files-and-volumes).
+Besides volumes, an instance can mount a copy of a file from the host, a
+directory on the host, and an empty in-memory filesystem. See
+[Files and volumes](../../guides/files-and-volumes).
 
 | Type | Source | Lifetime |
 |---|---|---|
 | `volume` | a volume | Persistent; outlives the instance. |
 | `file` | a host file | A copy, made at each start: a change on the host reaches the guest at its next start, and one made in the guest is lost when it stops. |
+| `directory` | a host directory | Shared while the guest runs: a change on either side is seen on the other. Cloud Hypervisor only. |
 | `tmpfs` | none | In memory; lost when the guest stops. |

@@ -245,6 +245,10 @@ enum MountType {
   MOUNT_TYPE_FILE = 2;
   // An empty in-memory filesystem, lost when the guest stops.
   MOUNT_TYPE_TMPFS = 3;
+  // A host directory, shared with the guest while it runs: a change on
+  // either side is seen on the other. Cloud Hypervisor only, and an
+  // instance with one cannot be snapshotted.
+  MOUNT_TYPE_DIRECTORY = 4;
 }
 
 // Protocol is the transport a port mapping forwards.
@@ -444,13 +448,15 @@ message RestartPolicy {
   int32 max_retries = 2;
 }
 
-// Mount attaches a volume, a host file or a tmpfs at target in the guest.
+// Mount attaches a volume, a host file or directory, or a tmpfs at target in
+// the guest.
 message Mount {
   MountType type = 1;
   // The volume's name for a volume. For a file, the host file's absolute
   // path: the daemon reads it when the instance starts and puts a copy on
   // the guest's config disk, so a change reaches the guest at its next
-  // start. A tmpfs has none.
+  // start. For a directory, the host directory's absolute path. A tmpfs has
+  // none.
   string source = 2;
   // The absolute path the mount appears at in the guest.
   string target = 3;

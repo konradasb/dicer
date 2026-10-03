@@ -447,6 +447,9 @@ type fakeStarter struct {
 	restoreErr      error
 	startErr        error
 
+	// spec is what the last StartVM was asked to boot.
+	spec hypervisor.VirtualMachine
+
 	// vmms is every process the starter launched, the latest last.
 	vmms []*process.Process
 }
@@ -456,8 +459,9 @@ func (f *fakeStarter) DefaultBootArgs() string { return "console=ttyS0" }
 func (f *fakeStarter) PowerOffEndsVM() bool    { return true }
 
 func (f *fakeStarter) StartVM(
-	context.Context, string, hypervisor.VirtualMachine,
+	_ context.Context, _ string, spec hypervisor.VirtualMachine,
 ) (*process.Process, hypervisor.Hypervisor, error) {
+	f.spec = spec
 	if f.startErr != nil {
 		return nil, nil, f.startErr
 	}

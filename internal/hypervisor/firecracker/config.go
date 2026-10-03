@@ -105,6 +105,8 @@ func checkSupported(spec hypervisor.VirtualMachine) error {
 		return fmt.Errorf("firecracker: PCI passthrough: %w", errors.ErrUnsupported)
 	case spec.GPU != nil:
 		return fmt.Errorf("firecracker: GPU: %w", errors.ErrUnsupported)
+	case len(spec.Filesystems) > 0:
+		return fmt.Errorf("firecracker: shared directories: %w", errors.ErrUnsupported)
 	case spec.Memory.SizeBytes <= 0:
 		return errors.New("firecracker: memory size must be positive")
 	}

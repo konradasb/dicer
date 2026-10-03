@@ -346,6 +346,10 @@ const (
 	MountType_MOUNT_TYPE_FILE MountType = 2
 	// An empty in-memory filesystem, lost when the guest stops.
 	MountType_MOUNT_TYPE_TMPFS MountType = 3
+	// A host directory, shared with the guest while it runs: a change on
+	// either side is seen on the other. Cloud Hypervisor only, and an
+	// instance with one cannot be snapshotted.
+	MountType_MOUNT_TYPE_DIRECTORY MountType = 4
 )
 
 // Enum value maps for MountType.
@@ -355,12 +359,14 @@ var (
 		1: "MOUNT_TYPE_VOLUME",
 		2: "MOUNT_TYPE_FILE",
 		3: "MOUNT_TYPE_TMPFS",
+		4: "MOUNT_TYPE_DIRECTORY",
 	}
 	MountType_value = map[string]int32{
 		"MOUNT_TYPE_UNSPECIFIED": 0,
 		"MOUNT_TYPE_VOLUME":      1,
 		"MOUNT_TYPE_FILE":        2,
 		"MOUNT_TYPE_TMPFS":       3,
+		"MOUNT_TYPE_DIRECTORY":   4,
 	}
 )
 
@@ -1594,14 +1600,16 @@ func (x *RestartPolicy) GetMaxRetries() int32 {
 	return 0
 }
 
-// Mount attaches a volume, a host file or a tmpfs at target in the guest.
+// Mount attaches a volume, a host file or directory, or a tmpfs at target in
+// the guest.
 type Mount struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Type  MountType              `protobuf:"varint,1,opt,name=type,proto3,enum=dicerd.v1.MountType" json:"type,omitempty"`
 	// The volume's name for a volume. For a file, the host file's absolute
 	// path: the daemon reads it when the instance starts and puts a copy on
 	// the guest's config disk, so a change reaches the guest at its next
-	// start. A tmpfs has none.
+	// start. For a directory, the host directory's absolute path. A tmpfs has
+	// none.
 	Source string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
 	// The absolute path the mount appears at in the guest.
 	Target string `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
@@ -6619,12 +6627,13 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\x0fRESTART_MODE_NO\x10\x01\x12\x1b\n" +
 	"\x17RESTART_MODE_ON_FAILURE\x10\x02\x12\x1f\n" +
 	"\x1bRESTART_MODE_UNLESS_STOPPED\x10\x03\x12\x17\n" +
-	"\x13RESTART_MODE_ALWAYS\x10\x04*i\n" +
+	"\x13RESTART_MODE_ALWAYS\x10\x04*\x83\x01\n" +
 	"\tMountType\x12\x1a\n" +
 	"\x16MOUNT_TYPE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11MOUNT_TYPE_VOLUME\x10\x01\x12\x13\n" +
 	"\x0fMOUNT_TYPE_FILE\x10\x02\x12\x14\n" +
-	"\x10MOUNT_TYPE_TMPFS\x10\x03*H\n" +
+	"\x10MOUNT_TYPE_TMPFS\x10\x03\x12\x18\n" +
+	"\x14MOUNT_TYPE_DIRECTORY\x10\x04*H\n" +
 	"\bProtocol\x12\x18\n" +
 	"\x14PROTOCOL_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fPROTOCOL_TCP\x10\x01\x12\x10\n" +

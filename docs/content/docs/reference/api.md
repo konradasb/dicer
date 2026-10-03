@@ -642,12 +642,13 @@ Kernel is a guest kernel image available to instances.
 
 ### Mount
 
-Mount attaches a volume, a host file or a tmpfs at target in the guest.
+Mount attaches a volume, a host file or directory, or a tmpfs at target in
+the guest.
 
 | Field | Type | Description |
 |---|---|---|
 | `type` | [`MountType`](#mounttype) |  |
-| `source` | `string` | The volume's name for a volume. For a file, the host file's absolute path: the daemon reads it when the instance starts and puts a copy on the guest's config disk, so a change reaches the guest at its next start. A tmpfs has none. |
+| `source` | `string` | The volume's name for a volume. For a file, the host file's absolute path: the daemon reads it when the instance starts and puts a copy on the guest's config disk, so a change reaches the guest at its next start. For a directory, the host directory's absolute path. A tmpfs has none. |
 | `target` | `string` | The absolute path the mount appears at in the guest. |
 | `read_only` | `bool` | A volume every instance attaching it mounts read-only can be shared. |
 
@@ -972,6 +973,7 @@ MountType is what a Mount attaches.
 | `MOUNT_TYPE_VOLUME` | 1 | A named volume: persistent storage, as a disk of its own. |
 | `MOUNT_TYPE_FILE` | 2 | A copy of a host file, read at each start. |
 | `MOUNT_TYPE_TMPFS` | 3 | An empty in-memory filesystem, lost when the guest stops. |
+| `MOUNT_TYPE_DIRECTORY` | 4 | A host directory, shared with the guest while it runs: a change on either side is seen on the other. Cloud Hypervisor only, and an instance with one cannot be snapshotted. |
 
 ### Protocol
 

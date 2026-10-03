@@ -227,19 +227,19 @@ depends_on:
 
 *list of strings or mappings*
 
-`volumes` are the volumes and host files to mount, each as `SOURCE:TARGET[:ro]` or as a mapping. A `SOURCE` that is a name is a volume, which must be declared under the file's `volumes`. One starting `/`, `.` or `~` is a host file, relative to the project directory: it must be a file, not a directory, and is copied into the guest each time the instance starts, as with `dicer run --mount type=file`. With a remote daemon, the path is on the daemon's host. A `TARGET` alone, an anonymous volume, is refused: name the volume.
+`volumes` are the volumes and host files and directories to mount, each as `SOURCE:TARGET[:ro]` or as a mapping. A `SOURCE` that is a name is a volume, which must be declared under the file's `volumes`. One starting `/`, `.` or `~` is a host path, relative to the project directory. A directory is shared with the guest while it runs, so that a change on either side is seen on the other, as with `dicer run --mount type=directory`; it needs Cloud Hypervisor, and the host's virtiofsd. A file is copied into the guest each time the instance starts, as with `--mount type=file`. With a remote daemon, the path is on the daemon's host, and a directory must be given in the long form, with `type: directory`. A `TARGET` alone, an anonymous volume, is refused: name the volume.
 
 ### `services.*.volumes[].type` {#services-volumes-type}
 
 *string*
 
-`type` is `volume`, `bind`, for a host file, or `tmpfs`. Required.
+`type` is `volume`; `bind`, for a host file or directory, whichever the path is; `directory`, for a host directory; or `tmpfs`. Required.
 
 ### `services.*.volumes[].source` {#services-volumes-source}
 
 *string*
 
-`source` is the volume's name, or the host file's path. A tmpfs has none.
+`source` is the volume's name, or the host file's or directory's path. A tmpfs has none.
 
 ### `services.*.volumes[].target` {#services-volumes-target}
 

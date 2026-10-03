@@ -18,8 +18,9 @@ func ToVMConfig(spec hypervisor.VirtualMachine) VmConfig {
 			Initramfs: ptr(spec.Boot.InitrdPath),
 		},
 		Cpus:    ptr(cpusConfig(spec.CPU)),
-		Memory:  ptr(memoryConfig(spec.Memory)),
+		Memory:  ptr(memoryConfig(spec.Memory, len(spec.Filesystems) > 0)),
 		Disks:   ptr(mapSlice(spec.Disks, diskConfig)),
+		Fs:      optionalSlice(mapSlice(spec.Filesystems, fsConfig)),
 		Serial:  &ConsoleConfig{Mode: ConsoleConfigMode("File"), File: ptr(spec.Console.Path)},
 		Console: &ConsoleConfig{Mode: ConsoleConfigMode("Off")},
 		Net:     optionalSlice(mapSlice(spec.NICs, netConfig)),
@@ -51,8 +52,14 @@ func cpusConfig(c hypervisor.CPUConfig) CpusConfig {
 	return cpus
 }
 
-func memoryConfig(m hypervisor.MemoryConfig) MemoryConfig {
+// memoryConfig translates the guest's memory. A vhost-user device, as a
+// shared directory is, reaches into guest memory from another process, so
+// the memory must be shared with it.
+func memoryConfig(m hypervisor.MemoryConfig, shared bool) MemoryConfig {
 	memory := MemoryConfig{Size: m.SizeBytes}
+	if shared {
+		memory.Shared = ptr(true)
+	}
 	if m.HotplugBytes > 0 {
 		memory.HotplugSize = ptr(m.HotplugBytes)
 		memory.HotplugMethod = ptr("VirtioMem")
@@ -79,6 +86,17 @@ func diskConfig(d hypervisor.DiskConfig) DiskConfig {
 		}
 	}
 	return disk
+}
+
+// A shared directory's request queues, as virtiofsd serves them by default.
+const (
+	fsNumQueues = 1
+	fsQueueSize = 1024
+)
+
+// fsConfig translates a shared directory.
+func fsConfig(f hypervisor.FilesystemConfig) FsConfig {
+	return FsConfig{Tag: f.Tag, Socket: f.Socket, NumQueues: fsNumQueues, QueueSize: fsQueueSize}
 }
 
 func netConfig(n hypervisor.NetworkInterfaceConfig) NetConfig {

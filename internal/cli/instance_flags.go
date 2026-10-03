@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -65,7 +66,8 @@ func addInstanceSpecFlags(cmd *cobra.Command, withDefaults bool) {
 	flags.StringArrayP("publish", "p", nil,
 		"Publish a guest port on the host, as [hostIP:]hostPort:guestPort[/tcp|udp] (repeatable)")
 	flags.StringArray("mount", nil,
-		"Mount a volume, host file or tmpfs, as [type=volume|file|tmpfs,][source=...,]target=/path[,readonly] (repeatable)")
+		"Mount a volume, host file or directory, or tmpfs, as "+
+			"[type=volume|file|directory|tmpfs,][source=...,]target=/path[,readonly] (repeatable)")
 	flags.StringArrayP("env", "e", nil,
 		"Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable)")
 	flags.StringArray("env-file", nil, "Read environment variables from a file of KEY=VALUE lines (repeatable)")
@@ -420,10 +422,11 @@ func parseEach[T any](specs []string, parse func(string) (T, error)) ([]T, error
 	return out, nil
 }
 
-// parseMount parses a mount written as docker run --mount takes it: comma
-// separated key=value pairs, e.g. type=volume,source=data,target=/data,readonly.
-// src and dst or destination may stand for source and target, and ro for
-// readonly. The type defaults to volume.
+// parseMount parses a mount written as comma-separated key=value pairs, e.g.
+// type=volume,source=data,target=/data,readonly. src and dst or destination
+// may stand for source and target, and ro for readonly. The type defaults to
+// volume. A file's or directory's relative source is taken from the current
+// directory.
 func parseMount(s string) (*dicerdv1.Mount, error) {
 	m := &dicerdv1.Mount{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME}
 
@@ -453,6 +456,15 @@ func parseMount(s string) (*dicerdv1.Mount, error) {
 		default:
 			return nil, fmt.Errorf("invalid mount %q: unknown key %q: want type, source, target or readonly", s, key)
 		}
+	}
+
+	if t := m.GetType(); (t == dicerdv1.MountType_MOUNT_TYPE_FILE || t == dicerdv1.MountType_MOUNT_TYPE_DIRECTORY) &&
+		m.GetSource() != "" && !filepath.IsAbs(m.GetSource()) {
+		abs, err := filepath.Abs(m.GetSource())
+		if err != nil {
+			return nil, fmt.Errorf("invalid mount %q: %w", s, err)
+		}
+		m.Source = abs
 	}
 
 	if m.GetTarget() == "" {

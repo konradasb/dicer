@@ -54,7 +54,7 @@ $ dicer run -d --vcpus 2 alpine:3.21 sleep infinity
 | `--kernel-args string` | Kernel command line arguments. |
 | `-l`, `--label stringArray` | Label as KEY=VALUE (repeatable). |
 | `-m`, `--memory string` | Memory, e.g. 512MiB or 2GiB. Default: `512MiB`. |
-| `--mount stringArray` | Mount a volume, host file or tmpfs, as [type=volume\|file\|tmpfs,][source=...,]target=/path[,readonly] (repeatable). |
+| `--mount stringArray` | Mount a volume, host file or directory, or tmpfs, as [type=volume\|file\|directory\|tmpfs,][source=...,]target=/path[,readonly] (repeatable). |
 | `--name string` | Instance name (default: the image's name and a random suffix). |
 | `--network string` | Network to attach to. |
 | `--no-healthcheck` | Check no health, not even as the image says to. |

@@ -51,7 +51,7 @@ $ dicer update web -- /usr/sbin/nginx -g 'daemon off;'
 | `--kernel-args string` | Kernel command line arguments. |
 | `-l`, `--label stringArray` | Label as KEY=VALUE (repeatable). |
 | `-m`, `--memory string` | Memory, e.g. 512MiB or 2GiB. |
-| `--mount stringArray` | Mount a volume, host file or tmpfs, as [type=volume\|file\|tmpfs,][source=...,]target=/path[,readonly] (repeatable). |
+| `--mount stringArray` | Mount a volume, host file or directory, or tmpfs, as [type=volume\|file\|directory\|tmpfs,][source=...,]target=/path[,readonly] (repeatable). |
 | `--network string` | Network to attach to. |
 | `--no-healthcheck` | Check no health, not even as the image says to. |
 | `-p`, `--publish stringArray` | Publish a guest port on the host, as [hostIP:]hostPort:guestPort[/tcp\|udp] (repeatable). |

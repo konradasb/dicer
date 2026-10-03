@@ -24,14 +24,20 @@ const (
 
 	// MountTmpfs is an empty in-memory filesystem, lost when the guest stops.
 	MountTmpfs MountType = "tmpfs"
+
+	// MountDirectory shares a host directory with the guest while it runs,
+	// over virtio-fs: what either side changes, the other sees. Only Cloud
+	// Hypervisor has virtio-fs.
+	MountDirectory MountType = "directory"
 )
 
-// Mount attaches a volume, a host file or a tmpfs at Target in the guest.
+// Mount attaches a volume, a host file or directory, or a tmpfs at Target in
+// the guest.
 type Mount struct {
 	Type MountType `yaml:"type" json:"type"`
 
-	// Source is the volume's name for a volume and the host file's absolute
-	// path for a file. A tmpfs has none.
+	// Source is the volume's name for a volume, and the host file's or
+	// directory's absolute path for a file or a directory. A tmpfs has none.
 	Source string `yaml:"source,omitempty" json:"source,omitempty"`
 
 	// Target is the absolute path the mount appears at in the guest.
@@ -106,6 +112,10 @@ func (m Mount) validate() error {
 		if !path.IsAbs(m.Source) {
 			return fmt.Errorf("mount %s: a file mount needs an absolute host path as its source", m)
 		}
+	case MountDirectory:
+		if !path.IsAbs(m.Source) {
+			return fmt.Errorf("mount %s: a directory mount needs an absolute host path as its source", m)
+		}
 	case MountTmpfs:
 		if m.Source != "" {
 			return fmt.Errorf("mount %s: a tmpfs has no source", m)
@@ -114,11 +124,22 @@ func (m Mount) validate() error {
 			return fmt.Errorf("mount %s: a read-only tmpfs would always be empty", m)
 		}
 	default:
-		return fmt.Errorf("mount %s: unknown type %q: want %s, %s or %s",
-			m, m.Type, MountVolume, MountFile, MountTmpfs)
+		return fmt.Errorf("mount %s: unknown type %q: want %s, %s, %s or %s",
+			m, m.Type, MountVolume, MountFile, MountDirectory, MountTmpfs)
 	}
 
 	return nil
+}
+
+// HasDirectoryMount reports whether the instance shares a host directory,
+// which only Cloud Hypervisor can, and which stops it being snapshotted.
+func (s InstanceSpec) HasDirectoryMount() bool {
+	for _, m := range s.Mounts {
+		if m.Type == MountDirectory {
+			return true
+		}
+	}
+	return false
 }
 
 // MountsVolume returns the mount by which the instance attaches the named

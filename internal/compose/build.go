@@ -10,6 +10,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -448,21 +449,26 @@ func (b *builder) mount(m rawMount) (*dicerdv1.Mount, error) {
 		return &dicerdv1.Mount{
 			Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: v.Name, Target: target, ReadOnly: readOnly,
 		}, nil
-	case "bind":
+	case "bind", "directory":
 		path, err := b.resolvePath(source)
 		if err != nil {
 			return nil, err
 		}
-		return &dicerdv1.Mount{
-			Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: path, Target: target, ReadOnly: readOnly,
-		}, nil
+		// A host directory is shared live; a host file, copied at each
+		// start. A path not on this machine, as with a remote daemon, is
+		// taken for a file unless the type says it is a directory.
+		mountType := dicerdv1.MountType_MOUNT_TYPE_FILE
+		if info, err := os.Stat(path); kind == "directory" || (err == nil && info.IsDir()) {
+			mountType = dicerdv1.MountType_MOUNT_TYPE_DIRECTORY
+		}
+		return &dicerdv1.Mount{Type: mountType, Source: path, Target: target, ReadOnly: readOnly}, nil
 	case "tmpfs":
 		if source != "" {
 			return nil, fmt.Errorf("tmpfs %s: a tmpfs has no source", target)
 		}
 		return &dicerdv1.Mount{Type: dicerdv1.MountType_MOUNT_TYPE_TMPFS, Target: target}, nil
 	default:
-		return nil, fmt.Errorf("invalid volume type %q: want volume, bind or tmpfs", kind)
+		return nil, fmt.Errorf("invalid volume type %q: want volume, bind, directory or tmpfs", kind)
 	}
 }
 

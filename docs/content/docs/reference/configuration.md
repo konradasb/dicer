@@ -41,6 +41,12 @@ The daemon's own settings. The sections after them are the API, resources, netwo
 
 `run_dir` is where the daemon keeps runtime state: sockets, config disks and the record of what is running. It should be a tmpfs, so that a reboot clears it. Unset is `/run/dicer`.
 
+### `virtiofsd` {#virtiofsd}
+
+*string*
+
+`virtiofsd` is the path of virtiofsd, which shares host directories with guests that mount them. Unset looks for it on the PATH and where its package installs it; without it, an instance that mounts a directory cannot start.
+
 ### `log_level` {#log-level}
 
 *string*

@@ -94,6 +94,12 @@ type Config struct {
 	// Events bounds the events log that dicer events shows.
 	Events EventsConfig `yaml:"events"`
 
+	// Virtiofsd is the path of virtiofsd, which shares host directories with
+	// guests that mount them. Unset looks for it on the PATH and where its
+	// package installs it; without it, an instance that mounts a directory
+	// cannot start.
+	Virtiofsd string `yaml:"virtiofsd,omitempty"`
+
 	// Registries are the credentials for private registries, by host as an
 	// image's name gives it: docker.io, ghcr.io, or a registry's host:port.
 	// Images from any other registry are pulled anonymously.

@@ -75,9 +75,10 @@ var restartModes = enum[types.RestartMode, dicerdv1.RestartMode]{"restart policy
 }}
 
 var mountTypes = enum[types.MountType, dicerdv1.MountType]{"mount type", map[types.MountType]dicerdv1.MountType{
-	types.MountVolume: dicerdv1.MountType_MOUNT_TYPE_VOLUME,
-	types.MountFile:   dicerdv1.MountType_MOUNT_TYPE_FILE,
-	types.MountTmpfs:  dicerdv1.MountType_MOUNT_TYPE_TMPFS,
+	types.MountVolume:    dicerdv1.MountType_MOUNT_TYPE_VOLUME,
+	types.MountFile:      dicerdv1.MountType_MOUNT_TYPE_FILE,
+	types.MountTmpfs:     dicerdv1.MountType_MOUNT_TYPE_TMPFS,
+	types.MountDirectory: dicerdv1.MountType_MOUNT_TYPE_DIRECTORY,
 }}
 
 var protocols = enum[string, dicerdv1.Protocol]{"protocol", map[string]dicerdv1.Protocol{

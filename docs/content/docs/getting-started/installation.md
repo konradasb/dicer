@@ -28,8 +28,10 @@ from source and sets the daemon up.
 - With firewalld (Fedora, RHEL and its rebuilds, openSUSE), its `dicer`
   zone, which the package and the install script install: see
   [Networking](../../concepts/networking#firewalld).
+- Optionally, `virtiofsd`, for instances to mount directories from the host.
 
-The package brings `erofs-utils`, `e2fsprogs` and `iptables` with it.
+The package brings `erofs-utils`, `e2fsprogs` and `iptables` with it, and
+recommends `virtiofsd`.
 
 **To build**, for the install script
 

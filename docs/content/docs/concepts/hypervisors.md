@@ -40,6 +40,7 @@ restored by the version that took it.
 |---|---|---|
 | Kernel command line | `console=ttyS0 reboot=k panic=1` | the same, and `pci=off` |
 | Ending a guest | powers off | resets, as it has no power button |
+| Directory mounts | yes, with virtiofsd on the host | no |
 
 How a guest ends is `dicer-init`'s business, so the difference does not show:
 an instance ends the same way under either.

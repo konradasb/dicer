@@ -212,9 +212,11 @@ a service can say:
 - **`command` replaces the image's ENTRYPOINT and CMD**, as with `dicer
   run`. Give the whole command line, or `entrypoint` and `command`
   together.
-- **A host path in `volumes` is a file, not a directory**, copied into the
-  guest each time it starts; a change reaches the guest at its next start.
-  With a remote daemon, the path is the daemon's host's.
+- **A host path in `volumes` is shared or copied.** A directory is shared
+  with the guest while it runs, which needs virtiofsd on the host; a file is
+  copied into the guest each time it starts. With a remote daemon, the path
+  is the daemon's host's, and a directory must be given with
+  `type: directory`.
 - **Each service joins one network.** A service that names none joins the
   project's network called `default`. A network the file gives no `subnet`
   gets a free one from `10.213.0.0/16`, one that no other network and none

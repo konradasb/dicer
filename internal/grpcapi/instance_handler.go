@@ -139,6 +139,9 @@ func (h *instanceHandler) newInstance(req *dicerdv1.CreateInstanceRequest) (type
 		UpdatedAt:         now,
 	}
 
+	if err := checkDirectoryMounts(inst); err != nil {
+		return types.InstanceSpec{}, err
+	}
 	if err := checkRemoveOnExit(inst); err != nil {
 		return types.InstanceSpec{}, err
 	}
@@ -188,6 +191,9 @@ func (h *instanceHandler) UpdateInstance(
 	}
 	if err := guest.ValidateHostname(inst.Hostname); err != nil {
 		return nil, errdefs.InvalidArgument("%v", err)
+	}
+	if err := checkDirectoryMounts(inst); err != nil {
+		return nil, err
 	}
 	if err := checkRemoveOnExit(inst); err != nil {
 		return nil, err

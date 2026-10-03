@@ -179,6 +179,51 @@ volumes:
 	}
 }
 
+func TestLoadHostDirectoriesAndFiles(t *testing.T) {
+	root := writeProjectFiles(t, "shop", map[string]string{
+		"compose.yaml": `
+services:
+  web:
+    image: nginx
+    volumes:
+      - ./src:/app
+      - ./app.conf:/etc/app.conf:ro
+      - type: directory
+        source: /srv/on-the-daemon
+        target: /srv
+      - type: bind
+        source: ./not-here
+        target: /etc/other.conf
+`,
+		"src/index.html": "hello",
+		"app.conf":       "k=v",
+	})
+	p, err := Load(Options{WorkDir: root, Lookup: lookupIn(nil)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := p.Services["web"].Instance.GetMounts()
+	want := []*dicerdv1.Mount{
+		// A directory here is shared.
+		{Type: dicerdv1.MountType_MOUNT_TYPE_DIRECTORY, Source: filepath.Join(root, "src"), Target: "/app"},
+		// A file is copied.
+		{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: filepath.Join(root, "app.conf"), Target: "/etc/app.conf", ReadOnly: true},
+		// A directory only the daemon's host has is said to be one.
+		{Type: dicerdv1.MountType_MOUNT_TYPE_DIRECTORY, Source: "/srv/on-the-daemon", Target: "/srv"},
+		// A path not here is taken for a file, as it always was.
+		{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: filepath.Join(root, "not-here"), Target: "/etc/other.conf"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("mounts = %v, want %v", got, want)
+	}
+	for i := range want {
+		if !proto.Equal(got[i], want[i]) {
+			t.Errorf("mount %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
 func TestLoadDefaults(t *testing.T) {
 	p := mustLoad(t, `
 services:

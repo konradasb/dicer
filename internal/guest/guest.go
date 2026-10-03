@@ -78,9 +78,10 @@ type Mount struct {
 	Target   string `json:"target"`
 	ReadOnly bool   `json:"read_only,omitempty"`
 
-	Volume *VolumeSource `json:"volume,omitempty"`
-	File   *FileSource   `json:"file,omitempty"`
-	Tmpfs  *TmpfsSource  `json:"tmpfs,omitempty"`
+	Volume    *VolumeSource    `json:"volume,omitempty"`
+	File      *FileSource      `json:"file,omitempty"`
+	Tmpfs     *TmpfsSource     `json:"tmpfs,omitempty"`
+	Directory *DirectorySource `json:"directory,omitempty"`
 }
 
 // VolumeSource is a filesystem on a disk the VMM attached.
@@ -100,6 +101,11 @@ type FileSource struct {
 
 // TmpfsSource is an empty in-memory filesystem.
 type TmpfsSource struct{}
+
+// DirectorySource is a host directory shared over virtio-fs, by its tag.
+type DirectorySource struct {
+	Tag string `json:"tag"`
+}
 
 // NetworkConfig holds guest network configuration: interfaces, routes, and DNS.
 type NetworkConfig struct {
@@ -207,13 +213,16 @@ func (m Mount) validate() error {
 	}
 
 	sources := 0
-	for _, set := range []bool{m.Volume != nil, m.File != nil, m.Tmpfs != nil} {
+	for _, set := range []bool{m.Volume != nil, m.File != nil, m.Tmpfs != nil, m.Directory != nil} {
 		if set {
 			sources++
 		}
 	}
 	if sources != 1 {
-		return fmt.Errorf("%s: want exactly one of volume, file and tmpfs, got %d", m.Target, sources)
+		return fmt.Errorf("%s: want exactly one of volume, file, tmpfs and directory, got %d", m.Target, sources)
+	}
+	if m.Directory != nil && m.Directory.Tag == "" {
+		return fmt.Errorf("%s: directory tag not set", m.Target)
 	}
 
 	if m.Volume != nil && m.Volume.Device == "" {

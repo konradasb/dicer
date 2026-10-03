@@ -104,6 +104,10 @@ nfpms:
       - erofs-utils
       - e2fsprogs
       - iptables
+    # Directory mounts share host directories with guests through it; the
+    # rest of Dicer does without.
+    recommends:
+      - virtiofsd
     contents:
       - src: build/package/dicerd.service
         dst: /usr/lib/systemd/system/dicerd.service

@@ -4,6 +4,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -113,6 +115,31 @@ func TestBuildCreateRequestMountFlags(t *testing.T) {
 		{Type: dicerdv1.MountType_MOUNT_TYPE_TMPFS, Target: "/scratch"},
 		{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "data", Target: "/var/lib/data", ReadOnly: true},
 		{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: "/etc/app.conf", Target: "/etc/app.conf"},
+	}
+	if !slices.EqualFunc(got.GetMounts(), want, equalMessages) {
+		t.Errorf("mounts = %+v, want %+v", got.GetMounts(), want)
+	}
+}
+
+func TestBuildCreateRequestDirectoryMounts(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := runBuild(t, "web",
+		"--mount", "type=directory,source=/home/me/src,target=/app",
+		"--mount", "type=directory,src=./docs,dst=/docs,ro",
+		"--mount", "type=file,source=app.conf,target=/etc/app.conf")
+	if err != nil {
+		t.Fatalf("buildCreateRequest: %v", err)
+	}
+
+	// A relative source is taken from where the command runs.
+	want := []*dicerdv1.Mount{
+		{Type: dicerdv1.MountType_MOUNT_TYPE_DIRECTORY, Source: "/home/me/src", Target: "/app"},
+		{Type: dicerdv1.MountType_MOUNT_TYPE_DIRECTORY, Source: filepath.Join(wd, "docs"), Target: "/docs", ReadOnly: true},
+		{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: filepath.Join(wd, "app.conf"), Target: "/etc/app.conf"},
 	}
 	if !slices.EqualFunc(got.GetMounts(), want, equalMessages) {
 		t.Errorf("mounts = %+v, want %+v", got.GetMounts(), want)

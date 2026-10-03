@@ -27,6 +27,13 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
+// errSnapshotShares is why an instance that shares a host directory cannot
+// be snapshotted: the hypervisor cannot save the state of the device.
+func errSnapshotShares(inst types.InstanceSpec) error {
+	return errdefs.InvalidState("instance %q mounts a host directory, and an instance that does cannot be "+
+		"snapshotted or restored", inst.Name)
+}
+
 // CreateSnapshot freezes a running or paused instance to disk. An empty name
 // is generated from the time. A running instance is paused while the
 // snapshot is taken.
@@ -41,6 +48,9 @@ func (m *Manager) CreateSnapshot(
 	}
 	if err := naming.Validate(name); err != nil {
 		return types.Snapshot{}, err
+	}
+	if inst.HasDirectoryMount() {
+		return types.Snapshot{}, errSnapshotShares(inst)
 	}
 
 	lock := m.lock(inst.ID)
@@ -231,6 +241,9 @@ func (m *Manager) RestoreSnapshot(ctx context.Context, inst types.InstanceSpec, 
 	if err != nil {
 		return err
 	}
+	if inst.HasDirectoryMount() {
+		return errSnapshotShares(inst)
+	}
 
 	rt, err := m.Runtime(inst)
 	if err != nil {
@@ -317,7 +330,7 @@ func (m *Manager) restore(
 
 	// The restored VMM keeps the disks it was snapshotted with; only the
 	// config disk is written afresh.
-	mounts, _, err := m.resolveMounts(inst)
+	mounts, err := m.resolveMounts(inst)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -329,7 +342,7 @@ func (m *Manager) restore(
 	cu.Add(netSetup.cleanup)
 
 	// The restored guest has already booted once.
-	if err := m.writeGuestDisks(ctx, inst, starter, img, mounts, netSetup, guest.Status{Boots: 1}); err != nil {
+	if err := m.writeGuestDisks(ctx, inst, starter, img, mounts.guest, netSetup, guest.Status{Boots: 1}); err != nil {
 		return nil, nil, nil, err
 	}
 

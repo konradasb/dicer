@@ -33,6 +33,7 @@ import (
 	"github.com/konradasb/dicer/internal/registry"
 	"github.com/konradasb/dicer/internal/types"
 	"github.com/konradasb/dicer/internal/version"
+	"github.com/konradasb/dicer/internal/virtiofs"
 	"github.com/konradasb/dicer/internal/vm"
 	"github.com/konradasb/dicer/internal/volume"
 )
@@ -88,7 +89,7 @@ func (d *daemon) Run(ctx context.Context) error {
 		return err
 	}
 
-	if err := d.initServices(); err != nil {
+	if err := d.initServices(ctx); err != nil {
 		return err
 	}
 
@@ -220,7 +221,7 @@ func (d *daemon) openDefinitions() error {
 // eventsFile is the events log, in the data directory.
 const eventsFile = "events.jsonl"
 
-func (d *daemon) initServices() error {
+func (d *daemon) initServices(ctx context.Context) error {
 	var err error
 	d.events, err = events.Open(events.Config{
 		Path:     filepath.Join(d.cfg.DataDir, eventsFile),
@@ -294,6 +295,16 @@ func (d *daemon) initServices() error {
 		return err
 	}
 
+	// Without virtiofsd, instances cannot mount directories; the rest of
+	// the daemon works. One the configuration names must work.
+	shares, err := d.newDirectoryShares(ctx)
+	switch {
+	case err != nil && d.cfg.Virtiofsd != "":
+		return fmt.Errorf("config: virtiofsd: %w", err)
+	case err != nil:
+		d.logger.Info("instances cannot mount host directories", "reason", err)
+	}
+
 	vmCfg := vm.Config{
 		Definitions: d.definitions,
 		Addresses:   d.addresses,
@@ -318,6 +329,9 @@ func (d *daemon) initServices() error {
 			Logger:             d.logger,
 		})
 		vmCfg.DNSServers = d.dnsServers
+	}
+	if shares != nil {
+		vmCfg.Shares = shares
 	}
 	d.instances = vm.NewManager(vmCfg)
 
@@ -363,4 +377,19 @@ func (d *daemon) hostCapacity() (types.Capacity, error) {
 		"allocatable_vcpus", allocatable.VCPUs, "allocatable_memory_bytes", allocatable.MemoryBytes)
 
 	return capacity, nil
+}
+
+// newDirectoryShares returns what shares host directories with guests:
+// the virtiofsd the configuration names, or else the host's.
+func (d *daemon) newDirectoryShares(ctx context.Context) (*virtiofs.Daemon, error) {
+	path, err := virtiofs.Find(d.cfg.Virtiofsd)
+	if err != nil {
+		return nil, err
+	}
+	shares, err := virtiofs.New(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	d.logger.Info("instances can mount host directories", "virtiofsd", path)
+	return shares, nil
 }

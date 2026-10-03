@@ -66,7 +66,10 @@ sparse, so `ls -l` shows their size, and `du` what they take.
     ├── vsock.sock            the channel to the guest's agent
     ├── config.img            the disk dicer-init reads its configuration from
     ├── status.img            the disk the guest reports how it ended on
-    └── logs/vmm.log          the hypervisor's log: dicer logs --source hypervisor
+    ├── fsN.sock              virtiofsd's socket for its N-th directory mount
+    └── logs/
+        ├── vmm.log           the hypervisor's log: dicer logs --source hypervisor
+        └── virtiofsd-N.log   virtiofsd's log for its N-th directory mount
 ```
 
 A reboot clears it, and every instance is then stopped. `config.img` holds

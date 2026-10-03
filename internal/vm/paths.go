@@ -4,6 +4,7 @@
 package vm
 
 import (
+	"fmt"
 	"path/filepath"
 
 	"github.com/konradasb/dicer/internal/hypervisor"
@@ -90,6 +91,18 @@ func (m *Manager) hypervisorSocketPath(instanceID string) string {
 // hypervisorLogPath returns the VMM's own log.
 func (m *Manager) hypervisorLogPath(instanceID string) string {
 	return hypervisor.LogPath(m.hypervisorSocketPath(instanceID))
+}
+
+// shareSocketPath returns the socket virtiofsd serves an instance's i-th
+// shared directory on.
+func (m *Manager) shareSocketPath(instanceID string, i int) string {
+	return filepath.Join(m.runtimeDir(instanceID), fmt.Sprintf("fs%d.sock", i))
+}
+
+// shareLogPath returns the log of the virtiofsd serving an instance's i-th
+// shared directory, beside the VMM's own.
+func (m *Manager) shareLogPath(instanceID string, i int) string {
+	return filepath.Join(filepath.Dir(m.hypervisorLogPath(instanceID)), fmt.Sprintf("virtiofsd-%d.log", i))
 }
 
 // vsockPath returns the host end of an instance's vsock device.

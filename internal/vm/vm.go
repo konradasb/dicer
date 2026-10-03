@@ -22,6 +22,7 @@ import (
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/process"
 	"github.com/konradasb/dicer/internal/types"
+	"github.com/konradasb/dicer/internal/virtiofs"
 )
 
 // Definitions stores the instance, network, volume and kernel definitions.
@@ -98,6 +99,13 @@ type DNSServers interface {
 	Stop(network string)
 }
 
+// Shares shares host directories with guests: it starts virtiofsd for a
+// share, on a socket the VMM connects to. The process ends when the VMM
+// does.
+type Shares interface {
+	Start(ctx context.Context, s virtiofs.Share) (*process.Process, error)
+}
+
 // Config holds the dependencies for a Manager.
 type Config struct {
 	Definitions Definitions
@@ -116,6 +124,9 @@ type Config struct {
 	// DNSServers, if set, lets guests find each other by name. Without it,
 	// they are given the network's upstream nameservers.
 	DNSServers DNSServers
+	// Shares, if set, lets instances mount host directories. Without it,
+	// an instance that mounts one cannot start.
+	Shares Shares
 
 	// Capacity limits the CPU and memory instances may be given. The zero
 	// value is unlimited.
@@ -140,6 +151,7 @@ type Manager struct {
 	hostNetwork HostNetwork
 	starters    map[types.HypervisorType][]hypervisor.Starter
 	dnsServers  DNSServers
+	shares      Shares
 	capacity    types.Capacity
 	metrics     Metrics
 	events      Events
@@ -218,6 +230,7 @@ func NewManager(cfg Config) *Manager {
 		hostNetwork: cfg.HostNetwork,
 		starters:    cfg.Starters,
 		dnsServers:  cfg.DNSServers,
+		shares:      cfg.Shares,
 		capacity:    cfg.Capacity,
 		metrics:     cfg.Metrics,
 		events:      cfg.Events,

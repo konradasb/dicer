@@ -5,12 +5,13 @@ package grpcapi
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"net"
-	"os"
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/guest"
+	"github.com/konradasb/dicer/internal/hostfs"
 	"github.com/konradasb/dicer/internal/naming"
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/types"
@@ -54,6 +55,17 @@ func checkRemoveOnExit(inst types.InstanceSpec) error {
 				"the restart policy is %s, so drop it or drop the request to delete it", inst.Restart)
 	}
 
+	return nil
+}
+
+// checkDirectoryMounts refuses directory mounts on a hypervisor that cannot
+// share a directory.
+func checkDirectoryMounts(inst types.InstanceSpec) error {
+	if inst.HasDirectoryMount() && inst.Hypervisor() != types.HypervisorCloudHypervisor {
+		return errdefs.InvalidArgument(
+			"directory mounts need %s: %s cannot share a directory with its guest",
+			types.HypervisorCloudHypervisor, inst.Hypervisor())
+	}
 	return nil
 }
 
@@ -133,6 +145,10 @@ func (h *instanceHandler) mounts(in []*dicerdv1.Mount) ([]types.Mount, error) {
 			if err := checkHostFile(m.Source); err != nil {
 				return nil, errdefs.InvalidArgument("mount on %s: %v", m.Target, err)
 			}
+		case types.MountDirectory:
+			if err := checkHostDirectory(m.Source); err != nil {
+				return nil, errdefs.InvalidArgument("mount on %s: %v", m.Target, err)
+			}
 		}
 	}
 	if volumes > vm.MaxVolumeMounts {
@@ -145,16 +161,25 @@ func (h *instanceHandler) mounts(in []*dicerdv1.Mount) ([]types.Mount, error) {
 
 // checkHostFile checks that path is a file the daemon can read.
 func checkHostFile(path string) error {
-	info, err := os.Stat(path)
+	info, err := hostfs.Stat(path)
 	switch {
 	case err != nil:
 		return fmt.Errorf("cannot read %q: %w", path, err)
 	case info.IsDir():
-		return fmt.Errorf("%q is a directory: only single files can be mounted from the host", path)
+		return fmt.Errorf("%q is a directory: mount it as type=directory", path)
 	case !info.Mode().IsRegular():
 		return fmt.Errorf("%q is not a regular file", path)
 	}
 	return nil
+}
+
+// checkHostDirectory checks that path is a directory on the daemon's host.
+func checkHostDirectory(path string) error {
+	err := hostfs.CheckDir(path)
+	if errors.Is(err, hostfs.ErrNotDirectory) {
+		return fmt.Errorf("%w: mount a file as type=file", err)
+	}
+	return err
 }
 
 // portMappings validates the ports an instance wants published. Clashes with

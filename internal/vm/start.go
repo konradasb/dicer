@@ -17,8 +17,11 @@ import (
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/guest"
+	"github.com/konradasb/dicer/internal/hostfs"
 	"github.com/konradasb/dicer/internal/hypervisor"
+	"github.com/konradasb/dicer/internal/process"
 	"github.com/konradasb/dicer/internal/types"
+	"github.com/konradasb/dicer/internal/virtiofs"
 )
 
 // Start boots a defined instance. It cancels any pending restart, resets the
@@ -85,7 +88,15 @@ func (m *Manager) boot(ctx context.Context, inst types.InstanceSpec, restarts in
 	}
 	cu.Add(netSetup.cleanup)
 
-	if err := m.writeGuestDisks(ctx, inst, starter, boot.image, boot.mounts, netSetup, guest.Status{}); err != nil {
+	// virtiofsd listens before the VMM, which connects to it as it starts.
+	filesystems, stopShares, err := m.startShares(ctx, inst, boot.mounts.shares)
+	if err != nil {
+		return err
+	}
+	cu.Add(stopShares)
+	boot.filesystems = filesystems
+
+	if err := m.writeGuestDisks(ctx, inst, starter, boot.image, boot.mounts.guest, netSetup, guest.Status{}); err != nil {
 		return err
 	}
 
@@ -144,12 +155,14 @@ func (m *Manager) setStoppedByUser(ctx context.Context, inst types.InstanceSpec,
 
 // bootAssets is what an instance boots from, resolved at start.
 type bootAssets struct {
-	image       *types.Image
-	kernelPath  string
-	kernelArgs  string
-	initrdPath  string
-	mounts      []guest.Mount
-	volumeDisks []hypervisor.DiskConfig
+	image      *types.Image
+	kernelPath string
+	kernelArgs string
+	initrdPath string
+	mounts     resolvedMounts
+	// filesystems are the devices that share mounts.shares, once virtiofsd
+	// serves them.
+	filesystems []hypervisor.FilesystemConfig
 }
 
 // resolveBoot resolves the image, kernel, initrd and mounts inst boots
@@ -176,7 +189,7 @@ func (m *Manager) resolveBoot(ctx context.Context, inst types.InstanceSpec, star
 	if b.initrdPath, err = m.initrds.Prepare(ctx); err != nil {
 		return b, fmt.Errorf("prepare initrd: %w", err)
 	}
-	if b.mounts, b.volumeDisks, err = m.resolveMounts(inst); err != nil {
+	if b.mounts, err = m.resolveMounts(inst); err != nil {
 		return b, err
 	}
 	return b, nil
@@ -215,9 +228,10 @@ func (m *Manager) vmSpec(inst types.InstanceSpec, b bootAssets, nic hypervisor.N
 			{Path: m.overlayDiskPath(inst)},
 			{Path: m.configDiskPath(inst.ID), ReadOnly: true},
 			{Path: m.statusDiskPath(inst.ID)},
-		}, b.volumeDisks...),
-		NICs:    []hypervisor.NetworkInterfaceConfig{nic},
-		Console: hypervisor.ConsoleConfig{Path: m.serialLogPath(inst)},
+		}, b.mounts.disks...),
+		Filesystems: b.filesystems,
+		NICs:        []hypervisor.NetworkInterfaceConfig{nic},
+		Console:     hypervisor.ConsoleConfig{Path: m.serialLogPath(inst)},
 		Vsock: &hypervisor.VsockConfig{
 			CID:    uint32(vsockCID(inst.ID)),
 			Socket: m.vsockPath(inst.ID),
@@ -225,18 +239,33 @@ func (m *Manager) vmSpec(inst types.InstanceSpec, b bootAssets, nic hypervisor.N
 	}
 }
 
-// resolveMounts turns inst's mounts into the guest's mount table and the
-// disks behind its volumes, which follow the four fixed disks in order. Host
-// files are read now, so each start sees their current contents.
-func (m *Manager) resolveMounts(inst types.InstanceSpec) ([]guest.Mount, []hypervisor.DiskConfig, error) {
+// directoryShare is a host directory an instance mounts, by the tag the
+// guest mounts it with.
+type directoryShare struct {
+	tag, source, target string
+	readOnly            bool
+}
+
+// resolvedMounts is what an instance's mounts become at start.
+type resolvedMounts struct {
+	// guest is the guest's mount table.
+	guest []guest.Mount
+	// disks are the disks behind the volumes, which follow the four fixed
+	// disks in order.
+	disks []hypervisor.DiskConfig
+	// shares are the host directories shared with the guest.
+	shares []directoryShare
+}
+
+// resolveMounts resolves inst's mounts. Host files are read now, so that each
+// start sees their current contents.
+func (m *Manager) resolveMounts(inst types.InstanceSpec) (resolvedMounts, error) {
+	var r resolvedMounts
 	if len(inst.Mounts) == 0 {
-		return nil, nil, nil
+		return r, nil
 	}
 
-	var (
-		mounts = make([]guest.Mount, 0, len(inst.Mounts))
-		disks  []hypervisor.DiskConfig
-	)
+	r.guest = make([]guest.Mount, 0, len(inst.Mounts))
 	for _, mnt := range inst.Mounts {
 		gm := guest.Mount{Target: mnt.Target, ReadOnly: mnt.ReadOnly}
 
@@ -244,26 +273,80 @@ func (m *Manager) resolveMounts(inst types.InstanceSpec) ([]guest.Mount, []hyper
 		case types.MountVolume:
 			path, err := m.volumeDisk(mnt.Source)
 			if err != nil {
-				return nil, nil, err
+				return resolvedMounts{}, err
 			}
-			gm.Volume = &guest.VolumeSource{Device: fmt.Sprintf("/dev/vd%c", 'e'+len(disks))}
-			disks = append(disks, hypervisor.DiskConfig{Path: path, ReadOnly: mnt.ReadOnly})
+			gm.Volume = &guest.VolumeSource{Device: fmt.Sprintf("/dev/vd%c", 'e'+len(r.disks))}
+			r.disks = append(r.disks, hypervisor.DiskConfig{Path: path, ReadOnly: mnt.ReadOnly})
 		case types.MountFile:
 			file, err := readHostFile(mnt.Source)
 			if err != nil {
-				return nil, nil, fmt.Errorf("mount on %s: %w", mnt.Target, err)
+				return resolvedMounts{}, fmt.Errorf("mount on %s: %w", mnt.Target, err)
 			}
 			gm.File = file
+		case types.MountDirectory:
+			if err := hostfs.CheckDir(mnt.Source); err != nil {
+				return resolvedMounts{}, fmt.Errorf("mount on %s: %w", mnt.Target, err)
+			}
+			share := directoryShare{
+				tag: fmt.Sprintf("dicerfs%d", len(r.shares)), source: mnt.Source, target: mnt.Target, readOnly: mnt.ReadOnly,
+			}
+			gm.Directory = &guest.DirectorySource{Tag: share.tag}
+			r.shares = append(r.shares, share)
 		case types.MountTmpfs:
 			gm.Tmpfs = &guest.TmpfsSource{}
 		default:
-			return nil, nil, fmt.Errorf("mount on %s: unknown type %q", mnt.Target, mnt.Type)
+			return resolvedMounts{}, fmt.Errorf("mount on %s: unknown type %q", mnt.Target, mnt.Type)
 		}
 
-		mounts = append(mounts, gm)
+		r.guest = append(r.guest, gm)
 	}
 
-	return mounts, disks, nil
+	return r, nil
+}
+
+// errNoShares is why an instance that mounts a host directory cannot start
+// on a host without virtiofsd.
+var errNoShares = errdefs.InvalidState(
+	"this host cannot share directories with guests: install virtiofsd, then restart dicerd")
+
+// startShares starts virtiofsd for each directory an instance shares, and
+// returns the devices that share them and a function that stops them. They
+// stop of their own accord when the VMM that connects to them does.
+func (m *Manager) startShares(
+	ctx context.Context, inst types.InstanceSpec, shares []directoryShare,
+) ([]hypervisor.FilesystemConfig, func(), error) {
+	if len(shares) == 0 {
+		return nil, func() {}, nil
+	}
+	if m.shares == nil {
+		return nil, nil, errNoShares
+	}
+	if inst.Hypervisor() != types.HypervisorCloudHypervisor {
+		return nil, nil, errdefs.InvalidState("directory mounts need %s, not %s",
+			types.HypervisorCloudHypervisor, inst.Hypervisor())
+	}
+
+	var procs []*process.Process
+	stop := func() {
+		for _, p := range procs {
+			p.Terminate()
+		}
+	}
+
+	filesystems := make([]hypervisor.FilesystemConfig, 0, len(shares))
+	for i, s := range shares {
+		socket := m.shareSocketPath(inst.ID, i)
+		p, err := m.shares.Start(ctx, virtiofs.Share{
+			Dir: s.source, Socket: socket, ReadOnly: s.readOnly, Log: m.shareLogPath(inst.ID, i),
+		})
+		if err != nil {
+			stop()
+			return nil, nil, fmt.Errorf("mount on %s: %w", s.target, err)
+		}
+		procs = append(procs, p)
+		filesystems = append(filesystems, hypervisor.FilesystemConfig{Tag: s.tag, Socket: socket})
+	}
+	return filesystems, stop, nil
 }
 
 // volumeDisk finds the disk of the named volume.
@@ -283,11 +366,11 @@ func (m *Manager) volumeDisk(name string) (string, error) {
 // readHostFile reads a host file with the permissions and owner the guest's
 // copy gets.
 func readHostFile(path string) (*guest.FileSource, error) {
-	data, err := os.ReadFile(path)
+	data, err := hostfs.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read host file: %w", err)
 	}
-	info, err := os.Stat(path)
+	info, err := hostfs.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("read host file: %w", err)
 	}

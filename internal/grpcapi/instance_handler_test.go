@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/konradasb/dicer/internal/errdefs"
@@ -46,6 +47,7 @@ func TestMounts(t *testing.T) {
 		{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "v1", Target: "/logs", ReadOnly: true},
 		{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: hostFile, Target: "/etc/app/secret", ReadOnly: true},
 		{Type: dicerdv1.MountType_MOUNT_TYPE_TMPFS, Target: "/scratch"},
+		{Type: dicerdv1.MountType_MOUNT_TYPE_DIRECTORY, Source: dir, Target: "/app"},
 	})
 	if err != nil {
 		t.Fatalf("mounts: %v", err)
@@ -55,6 +57,7 @@ func TestMounts(t *testing.T) {
 		{Type: types.MountVolume, Source: "v1", Target: "/logs", ReadOnly: true},
 		{Type: types.MountFile, Source: hostFile, Target: "/etc/app/secret", ReadOnly: true},
 		{Type: types.MountTmpfs, Target: "/scratch"},
+		{Type: types.MountDirectory, Source: dir, Target: "/app"},
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("mounts = %+v, want %+v", got, want)
@@ -83,6 +86,9 @@ func TestMounts(t *testing.T) {
 		{"relative host file", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: "secret", Target: "/s"}}},
 		{"missing host file", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: filepath.Join(dir, "nope"), Target: "/s"}}},
 		{"host directory", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: dir, Target: "/s"}}},
+		{"relative host directory", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_DIRECTORY, Source: "src", Target: "/s"}}},
+		{"missing host directory", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_DIRECTORY, Source: filepath.Join(dir, "nope"), Target: "/s"}}},
+		{"host file as a directory", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_DIRECTORY, Source: hostFile, Target: "/s"}}},
 		{"tmpfs with a source", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_TMPFS, Source: dir, Target: "/s"}}},
 		{"read-only tmpfs", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_TMPFS, Target: "/s", ReadOnly: true}}},
 		{"too many volumes", tooMany},
@@ -92,6 +98,26 @@ func TestMounts(t *testing.T) {
 			_, err := h.mounts(tt.in)
 			wantClass(t, err, errdefs.ErrInvalidArgument)
 		})
+	}
+}
+
+func TestCheckDirectoryMounts(t *testing.T) {
+	shares := []types.Mount{{Type: types.MountDirectory, Source: "/src", Target: "/app"}}
+
+	for _, hv := range []types.HypervisorType{"", types.HypervisorCloudHypervisor} {
+		if err := checkDirectoryMounts(types.InstanceSpec{HypervisorType: hv, Mounts: shares}); err != nil {
+			t.Errorf("a directory mount on %q = %v, want it accepted", hv, err)
+		}
+	}
+
+	err := checkDirectoryMounts(types.InstanceSpec{HypervisorType: types.HypervisorFirecracker, Mounts: shares})
+	wantClass(t, err, errdefs.ErrInvalidArgument)
+	if err == nil || !strings.Contains(err.Error(), "directory mounts need cloud-hypervisor") {
+		t.Errorf("a directory mount on firecracker = %v, want it refused", err)
+	}
+
+	if err := checkDirectoryMounts(types.InstanceSpec{HypervisorType: types.HypervisorFirecracker}); err != nil {
+		t.Errorf("firecracker with no directory mount = %v, want it accepted", err)
 	}
 }
 
