@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/konradasb/dicer"
-	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/cli/remote"
+	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -97,7 +97,7 @@ func listImages(ctx context.Context, client *dicer.Client, _ []string) ([]string
 
 	names := make([]string, 0, len(resp.GetImages()))
 	for _, img := range resp.GetImages() {
-		names = append(names, img.GetName()+"\t"+bytesize.Format(img.GetSizeBytes()))
+		names = append(names, img.GetName()+"\t"+humanize.Bytes(img.GetSizeBytes()))
 	}
 
 	return names, nil
@@ -125,7 +125,7 @@ func listVolumes(ctx context.Context, client *dicer.Client, _ []string) ([]strin
 
 	names := make([]string, 0, len(resp.GetVolumes()))
 	for _, v := range resp.GetVolumes() {
-		names = append(names, v.GetName()+"\t"+bytesize.Format(v.GetSizeBytes()))
+		names = append(names, v.GetName()+"\t"+humanize.Bytes(v.GetSizeBytes()))
 	}
 
 	return names, nil

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/konradasb/dicer/internal/events"
+	"github.com/konradasb/dicer/internal/humanize"
 	"github.com/konradasb/dicer/internal/types"
 )
 
@@ -44,14 +45,14 @@ func (m *Manager) recordEnd(inst types.InstanceSpec, exit Exit, d decision, ranF
 
 	after := ""
 	if ranFor > 0 {
-		after = " after running for " + duration(ranFor)
+		after = " after running for " + humanize.Duration(ranFor)
 	}
 	if exit.Clean() {
 		m.record(inst, events.ActionExited, fmt.Sprintf("Instance exited with code %d%s", *exit.Code, after), attrs)
 	} else {
 		message := fmt.Sprintf("Instance failed%s: %v", after, exit.Failure)
 		if d.gaveUp {
-			message += fmt.Sprintf("; restart policy %s gave up after %s", inst.Restart, plural(d.restarts, "restart"))
+			message += fmt.Sprintf("; restart policy %s gave up after %s", inst.Restart, humanize.Count(d.restarts, "restart"))
 		}
 		m.record(inst, events.ActionDied, message, attrs)
 	}
@@ -62,7 +63,7 @@ func (m *Manager) recordEnd(inst types.InstanceSpec, exit Exit, d decision, ranF
 			what = "exited"
 		}
 		m.record(inst, events.ActionRestarting,
-			fmt.Sprintf("Back-off restarting %s instance in %s (%s)", what, duration(d.delay), restartCount(inst.Restart, d.restarts)),
+			fmt.Sprintf("Back-off restarting %s instance in %s (%s)", what, humanize.Duration(d.delay), restartCount(inst.Restart, d.restarts)),
 			map[string]string{"delay": d.delay.String(), "restart_count": strconv.Itoa(d.restarts)})
 	}
 }
@@ -75,29 +76,4 @@ func restartCount(p types.RestartPolicy, n int) string {
 		count += " of " + strconv.Itoa(p.MaxRetries)
 	}
 	return fmt.Sprintf("restart %s, policy %s", count, p)
-}
-
-// duration formats d, rounded to suit its magnitude.
-func duration(d time.Duration) string {
-	switch {
-	case d < time.Second:
-		return d.Round(time.Millisecond).String()
-	case d < time.Minute:
-		return d.Round(100 * time.Millisecond).String()
-	default:
-		return d.Round(time.Second).String()
-	}
-}
-
-// vcpus formats a vCPU count: "2 vCPUs".
-func vcpus(n int) string {
-	return plural(n, "vCPU")
-}
-
-// plural formats n of what: "3 restarts".
-func plural(n int, what string) string {
-	if n == 1 {
-		return "1 " + what
-	}
-	return strconv.Itoa(n) + " " + what + "s"
 }

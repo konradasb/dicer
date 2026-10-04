@@ -21,8 +21,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/konradasb/dicer"
-	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/compose"
+	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -276,7 +276,7 @@ func (u *upper) ensureVolumes(services []*compose.Service) error {
 		if _, err := u.client.CreateVolume(u.ctx(), v.Request); err != nil {
 			return fmt.Errorf("create volume %s: %w", v.Name, err)
 		}
-		u.out.printf("Volume %s created (%s)", v.Name, bytesize.Format(v.Request.GetSizeBytes()))
+		u.out.printf("Volume %s created (%s)", v.Name, humanize.Bytes(v.Request.GetSizeBytes()))
 	}
 	return nil
 }
@@ -406,7 +406,7 @@ func (u *upper) up(s *compose.Service) error {
 	if err != nil {
 		return fmt.Errorf("service %s: start %s: %w", s.Name, name, err)
 	}
-	u.out.printf("Instance %s started in %s (%s)", name, formatDuration(time.Since(start)), orDash(started.GetIp()))
+	u.out.printf("Instance %s started in %s (%s)", name, humanize.Duration(time.Since(start)), orDash(started.GetIp()))
 	return nil
 }
 
@@ -424,7 +424,7 @@ func (u *upper) create(s *compose.Service, done string) error {
 	if err != nil {
 		return fmt.Errorf("service %s: create %s: %w", s.Name, req.GetName(), err)
 	}
-	u.out.printf("Instance %s %s in %s (%s)", inst.GetName(), done, formatDuration(time.Since(start)), orDash(inst.GetIp()))
+	u.out.printf("Instance %s %s in %s (%s)", inst.GetName(), done, humanize.Duration(time.Since(start)), orDash(inst.GetIp()))
 	return nil
 }
 

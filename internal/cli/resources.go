@@ -8,7 +8,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/konradasb/dicer/internal/bytesize"
+	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -35,9 +35,9 @@ func resourceFields(r *dicerdv1.GetResourcesResponse, p palette) []field {
 		{"vCPU", cpu.GetAllocated(), cpu.GetAllocatable(),
 			fmt.Sprintf("%d of %d", cpu.GetAllocated(), cpu.GetAllocatable()), cpuLimit(cpu)},
 		{"Memory", memory.GetAllocated(), memory.GetAllocatable(),
-			bytesize.FormatOf(memory.GetAllocated(), memory.GetAllocatable()), memoryLimit(memory)},
+			humanize.BytesOf(memory.GetAllocated(), memory.GetAllocatable()), memoryLimit(memory)},
 		{"Disk", diskUsed, disk.GetTotalBytes(),
-			bytesize.FormatOf(diskUsed, disk.GetTotalBytes()), bytesize.Format(disk.GetProvisionedBytes()) + " provisioned"},
+			humanize.BytesOf(diskUsed, disk.GetTotalBytes()), humanize.Bytes(disk.GetProvisionedBytes()) + " provisioned"},
 	}
 
 	// The amounts are padded to one width, so the percentages line up.
@@ -67,7 +67,7 @@ func fraction(used, limit int64) float64 {
 
 // cpuLimit explains the vCPU limit: "4 CPUs, 4× overcommit".
 func cpuLimit(cpu *dicerdv1.ResourceCapacity) string {
-	limit := plural(cpu.GetHost(), "CPU")
+	limit := humanize.Count(cpu.GetHost(), "CPU")
 	if cpu.GetOvercommit() != 1 {
 		limit += ", " + formatNumber(cpu.GetOvercommit()) + "× overcommit"
 	}
@@ -77,9 +77,9 @@ func cpuLimit(cpu *dicerdv1.ResourceCapacity) string {
 
 // memoryLimit explains the memory limit: "31.3 GiB, 1 GiB reserved".
 func memoryLimit(memory *dicerdv1.ResourceCapacity) string {
-	limit := bytesize.Format(memory.GetHost())
+	limit := humanize.Bytes(memory.GetHost())
 	if memory.GetReserved() > 0 {
-		limit += ", " + bytesize.Format(memory.GetReserved()) + " reserved"
+		limit += ", " + humanize.Bytes(memory.GetReserved()) + " reserved"
 	}
 	if memory.GetOvercommit() != 1 {
 		limit += ", " + formatNumber(memory.GetOvercommit()) + "× overcommit"
@@ -107,12 +107,4 @@ func percent(used, limit int64) string {
 		return "-"
 	}
 	return fmt.Sprintf("%d%%", used*100/limit)
-}
-
-// plural renders a count of things, e.g. "1 CPU", "4 CPUs".
-func plural(n int64, thing string) string {
-	if n == 1 {
-		return "1 " + thing
-	}
-	return fmt.Sprintf("%d %ss", n, thing)
 }

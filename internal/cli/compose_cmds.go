@@ -16,6 +16,7 @@ import (
 
 	"github.com/konradasb/dicer"
 	"github.com/konradasb/dicer/internal/compose"
+	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -99,7 +100,7 @@ func runComposeDown(cmd *cobra.Command, _ []string) error {
 		if _, err := client.DeleteInstance(ctx, &dicerdv1.DeleteInstanceRequest{Name: name, Force: true}); err != nil {
 			return fmt.Errorf("delete %s: %w", name, err)
 		}
-		out.printf("Instance %s deleted in %s", name, formatDuration(time.Since(start)))
+		out.printf("Instance %s deleted in %s", name, humanize.Duration(time.Since(start)))
 	}
 
 	for _, key := range slices.Sorted(maps.Keys(p.Networks)) {
@@ -377,7 +378,7 @@ func startInstance(s *composeSession, name string, out *lines) error {
 	if err != nil {
 		return fmt.Errorf("start %s: %w", name, err)
 	}
-	out.printf("Instance %s started in %s (%s)", started.GetName(), formatDuration(time.Since(start)), orDash(started.GetIp()))
+	out.printf("Instance %s started in %s (%s)", started.GetName(), humanize.Duration(time.Since(start)), orDash(started.GetIp()))
 	return nil
 }
 
@@ -392,7 +393,7 @@ func stopService(s *composeSession, inst *dicerdv1.Instance, out *lines) error {
 	if _, err := s.client.StopInstance(s.cmd.Context(), &dicerdv1.StopInstanceRequest{Name: inst.GetName()}); err != nil {
 		return fmt.Errorf("stop %s: %w", inst.GetName(), err)
 	}
-	out.printf("Instance %s stopped in %s", inst.GetName(), formatDuration(time.Since(start)))
+	out.printf("Instance %s stopped in %s", inst.GetName(), humanize.Duration(time.Since(start)))
 	return nil
 }
 

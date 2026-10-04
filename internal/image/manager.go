@@ -18,9 +18,9 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
-	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
+	"github.com/konradasb/dicer/internal/humanize"
 	"github.com/konradasb/dicer/internal/image/reference"
 	"github.com/konradasb/dicer/internal/registry"
 	"github.com/konradasb/dicer/internal/types"
@@ -255,7 +255,7 @@ func (m *Manager) Delete(ref string) error {
 		m.logger.Warn("failed to delete image files", "digest", img.Digest, "error", err)
 	}
 	m.record(img, events.ActionDeleted, fmt.Sprintf("Deleted image %s (%s): %s boot disk removed",
-		img.Name, shortDigest(img.Digest), bytesize.Format(img.SizeBytes)), map[string]string{"by": "user"})
+		img.Name, reference.ShortDigest(img.Digest), humanize.Bytes(img.SizeBytes)), map[string]string{"by": "user"})
 
 	return nil
 }
@@ -383,10 +383,10 @@ func (m *Manager) executePull(
 
 	fetched := "layers already cached"
 	if n := downloaded.total(); n > 0 {
-		fetched = "downloaded " + bytesize.Format(n)
+		fetched = "downloaded " + humanize.Bytes(n)
 	}
 	m.record(img, events.ActionPulled, fmt.Sprintf("Pulled image %s (%s) in %s: %s, %s boot disk",
-		resolved.String(), shortDigest(digest), roundDuration(time.Since(started)), fetched, bytesize.Format(sizeBytes)),
+		resolved.String(), reference.ShortDigest(digest), humanize.Duration(time.Since(started)), fetched, humanize.Bytes(sizeBytes)),
 		map[string]string{"size_bytes": strconv.FormatInt(sizeBytes, 10)})
 	m.logger.InfoContext(ctx, "image ready",
 		"ref", resolved.String(),
@@ -458,29 +458,10 @@ func (m *Manager) loadExistingImages() error {
 	return nil
 }
 
-// shortDigest abbreviates a digest for a person, as git does a commit:
-// "sha256:1a2b3c4d5e6f".
-func shortDigest(digest string) string {
-	algo, hex, ok := strings.Cut(digest, ":")
-	if !ok || len(hex) <= 12 {
-		return digest
-	}
-	return algo + ":" + hex[:12]
-}
-
 // digestHex returns a digest without its algorithm prefix.
 func digestHex(digest string) string {
 	if _, hex, ok := strings.Cut(digest, ":"); ok {
 		return hex
 	}
 	return digest
-}
-
-// roundDuration is d rounded as an event says it: to the millisecond under
-// a second, to a tenth of a second after.
-func roundDuration(d time.Duration) time.Duration {
-	if d < time.Second {
-		return d.Round(time.Millisecond)
-	}
-	return d.Round(100 * time.Millisecond)
 }

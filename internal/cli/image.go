@@ -5,15 +5,15 @@ package cli
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 
 	"github.com/konradasb/dicer"
-	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/cli/printer"
+	"github.com/konradasb/dicer/internal/humanize"
+	"github.com/konradasb/dicer/internal/image/reference"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -31,22 +31,12 @@ func (p *printableImage) KV() []map[string]any {
 		kv = append(kv, map[string]any{
 			"Name":      img.GetName(),
 			"Digest":    img.GetDigest(),
-			"Size":      bytesize.Format(img.GetSizeBytes()),
+			"Size":      humanize.Bytes(img.GetSizeBytes()),
 			"Created":   age(timeOf(img.GetCreateTime())),
 			"Last used": age(timeOf(img.GetLastUsedTime())),
 		})
 	}
 	return kv
-}
-
-// shortDigest abbreviates a digest for a person, as git does a commit:
-// "sha256:1a2b3c4d5e6f".
-func shortDigest(digest string) string {
-	algo, hex, ok := strings.Cut(digest, ":")
-	if !ok || len(hex) <= 12 {
-		return digest
-	}
-	return algo + ":" + hex[:12]
 }
 
 func newImageCommand() *cobra.Command {
@@ -91,12 +81,12 @@ func newImagePullCommand() *cobra.Command {
 			reporter.done()
 
 			if !reporter.fetched {
-				succeeded(cmd, "Image %s is up to date (%s)", img.GetName(), shortDigest(img.GetDigest()))
+				succeeded(cmd, "Image %s is up to date (%s)", img.GetName(), reference.ShortDigest(img.GetDigest()))
 
 				return nil
 			}
 			succeeded(cmd, "Image %s pulled in %s (%s, %s)", img.GetName(),
-				formatDuration(time.Since(start)), shortDigest(img.GetDigest()), bytesize.Format(img.GetSizeBytes()))
+				humanize.Duration(time.Since(start)), reference.ShortDigest(img.GetDigest()), humanize.Bytes(img.GetSizeBytes()))
 
 			return nil
 		},
@@ -204,7 +194,7 @@ func newImagePruneCommand() *cobra.Command {
 				succeeded(cmd, "Deleted %s", img.GetName())
 			}
 			succeeded(cmd, "Reclaimed %s from %d image(s)",
-				bytesize.Format(result.GetReclaimedBytes()), len(result.GetImages()))
+				humanize.Bytes(result.GetReclaimedBytes()), len(result.GetImages()))
 
 			return nil
 		},

@@ -22,8 +22,8 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/events"
+	"github.com/konradasb/dicer/internal/humanize"
 	"github.com/konradasb/dicer/internal/types"
 )
 
@@ -201,8 +201,8 @@ func (m *Manager) recordFetched(k types.Kernel, d time.Duration, fetchedBytes in
 		ID:     k.ID,
 		Name:   k.Name,
 		Action: events.ActionFetched,
-		Message: fmt.Sprintf("Fetched kernel from %s in %s: %s, %s", k.URL, d.Round(time.Millisecond),
-			bytesize.Format(fetchedBytes),
+		Message: fmt.Sprintf("Fetched kernel from %s in %s: %s, %s", k.URL, humanize.Duration(d),
+			humanize.Bytes(fetchedBytes),
 			verified),
 		Attributes: map[string]string{"url": k.URL, "fetched_bytes": strconv.FormatInt(fetchedBytes, 10)},
 	})

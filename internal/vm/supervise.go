@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/konradasb/dicer/internal/humanize"
 	"github.com/konradasb/dicer/internal/process"
 	"github.com/konradasb/dicer/internal/types"
 )
@@ -140,13 +141,13 @@ func stopMessage(outcome stopOutcome, grace, took, ranFor time.Duration) string 
 
 	message := "Stopped instance"
 	if ranFor > 0 {
-		message += " after running for " + duration(ranFor)
+		message += " after running for " + humanize.Duration(ranFor)
 	}
 	switch outcome {
 	case stopGraceful:
-		return message + ": guest shut down gracefully in " + duration(took)
+		return message + ": guest shut down gracefully in " + humanize.Duration(took)
 	case stopTimedOut:
-		return message + fmt.Sprintf(": guest did not shut down within the %s grace period; hypervisor shut down", duration(grace))
+		return message + fmt.Sprintf(": guest did not shut down within the %s grace period; hypervisor shut down", humanize.Duration(grace))
 	default:
 		return message + ": guest could not be asked to shut down (paused, or its agent is too old); hypervisor shut down"
 	}
@@ -234,7 +235,7 @@ func (m *Manager) ended(ctx context.Context, inst types.InstanceSpec, prev types
 		rt.State = types.StateStopped
 	case d.gaveUp:
 		rt.State = types.StateFailed
-		rt.StateError = fmt.Sprintf("gave up after %s: %v", plural(d.restarts, "restart"), exit.Failure)
+		rt.StateError = fmt.Sprintf("gave up after %s: %v", humanize.Count(d.restarts, "restart"), exit.Failure)
 	default:
 		rt.State = types.StateFailed
 		rt.StateError = exit.Failure.Error()

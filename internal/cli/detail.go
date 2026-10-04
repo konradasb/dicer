@@ -18,8 +18,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 
-	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/cli/printer"
+	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -131,7 +131,7 @@ func since(t time.Time) string {
 func restartDetail(inst *dicerdv1.Instance) string {
 	policy := restartPolicyName(inst.GetRestartPolicy())
 	if n := inst.GetRestartCount(); n > 0 {
-		policy += ", restarted " + plural(int64(n), "time") + " in a row"
+		policy += ", restarted " + humanize.Count(n, "time") + " in a row"
 	}
 
 	return policy
@@ -141,7 +141,7 @@ func restartDetail(inst *dicerdv1.Instance) string {
 // hypervisor that runs it, and the kernel it boots.
 func machineLines(inst *dicerdv1.Instance) []string {
 	resources := fmt.Sprintf("%s, %s memory, %s disk",
-		plural(int64(inst.GetVcpus()), "vCPU"), bytesize.Format(inst.GetMemoryBytes()), bytesize.Format(inst.GetDiskBytes()))
+		humanize.Count(inst.GetVcpus(), "vCPU"), humanize.Bytes(inst.GetMemoryBytes()), humanize.Bytes(inst.GetDiskBytes()))
 
 	hv := enumName(inst.GetHypervisorType())
 	if v := inst.GetHypervisorVersion(); v != "" {

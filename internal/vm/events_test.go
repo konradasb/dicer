@@ -211,15 +211,3 @@ func TestUpdateMessage(t *testing.T) {
 		t.Errorf("updateMessage =\n%q\nwant\n%q", got, want)
 	}
 }
-
-func TestDuration(t *testing.T) {
-	for d, want := range map[time.Duration]string{
-		829 * time.Millisecond:                "829ms",
-		1840 * time.Millisecond:               "1.8s",
-		5*time.Minute + 3400*time.Millisecond: "5m3s",
-	} {
-		if got := duration(d); got != want {
-			t.Errorf("duration(%v) = %q, want %q", d, got, want)
-		}
-	}
-}

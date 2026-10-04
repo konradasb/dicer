@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/konradasb/dicer"
-	"github.com/konradasb/dicer/internal/bytesize"
+	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -51,8 +51,8 @@ func (p *printableInstance) KV() []map[string]any {
 			"State":   state,
 			"Status":  instanceStatus(inst),
 			"VCPU":    inst.GetVcpus(),
-			"Memory":  bytesize.Format(inst.GetMemoryBytes()),
-			"Disk":    bytesize.Format(inst.GetDiskBytes()),
+			"Memory":  humanize.Bytes(inst.GetMemoryBytes()),
+			"Disk":    humanize.Bytes(inst.GetDiskBytes()),
 			"Network": inst.GetNetworkName(),
 			"IP":      orDash(inst.GetIp()),
 			"Ports":   orDash(formatPorts(inst.GetPorts())),
@@ -383,7 +383,7 @@ func pullShowingProgress(cmd *cobra.Command, client *dicer.Client, ref string) e
 
 	if reporter.fetched {
 		succeeded(cmd, "Image %s pulled in %s (%s)",
-			img.GetName(), formatDuration(time.Since(start)), bytesize.Format(img.GetSizeBytes()))
+			img.GetName(), humanize.Duration(time.Since(start)), humanize.Bytes(img.GetSizeBytes()))
 	}
 
 	return nil

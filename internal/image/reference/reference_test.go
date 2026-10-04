@@ -138,3 +138,17 @@ func TestRef_DigestHex(t *testing.T) {
 		})
 	}
 }
+
+func TestShortDigest(t *testing.T) {
+	for _, tc := range []struct {
+		digest, want string
+	}{
+		{"sha256:1a2b3c4d5e6f7a8b9c0d", "sha256:1a2b3c4d5e6f"},
+		{"sha256:1a2b3c", "sha256:1a2b3c"},
+		{"1a2b3c4d5e6f7a8b9c0d", "1a2b3c4d5e6f7a8b9c0d"},
+	} {
+		if got := ShortDigest(tc.digest); got != tc.want {
+			t.Errorf("ShortDigest(%q) = %q, want %q", tc.digest, got, tc.want)
+		}
+	}
+}

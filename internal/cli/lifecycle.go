@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/konradasb/dicer"
+	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -60,7 +61,7 @@ func runTask[T any](cmd *cobra.Command, doing string, call func() (T, error), do
 		return err
 	}
 
-	t.succeed("%s", done(result, formatDuration(t.elapsed())))
+	t.succeed("%s", done(result, humanize.Duration(t.elapsed())))
 	return nil
 }
 

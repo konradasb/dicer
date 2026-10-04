@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/events"
+	"github.com/konradasb/dicer/internal/humanize"
+	"github.com/konradasb/dicer/internal/image/reference"
 	"github.com/konradasb/dicer/internal/types"
 )
 
@@ -150,14 +151,14 @@ func (m *Manager) collect(p GCPolicy, images []*types.Image, reason GCReason, re
 
 // gcMessage says why garbage collection under p removed img.
 func gcMessage(p GCPolicy, img *types.Image, reason GCReason) string {
-	removed := fmt.Sprintf("Garbage-collected image %s (%s)", img.Name, shortDigest(img.Digest))
+	removed := fmt.Sprintf("Garbage-collected image %s (%s)", img.Name, reference.ShortDigest(img.Digest))
 	lastUsed := img.LastUsedAt.Local().Format(time.DateTime)
 	if reason == GCReasonSize {
 		return fmt.Sprintf("%s: image store over gc_max_size %s, and it was the least recently used (last used %s); %s boot disk removed",
-			removed, bytesize.Format(p.MaxSize), lastUsed, bytesize.Format(img.SizeBytes))
+			removed, humanize.Bytes(p.MaxSize), lastUsed, humanize.Bytes(img.SizeBytes))
 	}
 	return fmt.Sprintf("%s: unused since %s, longer than gc_max_unused_age %s; %s boot disk removed",
-		removed, lastUsed, age(p.MaxUnusedAge), bytesize.Format(img.SizeBytes))
+		removed, lastUsed, age(p.MaxUnusedAge), humanize.Bytes(img.SizeBytes))
 }
 
 // age is a duration as the configuration gives it: in days if it is whole

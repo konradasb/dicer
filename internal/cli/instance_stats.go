@@ -12,7 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/konradasb/dicer/internal/bytesize"
+	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -37,10 +37,10 @@ func (p *printableInstanceStats) KV() []map[string]any {
 			"ID":       s.GetId(),
 			"Name":     s.GetName(),
 			"CPUPerc":  fmt.Sprintf("%.2f%%", s.GetCpuPercent()),
-			"MemUsage": bytesize.Format(s.GetResidentMemoryBytes()) + " / " + bytesize.Format(s.GetMemoryBytes()),
+			"MemUsage": humanize.Bytes(s.GetResidentMemoryBytes()) + " / " + humanize.Bytes(s.GetMemoryBytes()),
 			"MemPerc":  memPerc,
-			"NetIO":    bytesize.Format(s.GetNetworkReceiveBytes()) + " / " + bytesize.Format(s.GetNetworkTransmitBytes()),
-			"BlockIO":  bytesize.Format(s.GetDiskReadBytes()) + " / " + bytesize.Format(s.GetDiskWrittenBytes()),
+			"NetIO":    humanize.Bytes(s.GetNetworkReceiveBytes()) + " / " + humanize.Bytes(s.GetNetworkTransmitBytes()),
+			"BlockIO":  humanize.Bytes(s.GetDiskReadBytes()) + " / " + humanize.Bytes(s.GetDiskWrittenBytes()),
 		})
 	}
 	return kv

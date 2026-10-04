@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/konradasb/dicer/internal/archive"
-	"github.com/konradasb/dicer/internal/bytesize"
+	"github.com/konradasb/dicer/internal/humanize"
 	"github.com/konradasb/dicer/internal/naming"
 )
 
@@ -76,7 +76,7 @@ func newInstanceCopyCommand() *cobra.Command {
 				return err
 			}
 
-			succeeded(cmd, "Copied %s to %s (%s)", src, dest, bytesize.Format(n))
+			succeeded(cmd, "Copied %s to %s (%s)", src, dest, humanize.Bytes(n))
 			return nil
 		},
 	}

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/konradasb/dicer/internal/humanize"
 )
 
 // spinnerFrames are drawn in turn while a task runs.
@@ -42,7 +44,7 @@ func startTask(cmd *cobra.Command, what string) *task {
 
 		for i := 0; ; i++ {
 			frame := spinnerFrames[i%len(spinnerFrames)]
-			_, _ = fmt.Fprintf(t.out, "\r\x1b[K%s %s… %s", frame, what, formatDuration(time.Since(t.start)))
+			_, _ = fmt.Fprintf(t.out, "\r\x1b[K%s %s… %s", frame, what, humanize.Duration(time.Since(t.start)))
 
 			select {
 			case <-t.stop:
@@ -73,19 +75,6 @@ func (t *task) end() {
 func (t *task) succeed(format string, args ...any) {
 	t.end()
 	_, _ = fmt.Fprintf(t.out, format+"\n", args...)
-}
-
-// formatDuration renders how long something took, to a precision a person
-// cares about: "120ms", "1.4s", "2m5s".
-func formatDuration(d time.Duration) string {
-	switch {
-	case d < time.Second:
-		return d.Round(time.Millisecond).String()
-	case d < time.Minute:
-		return d.Round(100 * time.Millisecond).String()
-	default:
-		return d.Round(time.Second).String()
-	}
 }
 
 // succeeded writes a line saying something went well.

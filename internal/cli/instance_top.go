@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/konradasb/dicer/internal/bytesize"
+	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -40,7 +40,7 @@ func (p *printableProcesses) KV() []map[string]any {
 			"State":   process.GetState(),
 			"Started": age(process.GetStartTime().AsTime()),
 			"CPUTime": process.GetCpuTime().AsDuration().Round(10 * time.Millisecond).String(),
-			"RSS":     bytesize.Format(process.GetResidentMemoryBytes()),
+			"RSS":     humanize.Bytes(process.GetResidentMemoryBytes()),
 			"Command": command,
 		})
 	}

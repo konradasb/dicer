@@ -10,10 +10,10 @@ import (
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/filestore"
+	"github.com/konradasb/dicer/internal/humanize"
 	"github.com/konradasb/dicer/internal/naming"
 	"github.com/konradasb/dicer/internal/types"
 	"github.com/konradasb/dicer/internal/volume"
@@ -51,7 +51,7 @@ func (h *volumeHandler) CreateVolume(
 		_ = h.volumes.Delete(vol.ID)
 		return nil, err
 	}
-	h.record(*vol, events.ActionCreated, "Created volume of "+bytesize.Format(vol.SizeBytes)+", formatted ext4")
+	h.record(*vol, events.ActionCreated, "Created volume of "+humanize.Bytes(vol.SizeBytes)+", formatted ext4")
 
 	return volumeToProto(*vol), nil
 }
@@ -104,7 +104,7 @@ func (h *volumeHandler) DeleteVolume(
 	if err := h.definitions.DeleteVolume(vol.Name); err != nil {
 		return nil, err
 	}
-	h.record(vol, events.ActionDeleted, "Deleted volume of "+bytesize.Format(vol.SizeBytes)+" and its data")
+	h.record(vol, events.ActionDeleted, "Deleted volume of "+humanize.Bytes(vol.SizeBytes)+" and its data")
 
 	if err := h.volumes.Delete(vol.ID); err != nil {
 		return nil, fmt.Errorf("remove volume disk: %w", err)

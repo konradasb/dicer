@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/pflag"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -209,7 +210,7 @@ func healthLines(inst *dicerdv1.Instance, p palette) []string {
 		verdict += ", checked " + age(last)
 	}
 	if n := h.GetFailingStreak(); n > 0 {
-		verdict += fmt.Sprintf(", %s failed in a row", plural(int64(n), "check"))
+		verdict += fmt.Sprintf(", %s failed in a row", humanize.Count(n, "check"))
 	}
 
 	out := []string{verdict}

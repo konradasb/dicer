@@ -6,7 +6,7 @@ package types
 import (
 	"fmt"
 
-	"github.com/konradasb/dicer/internal/bytesize"
+	"github.com/konradasb/dicer/internal/humanize"
 )
 
 // Resources is an amount of the host's CPU and memory.
@@ -35,7 +35,7 @@ func (r Resources) Fits(limit Resources) bool {
 
 // String describes r for a person, e.g. "2 vCPU, 4 GiB".
 func (r Resources) String() string {
-	return fmt.Sprintf("%d vCPU, %s", r.VCPUs, bytesize.Format(r.MemoryBytes))
+	return fmt.Sprintf("%d vCPU, %s", r.VCPUs, humanize.Bytes(r.MemoryBytes))
 }
 
 // Capacity is how much of the host instances may be given.

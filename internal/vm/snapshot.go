@@ -18,10 +18,10 @@ import (
 	"gvisor.dev/gvisor/pkg/cleanup"
 
 	"github.com/konradasb/dicer/internal/atomicfile"
-	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/guest"
+	"github.com/konradasb/dicer/internal/humanize"
 	"github.com/konradasb/dicer/internal/hypervisor"
 	"github.com/konradasb/dicer/internal/image/reference"
 	"github.com/konradasb/dicer/internal/naming"
@@ -90,7 +90,7 @@ func (m *Manager) CreateSnapshot(
 		return types.Snapshot{}, err
 	}
 
-	m.record(inst, events.ActionSnapshotCreated, fmt.Sprintf("Created snapshot %q of memory and disk in %s: %s", name, duration(time.Since(started)), bytesize.Format(snap.SizeBytes)),
+	m.record(inst, events.ActionSnapshotCreated, fmt.Sprintf("Created snapshot %q of memory and disk in %s: %s", name, humanize.Duration(time.Since(started)), humanize.Bytes(snap.SizeBytes)),
 		map[string]string{"snapshot": name, "size_bytes": strconv.FormatInt(snap.SizeBytes, 10)})
 	m.logger.InfoContext(ctx, "created snapshot",
 		"instance", inst.Name, "snapshot", name, "size_bytes", snap.SizeBytes)
@@ -292,7 +292,7 @@ func (m *Manager) RestoreSnapshot(ctx context.Context, inst types.InstanceSpec, 
 	m.supervise(ctx, inst, vmm, running)
 
 	m.record(inst, events.ActionSnapshotRestored, fmt.Sprintf("Restored instance from snapshot %q taken %s in %s: memory and disk rolled back",
-		name, snap.CreatedAt.Local().Format(time.DateTime), duration(time.Since(started))),
+		name, snap.CreatedAt.Local().Format(time.DateTime), humanize.Duration(time.Since(started))),
 		map[string]string{"snapshot": name})
 	m.logger.InfoContext(ctx, "restored snapshot",
 		"instance", inst.Name, "snapshot", name, "pid", vmm.PID())

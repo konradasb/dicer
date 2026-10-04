@@ -81,3 +81,14 @@ func Familiar(s string) string {
 	}
 	return reference.FamiliarString(named)
 }
+
+// ShortDigest abbreviates a digest for a person, as git does a commit:
+// "sha256:1a2b3c4d5e6f". A digest too short to abbreviate, or without an
+// algorithm, is returned as is.
+func ShortDigest(digest string) string {
+	algorithm, hex, ok := strings.Cut(digest, ":")
+	if !ok || len(hex) <= 12 {
+		return digest
+	}
+	return algorithm + ":" + hex[:12]
+}
