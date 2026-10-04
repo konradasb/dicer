@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/konradasb/dicer"
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/cli/printer"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
@@ -29,7 +30,7 @@ func (p *printableVolume) KV() []map[string]any {
 		kv = append(kv, map[string]any{
 			"ID":      v.GetId(),
 			"Name":    v.GetName(),
-			"Size":    size(v.GetSizeBytes()),
+			"Size":    bytesize.Format(v.GetSizeBytes()),
 			"Created": age(timeOf(v.GetCreateTime())),
 		})
 	}
@@ -77,7 +78,7 @@ func newVolumeCreateCommand() *cobra.Command {
 				return err
 			}
 
-			succeeded(cmd, "Volume %s created (%s)", v.GetName(), size(v.GetSizeBytes()))
+			succeeded(cmd, "Volume %s created (%s)", v.GetName(), bytesize.Format(v.GetSizeBytes()))
 			return nil
 		},
 	}

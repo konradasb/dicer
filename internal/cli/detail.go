@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/cli/printer"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
@@ -140,7 +141,7 @@ func restartDetail(inst *dicerdv1.Instance) string {
 // hypervisor that runs it, and the kernel it boots.
 func machineLines(inst *dicerdv1.Instance) []string {
 	resources := fmt.Sprintf("%s, %s memory, %s disk",
-		plural(int64(inst.GetVcpus()), "vCPU"), size(inst.GetMemoryBytes()), size(inst.GetDiskBytes()))
+		plural(int64(inst.GetVcpus()), "vCPU"), bytesize.Format(inst.GetMemoryBytes()), bytesize.Format(inst.GetDiskBytes()))
 
 	hv := enumName(inst.GetHypervisorType())
 	if v := inst.GetHypervisorVersion(); v != "" {

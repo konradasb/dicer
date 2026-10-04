@@ -125,35 +125,6 @@ func age(t time.Time) string {
 	return units.HumanDuration(time.Since(t)) + " ago"
 }
 
-// sizeUnits are the IEC units sizes are shown in.
-var sizeUnits = []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}
-
-// size renders a byte count, e.g. "1.5 GiB".
-func size(bytes int64) string {
-	value, unit := scaleBytes(bytes, bytes)
-	return formatNumber(value) + " " + unit
-}
-
-// sizeOf renders an amount of a total in the total's unit: "1.5 of 30.3 GiB".
-func sizeOf(part, total int64) string {
-	value, unit := scaleBytes(total, total)
-	partValue, _ := scaleBytes(part, total)
-	return formatNumber(partValue) + " of " + formatNumber(value) + " " + unit
-}
-
-// scaleBytes returns bytes in the largest unit that leaves reference at
-// least 1, and that unit.
-func scaleBytes(bytes, reference int64) (float64, string) {
-	value, ref := float64(bytes), float64(reference)
-	i := 0
-	for ref >= 1024 && i < len(sizeUnits)-1 {
-		value /= 1024
-		ref /= 1024
-		i++
-	}
-	return value, sizeUnits[i]
-}
-
 // formatNumber renders a number to at most one decimal place, dropping a
 // trailing ".0": 30.3, 1, 4.
 func formatNumber(f float64) string {

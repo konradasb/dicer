@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/docker/go-units"
-
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/types"
 )
@@ -89,14 +87,6 @@ func duration(d time.Duration) string {
 	default:
 		return d.Round(time.Second).String()
 	}
-}
-
-// binarySizeUnits are the IEC units sizes are written in.
-var binarySizeUnits = []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}
-
-// size formats n bytes: "512 MiB".
-func size(n int64) string {
-	return units.CustomSize("%.4g %s", float64(n), 1024, binarySizeUnits)
 }
 
 // vcpus formats a vCPU count: "2 vCPUs".

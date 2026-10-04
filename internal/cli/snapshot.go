@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/konradasb/dicer"
+	"github.com/konradasb/dicer/internal/bytesize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -27,8 +28,8 @@ func (p *printableSnapshot) KV() []map[string]any {
 			"Name":       s.GetName(),
 			"Instance":   s.GetInstanceName(),
 			"Hypervisor": enumName(s.GetHypervisorType()) + " " + s.GetHypervisorVersion(),
-			"Memory":     size(s.GetMemoryBytes()),
-			"Size":       size(s.GetSizeBytes()),
+			"Memory":     bytesize.Format(s.GetMemoryBytes()),
+			"Size":       bytesize.Format(s.GetSizeBytes()),
 			"Created":    age(timeOf(s.GetCreateTime())),
 		})
 	}
@@ -81,7 +82,7 @@ func newSnapshotCreateCommand() *cobra.Command {
 				return client.CreateSnapshot(cmd.Context(), &dicerdv1.CreateSnapshotRequest{Instance: args[0], Name: name})
 			}, func(snap *dicerdv1.Snapshot, took string) string {
 				return fmt.Sprintf("Snapshot %s of instance %s created in %s (%s)",
-					snap.GetName(), snap.GetInstanceName(), took, size(snap.GetSizeBytes()))
+					snap.GetName(), snap.GetInstanceName(), took, bytesize.Format(snap.GetSizeBytes()))
 			})
 		},
 	}

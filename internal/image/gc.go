@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/types"
 )
@@ -153,10 +154,10 @@ func gcMessage(p GCPolicy, img *types.Image, reason GCReason) string {
 	lastUsed := img.LastUsedAt.Local().Format(time.DateTime)
 	if reason == GCReasonSize {
 		return fmt.Sprintf("%s: image store over gc_max_size %s, and it was the least recently used (last used %s); %s boot disk removed",
-			removed, humanSize(p.MaxSize), lastUsed, humanSize(img.SizeBytes))
+			removed, bytesize.Format(p.MaxSize), lastUsed, bytesize.Format(img.SizeBytes))
 	}
 	return fmt.Sprintf("%s: unused since %s, longer than gc_max_unused_age %s; %s boot disk removed",
-		removed, lastUsed, age(p.MaxUnusedAge), humanSize(img.SizeBytes))
+		removed, lastUsed, age(p.MaxUnusedAge), bytesize.Format(img.SizeBytes))
 }
 
 // age is a duration as the configuration gives it: in days if it is whole

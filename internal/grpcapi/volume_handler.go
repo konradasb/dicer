@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/docker/go-units"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/filestore"
@@ -51,7 +51,7 @@ func (h *volumeHandler) CreateVolume(
 		_ = h.volumes.Delete(vol.ID)
 		return nil, err
 	}
-	h.record(*vol, events.ActionCreated, "Created volume of "+volumeSize(vol.SizeBytes)+", formatted ext4")
+	h.record(*vol, events.ActionCreated, "Created volume of "+bytesize.Format(vol.SizeBytes)+", formatted ext4")
 
 	return volumeToProto(*vol), nil
 }
@@ -104,7 +104,7 @@ func (h *volumeHandler) DeleteVolume(
 	if err := h.definitions.DeleteVolume(vol.Name); err != nil {
 		return nil, err
 	}
-	h.record(vol, events.ActionDeleted, "Deleted volume of "+volumeSize(vol.SizeBytes)+" and its data")
+	h.record(vol, events.ActionDeleted, "Deleted volume of "+bytesize.Format(vol.SizeBytes)+" and its data")
 
 	if err := h.volumes.Delete(vol.ID); err != nil {
 		return nil, fmt.Errorf("remove volume disk: %w", err)
@@ -124,9 +124,4 @@ func (h *volumeHandler) record(vol types.Volume, action events.Action, message s
 		Message:    message,
 		Attributes: map[string]string{"size_bytes": strconv.FormatInt(vol.SizeBytes, 10)},
 	})
-}
-
-// volumeSize formats a volume's size: "10 GiB".
-func volumeSize(n int64) string {
-	return units.CustomSize("%.4g %s", float64(n), 1024, []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"})
 }

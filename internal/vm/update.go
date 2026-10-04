@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/image/reference"
@@ -84,8 +85,8 @@ func definitionChanges(a, b types.InstanceSpec) []string {
 
 	from("image", reference.Familiar(a.ImageRef), reference.Familiar(b.ImageRef))
 	from("vCPUs", strconv.Itoa(a.VCPUs), strconv.Itoa(b.VCPUs))
-	from("memory", size(a.MemoryBytes), size(b.MemoryBytes))
-	from("disk", size(a.DiskBytes), size(b.DiskBytes))
+	from("memory", bytesize.Format(a.MemoryBytes), bytesize.Format(b.MemoryBytes))
+	from("disk", bytesize.Format(a.DiskBytes), bytesize.Format(b.DiskBytes))
 	from("restart policy", a.Restart.String(), b.Restart.String())
 	from("network", a.NetworkName, b.NetworkName)
 	from("static IP", a.StaticIP, b.StaticIP)

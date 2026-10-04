@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/konradasb/dicer"
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/cli/printer"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
@@ -30,7 +31,7 @@ func (p *printableImage) KV() []map[string]any {
 		kv = append(kv, map[string]any{
 			"Name":      img.GetName(),
 			"Digest":    img.GetDigest(),
-			"Size":      size(img.GetSizeBytes()),
+			"Size":      bytesize.Format(img.GetSizeBytes()),
 			"Created":   age(timeOf(img.GetCreateTime())),
 			"Last used": age(timeOf(img.GetLastUsedTime())),
 		})
@@ -95,7 +96,7 @@ func newImagePullCommand() *cobra.Command {
 				return nil
 			}
 			succeeded(cmd, "Image %s pulled in %s (%s, %s)", img.GetName(),
-				formatDuration(time.Since(start)), shortDigest(img.GetDigest()), size(img.GetSizeBytes()))
+				formatDuration(time.Since(start)), shortDigest(img.GetDigest()), bytesize.Format(img.GetSizeBytes()))
 
 			return nil
 		},
@@ -203,7 +204,7 @@ func newImagePruneCommand() *cobra.Command {
 				succeeded(cmd, "Deleted %s", img.GetName())
 			}
 			succeeded(cmd, "Reclaimed %s from %d image(s)",
-				size(result.GetReclaimedBytes()), len(result.GetImages()))
+				bytesize.Format(result.GetReclaimedBytes()), len(result.GetImages()))
 
 			return nil
 		},

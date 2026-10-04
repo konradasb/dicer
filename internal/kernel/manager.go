@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/go-units"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/types"
 )
@@ -202,7 +202,7 @@ func (m *Manager) recordFetched(k types.Kernel, d time.Duration, fetchedBytes in
 		Name:   k.Name,
 		Action: events.ActionFetched,
 		Message: fmt.Sprintf("Fetched kernel from %s in %s: %s, %s", k.URL, d.Round(time.Millisecond),
-			units.CustomSize("%.4g %s", float64(fetchedBytes), 1024, []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}),
+			bytesize.Format(fetchedBytes),
 			verified),
 		Attributes: map[string]string{"url": k.URL, "fetched_bytes": strconv.FormatInt(fetchedBytes, 10)},
 	})

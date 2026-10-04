@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/konradasb/dicer/internal/bytesize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -76,9 +77,9 @@ func (r *pullReporter) report(p *dicerdv1.PullImageProgress) {
 	line := fmt.Sprintf("%-11s", stageLabel(p.GetStage()))
 	if done, total := p.GetDownloadedBytes(), p.GetTotalBytes(); total > 0 {
 		line += " " + progressBar(done, total) + " " +
-			fmt.Sprintf("%4s  %s", percent(done, total), sizeOf(done, total))
+			fmt.Sprintf("%4s  %s", percent(done, total), bytesize.FormatOf(done, total))
 		if rate := r.rate(done); rate > 0 {
-			line += fmt.Sprintf("  %s/s", size(int64(rate)))
+			line += fmt.Sprintf("  %s/s", bytesize.Format(int64(rate)))
 			if left := time.Duration(float64(total-done) / rate * float64(time.Second)); done < total {
 				line += "  ETA " + formatDuration(left.Round(time.Second))
 			}

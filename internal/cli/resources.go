@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/konradasb/dicer/internal/bytesize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -34,9 +35,9 @@ func resourceFields(r *dicerdv1.GetResourcesResponse, p palette) []field {
 		{"vCPU", cpu.GetAllocated(), cpu.GetAllocatable(),
 			fmt.Sprintf("%d of %d", cpu.GetAllocated(), cpu.GetAllocatable()), cpuLimit(cpu)},
 		{"Memory", memory.GetAllocated(), memory.GetAllocatable(),
-			sizeOf(memory.GetAllocated(), memory.GetAllocatable()), memoryLimit(memory)},
+			bytesize.FormatOf(memory.GetAllocated(), memory.GetAllocatable()), memoryLimit(memory)},
 		{"Disk", diskUsed, disk.GetTotalBytes(),
-			sizeOf(diskUsed, disk.GetTotalBytes()), size(disk.GetProvisionedBytes()) + " provisioned"},
+			bytesize.FormatOf(diskUsed, disk.GetTotalBytes()), bytesize.Format(disk.GetProvisionedBytes()) + " provisioned"},
 	}
 
 	// The amounts are padded to one width, so the percentages line up.
@@ -76,9 +77,9 @@ func cpuLimit(cpu *dicerdv1.ResourceCapacity) string {
 
 // memoryLimit explains the memory limit: "31.3 GiB, 1 GiB reserved".
 func memoryLimit(memory *dicerdv1.ResourceCapacity) string {
-	limit := size(memory.GetHost())
+	limit := bytesize.Format(memory.GetHost())
 	if memory.GetReserved() > 0 {
-		limit += ", " + size(memory.GetReserved()) + " reserved"
+		limit += ", " + bytesize.Format(memory.GetReserved()) + " reserved"
 	}
 	if memory.GetOvercommit() != 1 {
 		limit += ", " + formatNumber(memory.GetOvercommit()) + "× overcommit"

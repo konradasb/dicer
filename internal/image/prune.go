@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/types"
@@ -24,7 +25,7 @@ func (m *Manager) Prune(keep map[string]struct{}) (types.PruneResult, error) {
 	result, err := m.remove(unused)
 	for _, img := range result.Images {
 		m.record(&img, events.ActionDeleted, fmt.Sprintf("Deleted image %s (%s) by prune: no instance uses it; %s boot disk removed",
-			img.Name, shortDigest(img.Digest), humanSize(img.SizeBytes)), map[string]string{"by": "prune"})
+			img.Name, shortDigest(img.Digest), bytesize.Format(img.SizeBytes)), map[string]string{"by": "prune"})
 	}
 	return result, err
 }

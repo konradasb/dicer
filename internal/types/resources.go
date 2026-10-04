@@ -6,7 +6,7 @@ package types
 import (
 	"fmt"
 
-	"github.com/docker/go-units"
+	"github.com/konradasb/dicer/internal/bytesize"
 )
 
 // Resources is an amount of the host's CPU and memory.
@@ -35,12 +35,8 @@ func (r Resources) Fits(limit Resources) bool {
 
 // String describes r for a person, e.g. "2 vCPU, 4 GiB".
 func (r Resources) String() string {
-	return fmt.Sprintf("%d vCPU, %s", r.VCPUs,
-		units.CustomSize("%.4g %s", float64(r.MemoryBytes), 1024, binarySizeUnits))
+	return fmt.Sprintf("%d vCPU, %s", r.VCPUs, bytesize.Format(r.MemoryBytes))
 }
-
-// binarySizeUnits are the IEC units memory is written in.
-var binarySizeUnits = []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}
 
 // Capacity is how much of the host instances may be given.
 type Capacity struct {

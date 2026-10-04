@@ -18,6 +18,7 @@ import (
 	"gvisor.dev/gvisor/pkg/cleanup"
 
 	"github.com/konradasb/dicer/internal/atomicfile"
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/guest"
@@ -89,7 +90,7 @@ func (m *Manager) CreateSnapshot(
 		return types.Snapshot{}, err
 	}
 
-	m.record(inst, events.ActionSnapshotCreated, fmt.Sprintf("Created snapshot %q of memory and disk in %s: %s", name, duration(time.Since(started)), size(snap.SizeBytes)),
+	m.record(inst, events.ActionSnapshotCreated, fmt.Sprintf("Created snapshot %q of memory and disk in %s: %s", name, duration(time.Since(started)), bytesize.Format(snap.SizeBytes)),
 		map[string]string{"snapshot": name, "size_bytes": strconv.FormatInt(snap.SizeBytes, 10)})
 	m.logger.InfoContext(ctx, "created snapshot",
 		"instance", inst.Name, "snapshot", name, "size_bytes", snap.SizeBytes)

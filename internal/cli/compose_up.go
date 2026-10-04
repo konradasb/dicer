@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/konradasb/dicer"
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/compose"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
@@ -275,7 +276,7 @@ func (u *upper) ensureVolumes(services []*compose.Service) error {
 		if _, err := u.client.CreateVolume(u.ctx(), v.Request); err != nil {
 			return fmt.Errorf("create volume %s: %w", v.Name, err)
 		}
-		u.out.printf("Volume %s created (%s)", v.Name, size(v.Request.GetSizeBytes()))
+		u.out.printf("Volume %s created (%s)", v.Name, bytesize.Format(v.Request.GetSizeBytes()))
 	}
 	return nil
 }

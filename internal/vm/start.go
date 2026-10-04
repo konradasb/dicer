@@ -15,6 +15,7 @@ import (
 
 	"gvisor.dev/gvisor/pkg/cleanup"
 
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/guest"
@@ -120,7 +121,7 @@ func (m *Manager) boot(ctx context.Context, inst types.InstanceSpec, restarts in
 	}
 	message := fmt.Sprintf("%s instance on %s %s in %s%s: %s, %s memory, IP %s, PID %d",
 		verb, inst.Hypervisor(), starter.Version(), duration(time.Since(booting)), why,
-		vcpus(inst.VCPUs), size(inst.MemoryBytes), netSetup.nic.IP, vmm.PID())
+		vcpus(inst.VCPUs), bytesize.Format(inst.MemoryBytes), netSetup.nic.IP, vmm.PID())
 	m.record(inst, events.ActionStarted, message, attrs)
 
 	m.logger.InfoContext(ctx, "started instance",

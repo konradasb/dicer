@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/docker/go-units"
 	"golang.org/x/sync/semaphore"
 
+	"github.com/konradasb/dicer/internal/bytesize"
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/image/reference"
@@ -255,7 +255,7 @@ func (m *Manager) Delete(ref string) error {
 		m.logger.Warn("failed to delete image files", "digest", img.Digest, "error", err)
 	}
 	m.record(img, events.ActionDeleted, fmt.Sprintf("Deleted image %s (%s): %s boot disk removed",
-		img.Name, shortDigest(img.Digest), humanSize(img.SizeBytes)), map[string]string{"by": "user"})
+		img.Name, shortDigest(img.Digest), bytesize.Format(img.SizeBytes)), map[string]string{"by": "user"})
 
 	return nil
 }
@@ -383,10 +383,10 @@ func (m *Manager) executePull(
 
 	fetched := "layers already cached"
 	if n := downloaded.total(); n > 0 {
-		fetched = "downloaded " + humanSize(n)
+		fetched = "downloaded " + bytesize.Format(n)
 	}
 	m.record(img, events.ActionPulled, fmt.Sprintf("Pulled image %s (%s) in %s: %s, %s boot disk",
-		resolved.String(), shortDigest(digest), roundDuration(time.Since(started)), fetched, humanSize(sizeBytes)),
+		resolved.String(), shortDigest(digest), roundDuration(time.Since(started)), fetched, bytesize.Format(sizeBytes)),
 		map[string]string{"size_bytes": strconv.FormatInt(sizeBytes, 10)})
 	m.logger.InfoContext(ctx, "image ready",
 		"ref", resolved.String(),
@@ -483,10 +483,4 @@ func roundDuration(d time.Duration) time.Duration {
 		return d.Round(time.Millisecond)
 	}
 	return d.Round(100 * time.Millisecond)
-}
-
-// humanSize is a size in bytes as a person reads it, in the binary units
-// sizes are given in: 5.01 MiB.
-func humanSize(n int64) string {
-	return units.CustomSize("%.3g %s", float64(n), 1024, []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"})
 }
