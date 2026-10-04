@@ -976,6 +976,7 @@ EventKind is the kind of resource an event is about.
 | `EVENT_KIND_INSTANCE` | 1 |  |
 | `EVENT_KIND_IMAGE` | 2 |  |
 | `EVENT_KIND_NETWORK` | 3 |  |
+| `EVENT_KIND_VOLUME` | 4 |  |
 
 ### HealthStatus
 

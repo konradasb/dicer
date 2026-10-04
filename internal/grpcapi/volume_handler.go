@@ -6,10 +6,13 @@ package grpcapi
 import (
 	"context"
 	"fmt"
+	"strconv"
 
+	"github.com/docker/go-units"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/filestore"
 	"github.com/konradasb/dicer/internal/naming"
 	"github.com/konradasb/dicer/internal/types"
@@ -21,6 +24,7 @@ import (
 type volumeHandler struct {
 	definitions *filestore.Manager
 	volumes     *volume.Manager
+	events      recorder
 }
 
 func (h *volumeHandler) CreateVolume(
@@ -47,6 +51,7 @@ func (h *volumeHandler) CreateVolume(
 		_ = h.volumes.Delete(vol.ID)
 		return nil, err
 	}
+	h.record(*vol, events.ActionCreated, "Created volume of "+volumeSize(vol.SizeBytes)+", formatted ext4")
 
 	return volumeToProto(*vol), nil
 }
@@ -99,10 +104,29 @@ func (h *volumeHandler) DeleteVolume(
 	if err := h.definitions.DeleteVolume(vol.Name); err != nil {
 		return nil, err
 	}
+	h.record(vol, events.ActionDeleted, "Deleted volume of "+volumeSize(vol.SizeBytes)+" and its data")
 
 	if err := h.volumes.Delete(vol.ID); err != nil {
 		return nil, fmt.Errorf("remove volume disk: %w", err)
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+// record records that action happened to vol, with its size among the
+// attributes.
+func (h *volumeHandler) record(vol types.Volume, action events.Action, message string) {
+	h.events.Record(events.Event{
+		Kind:       events.KindVolume,
+		ID:         vol.ID,
+		Name:       vol.Name,
+		Action:     action,
+		Message:    message,
+		Attributes: map[string]string{"size_bytes": strconv.FormatInt(vol.SizeBytes, 10)},
+	})
+}
+
+// volumeSize formats a volume's size: "10 GiB".
+func volumeSize(n int64) string {
+	return units.CustomSize("%.4g %s", float64(n), 1024, []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"})
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/types"
 	"github.com/konradasb/dicer/internal/vm"
+	"github.com/konradasb/dicer/internal/volume"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -56,6 +57,7 @@ func newResourceServer(t *testing.T) (*Server, *filestore.Manager) {
 		Definitions: definitions,
 		Networks:    networkManager,
 		Instances:   instances,
+		Volumes:     volume.NewManager(volume.Config{DataDir: dataDir, Logger: logger}),
 		DataDir:     dataDir,
 		Logger:      logger,
 	}), definitions

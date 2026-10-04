@@ -113,7 +113,11 @@ func NewServer(cfg Config) *Server {
 			hostSubnets: cfg.HostSubnets,
 			events:      recorderOf(cfg.Events),
 		},
-		volumeHandler: volumeHandler{definitions: cfg.Definitions, volumes: cfg.Volumes},
+		volumeHandler: volumeHandler{
+			definitions: cfg.Definitions,
+			volumes:     cfg.Volumes,
+			events:      recorderOf(cfg.Events),
+		},
 		kernelHandler: kernelHandler{definitions: cfg.Definitions, kernels: cfg.Kernels},
 		imageHandler: imageHandler{
 			definitions: cfg.Definitions,

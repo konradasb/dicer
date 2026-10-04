@@ -70,13 +70,6 @@ func TestCreateNetworkRefusesATakenSubnet(t *testing.T) {
 	}
 }
 
-// fakeRecorder keeps the events recorded.
-type fakeRecorder struct {
-	events []events.Event
-}
-
-func (f *fakeRecorder) Record(e events.Event) { f.events = append(f.events, e) }
-
 // TestNetworkCreatedAndDeletedAreRecorded checks a network's creation and
 // deletion are recorded, with its subnet and gateway, and a refused request
 // is not.

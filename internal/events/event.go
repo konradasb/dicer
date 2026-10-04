@@ -16,6 +16,7 @@ const (
 	KindInstance Kind = "instance"
 	KindImage    Kind = "image"
 	KindNetwork  Kind = "network"
+	KindVolume   Kind = "volume"
 )
 
 // Action is what happened to the resource.
