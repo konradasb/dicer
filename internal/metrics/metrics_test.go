@@ -63,6 +63,7 @@ func TestReferenceListsEverything(t *testing.T) {
 		},
 		Networks: func() []NetworkSummary { return []NetworkSummary{{Name: "default"}} },
 		Images:   func() ImageSummary { return ImageSummary{} },
+		Kernels:  func() KernelSummary { return KernelSummary{} },
 		InstanceStats: func() []types.InstanceStats {
 			return []types.InstanceStats{{InstanceID: "i-web", Name: "web"}}
 		},
@@ -77,6 +78,7 @@ func TestReferenceListsEverything(t *testing.T) {
 	m.RecordImageCacheLookup(true)
 	m.RecordImageCollected("unused")
 	m.RecordImageGCReclaimed(1)
+	m.RecordKernelFetch(nil, time.Second, 1)
 	m.recordCall("/dicerd.v1.InstanceService/Start", nil, time.Second)
 
 	listed := map[string]Description{}

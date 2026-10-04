@@ -264,6 +264,7 @@ func (d *daemon) initServices() error {
 
 	d.kernels, err = kernel.NewManager(kernel.Config{
 		DataDir: d.cfg.DataDir,
+		Metrics: d.metrics,
 		Logger:  d.logger,
 	})
 	if err != nil {

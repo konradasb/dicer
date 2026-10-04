@@ -24,6 +24,7 @@ const (
 	// GroupInstanceStats holds what each running instance uses of the host.
 	GroupInstanceStats = "instance_stats"
 	GroupImages        = "images"
+	GroupKernels       = "kernels"
 	GroupNetworks      = "networks"
 	GroupAPI           = "api"
 )
@@ -65,6 +66,7 @@ type Sources struct {
 	InstanceStats func() []types.InstanceStats
 	Networks      func() []NetworkSummary
 	Images        func() ImageSummary
+	Kernels       func() KernelSummary
 }
 
 // Options configures a Metrics.
@@ -94,6 +96,7 @@ type Metrics struct {
 	instance instanceMetrics
 	grpc     grpcMetrics
 	image    imageMetrics
+	kernel   kernelMetrics
 }
 
 // New creates the registry and registers every metric on it.
@@ -125,6 +128,11 @@ func New(opts Options) *Metrics {
 		m.registry.MustRegister(m.newImageCollector(src))
 	}
 	m.image = m.newImageMetrics()
+
+	if src := opts.Sources.Kernels; src != nil {
+		m.registry.MustRegister(m.newKernelCollector(src))
+	}
+	m.kernel = m.newKernelMetrics()
 
 	if src := opts.Sources.Networks; src != nil {
 		m.registry.MustRegister(m.newNetworkCollector(src))

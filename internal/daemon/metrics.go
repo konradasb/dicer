@@ -44,6 +44,7 @@ func (d *daemon) newMetrics() *metrics.Metrics {
 			InstanceStats: d.instanceStats,
 			Networks:      d.networkSummaries,
 			Images:        d.imageSummary,
+			Kernels:       d.kernelSummary,
 		},
 	})
 }
@@ -136,6 +137,27 @@ func (d *daemon) imageSummary() metrics.ImageSummary {
 	}
 
 	return stats
+}
+
+// kernelSummary counts the kernels defined, and sums what they hold on disk,
+// for a scrape. It reports nothing before the kernel store exists.
+func (d *daemon) kernelSummary() metrics.KernelSummary {
+	if d.definitions == nil || d.kernels == nil {
+		return metrics.KernelSummary{}
+	}
+
+	kernels, err := d.definitions.ListKernels()
+	if err != nil {
+		d.logger.Warn("cannot list kernels for metrics", "error", err)
+		return metrics.KernelSummary{}
+	}
+
+	summary := metrics.KernelSummary{Count: len(kernels)}
+	for _, k := range kernels {
+		summary.DiskBytes += d.kernels.DiskBytes(k.ID)
+	}
+
+	return summary
 }
 
 // serveMetrics serves the metrics endpoint until ctx is cancelled. It returns

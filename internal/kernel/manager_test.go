@@ -20,7 +20,7 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-func newTestManager(t *testing.T, fetch func(ctx context.Context, url, dst string) error) *Manager {
+func newTestManager(t *testing.T, fetch fetchFunc) *Manager {
 	t.Helper()
 
 	c, err := NewManager(Config{
@@ -36,11 +36,31 @@ func newTestManager(t *testing.T, fetch func(ctx context.Context, url, dst strin
 }
 
 // writeFetcher returns a fetch func that writes fixed contents and counts calls.
-func writeFetcher(contents string, calls *int) func(context.Context, string, string) error {
-	return func(_ context.Context, _, dst string) error {
+func writeFetcher(contents string, calls *int) fetchFunc {
+	return func(_ context.Context, _, dst string) (int64, error) {
 		*calls++
-		return os.WriteFile(dst, []byte(contents), 0o755)
+		return writeFile(dst, contents)
 	}
+}
+
+// writeFile writes contents to dst as a fetch would, returning their size.
+func writeFile(dst, contents string) (int64, error) {
+	return int64(len(contents)), os.WriteFile(dst, []byte(contents), 0o755)
+}
+
+// fetchRecord is one call to RecordKernelFetch.
+type fetchRecord struct {
+	err          error
+	fetchedBytes int64
+}
+
+// fakeMetrics keeps every fetch recorded.
+type fakeMetrics struct {
+	fetches []fetchRecord
+}
+
+func (f *fakeMetrics) RecordKernelFetch(err error, _ time.Duration, fetchedBytes int64) {
+	f.fetches = append(f.fetches, fetchRecord{err: err, fetchedBytes: fetchedBytes})
 }
 
 func sha256Of(s string) string {
@@ -119,9 +139,9 @@ func TestPathRefetchesCorruptedCache(t *testing.T) {
 }
 
 func TestPathWithoutURL(t *testing.T) {
-	c := newTestManager(t, func(context.Context, string, string) error {
+	c := newTestManager(t, func(context.Context, string, string) (int64, error) {
 		t.Fatal("should not fetch without a URL")
-		return nil
+		return 0, nil
 	})
 
 	if _, err := c.Path(context.Background(), types.Kernel{ID: "k1", Name: "test"}); err == nil {
@@ -143,6 +163,53 @@ func TestPathWithoutChecksumUsesCache(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Errorf("fetches = %d, want 1", calls)
+	}
+}
+
+// TestFetchesAreRecorded covers what the fetch metrics see: each fetch once,
+// failed or not, with the bytes it fetched, and nothing for a cached kernel.
+func TestFetchesAreRecorded(t *testing.T) {
+	var calls int
+	c := newTestManager(t, writeFetcher("vmlinux", &calls))
+	metrics := &fakeMetrics{}
+	c.metrics = metrics
+
+	bad := types.Kernel{ID: "k1", Name: "bad", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("other")}
+	if _, err := c.Path(t.Context(), bad); err == nil {
+		t.Fatal("Path should fail when the download does not match the expected checksum")
+	}
+
+	good := types.Kernel{ID: "k2", Name: "good", URL: "https://example.invalid/vmlinux"}
+	for range 2 {
+		if _, err := c.Path(t.Context(), good); err != nil {
+			t.Fatalf("Path: %v", err)
+		}
+	}
+
+	if len(metrics.fetches) != 2 {
+		t.Fatalf("recorded fetches = %d, want 2: %+v", len(metrics.fetches), metrics.fetches)
+	}
+	if got := metrics.fetches[0]; got.err == nil || got.fetchedBytes != 7 {
+		t.Errorf("failed fetch recorded as %+v, want an error and 7 bytes", got)
+	}
+	if got := metrics.fetches[1]; got.err != nil || got.fetchedBytes != 7 {
+		t.Errorf("successful fetch recorded as %+v, want no error and 7 bytes", got)
+	}
+}
+
+func TestDiskBytes(t *testing.T) {
+	var calls int
+	c := newTestManager(t, writeFetcher("vmlinux", &calls))
+	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux"}
+
+	if got := c.DiskBytes(k.ID); got != 0 {
+		t.Errorf("DiskBytes before download = %d, want 0", got)
+	}
+	if _, err := c.Path(t.Context(), k); err != nil {
+		t.Fatalf("Path: %v", err)
+	}
+	if got := c.DiskBytes(k.ID); got != 7 {
+		t.Errorf("DiskBytes after download = %d, want 7", got)
 	}
 }
 
@@ -175,10 +242,10 @@ func TestDelete(t *testing.T) {
 func TestConcurrentPathsShareOneDownload(t *testing.T) {
 	var calls atomic.Int32
 	release := make(chan struct{})
-	c := newTestManager(t, func(_ context.Context, _, dst string) error {
+	c := newTestManager(t, func(_ context.Context, _, dst string) (int64, error) {
 		calls.Add(1)
 		<-release
-		return os.WriteFile(dst, []byte("vmlinux"), 0o755)
+		return writeFile(dst, "vmlinux")
 	})
 	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux"}
 

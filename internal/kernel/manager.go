@@ -27,14 +27,34 @@ import (
 // Config configures a Manager.
 type Config struct {
 	DataDir string
+	Metrics Metrics
 	Logger  *slog.Logger
 }
+
+// Metrics records how fetches went. It is declared here, and satisfied by
+// internal/metrics, so this package measures itself without depending on a
+// metrics library.
+type Metrics interface {
+	// RecordKernelFetch records a kernel downloaded or copied into place:
+	// its outcome, how long it took and the bytes it fetched.
+	RecordKernelFetch(err error, d time.Duration, fetchedBytes int64)
+}
+
+// discardMetrics is the Metrics used when none is configured.
+type discardMetrics struct{}
+
+func (discardMetrics) RecordKernelFetch(error, time.Duration, int64) {}
+
+// fetchFunc fetches url into a new file at dst and returns the bytes it
+// wrote, even on failure.
+type fetchFunc func(ctx context.Context, url, dst string) (int64, error)
 
 // Manager caches kernel binaries on local disk, fetching each on first use.
 type Manager struct {
 	dataDir   string
-	fetchFunc func(ctx context.Context, url, dst string) error
+	fetchFunc fetchFunc
 	fetches   singleflight.Group // one download per kernel at a time
+	metrics   Metrics
 	logger    *slog.Logger
 }
 
@@ -43,14 +63,18 @@ func NewManager(cfg Config) (*Manager, error) {
 	if cfg.DataDir == "" {
 		return nil, errors.New("data directory is required")
 	}
+	if cfg.Metrics == nil {
+		cfg.Metrics = discardMetrics{}
+	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
 
 	s := &Manager{
 		dataDir:   cfg.DataDir,
-		logger:    cfg.Logger.With("component", "kernel"),
 		fetchFunc: fetchURL,
+		metrics:   cfg.Metrics,
+		logger:    cfg.Logger.With("component", "kernel"),
 	}
 
 	return s, nil
@@ -107,7 +131,11 @@ const fetchTimeout = 10 * time.Minute
 // fetch downloads a kernel beside path, verifies it and only then renames it
 // into place, so that path never holds a partial or unverified kernel -- which
 // a copy without a checksum to check it against would be trusted as.
-func (m *Manager) fetch(ctx context.Context, k types.Kernel, path string) error {
+func (m *Manager) fetch(ctx context.Context, k types.Kernel, path string) (err error) {
+	var fetched int64
+	started := time.Now()
+	defer func() { m.metrics.RecordKernelFetch(err, time.Since(started), fetched) }()
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return fmt.Errorf("create kernel dir: %w", err)
 	}
@@ -117,7 +145,7 @@ func (m *Manager) fetch(ctx context.Context, k types.Kernel, path string) error 
 	tmp := path + ".download"
 	defer func() { _ = os.Remove(tmp) }()
 
-	if err := m.fetchFunc(ctx, k.URL, tmp); err != nil {
+	if fetched, err = m.fetchFunc(ctx, k.URL, tmp); err != nil {
 		return fmt.Errorf("download kernel %q: %w", k.Name, err)
 	}
 
@@ -161,6 +189,17 @@ func (m *Manager) cached(path, wantSHA string) bool {
 	return true
 }
 
+// DiskBytes returns the size of a kernel's binary on local disk, or 0 if it
+// has not been downloaded.
+func (m *Manager) DiskBytes(id string) int64 {
+	info, err := os.Stat(m.kernelPath(id))
+	if err != nil {
+		return 0
+	}
+
+	return info.Size()
+}
+
 // Delete removes a kernel's binary from local disk.
 func (m *Manager) Delete(id string) error {
 	return os.RemoveAll(m.kernelDir(id))
@@ -184,24 +223,24 @@ func computeSHA256(path string) (string, error) {
 
 // fetchURL downloads from an http(s) URL, or copies from a local path given
 // as file:// or as an absolute path.
-func fetchURL(ctx context.Context, url, dst string) error {
+func fetchURL(ctx context.Context, url, dst string) (int64, error) {
 	if local := localSource(url); local != "" {
 		return copyLocal(local, dst)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
-		return fmt.Errorf("create request: %w", err)
+		return 0, fmt.Errorf("create request: %w", err)
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("http get: %w", err)
+		return 0, fmt.Errorf("http get: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected HTTP status %s", resp.Status)
+		return 0, fmt.Errorf("unexpected HTTP status %s", resp.Status)
 	}
 
 	return writeTo(dst, resp.Body)
@@ -220,21 +259,22 @@ func localSource(url string) string {
 	return ""
 }
 
-func copyLocal(src, dst string) error {
+func copyLocal(src, dst string) (int64, error) {
 	f, err := os.Open(src)
 	if err != nil {
-		return fmt.Errorf("open local file: %w", err)
+		return 0, fmt.Errorf("open local file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 
 	return writeTo(dst, f)
 }
 
-// writeTo streams src into a new file at dst, checking the Close error.
-func writeTo(dst string, src io.Reader) (err error) {
+// writeTo streams src into a new file at dst, checking the Close error, and
+// returns the bytes it wrote, even on failure.
+func writeTo(dst string, src io.Reader) (n int64, err error) {
 	f, err := os.Create(dst)
 	if err != nil {
-		return fmt.Errorf("create file: %w", err)
+		return 0, fmt.Errorf("create file: %w", err)
 	}
 
 	defer func() {
@@ -247,17 +287,17 @@ func writeTo(dst string, src io.Reader) (err error) {
 		}
 	}()
 
-	if _, err := io.Copy(f, src); err != nil {
-		return fmt.Errorf("write file: %w", err)
+	if n, err = io.Copy(f, src); err != nil {
+		return n, fmt.Errorf("write file: %w", err)
 	}
 	if err := f.Chmod(0o755); err != nil {
-		return fmt.Errorf("chmod: %w", err)
+		return n, fmt.Errorf("chmod: %w", err)
 	}
 	// Flushed before it is renamed into place, so that a crash cannot leave
 	// a renamed file whose contents never reached the disk.
 	if err := f.Sync(); err != nil {
-		return fmt.Errorf("sync: %w", err)
+		return n, fmt.Errorf("sync: %w", err)
 	}
 
-	return nil
+	return n, nil
 }
