@@ -64,6 +64,7 @@ func TestReferenceListsEverything(t *testing.T) {
 		Networks: func() []NetworkSummary { return []NetworkSummary{{Name: "default"}} },
 		Images:   func() ImageSummary { return ImageSummary{} },
 		Kernels:  func() KernelSummary { return KernelSummary{} },
+		Volumes:  func() VolumeSummary { return VolumeSummary{} },
 		InstanceStats: func() []types.InstanceStats {
 			return []types.InstanceStats{{InstanceID: "i-web", Name: "web"}}
 		},

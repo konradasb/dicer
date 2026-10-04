@@ -45,6 +45,7 @@ func (d *daemon) newMetrics() *metrics.Metrics {
 			Networks:      d.networkSummaries,
 			Images:        d.imageSummary,
 			Kernels:       d.kernelSummary,
+			Volumes:       d.volumeSummary,
 		},
 	})
 }
@@ -155,6 +156,29 @@ func (d *daemon) kernelSummary() metrics.KernelSummary {
 	summary := metrics.KernelSummary{Count: len(kernels)}
 	for _, k := range kernels {
 		summary.DiskBytes += d.kernels.DiskBytes(k.ID)
+	}
+
+	return summary
+}
+
+// volumeSummary counts the volumes defined, and sums their sizes and what
+// they take up on disk, for a scrape. It reports nothing before the volume
+// store exists.
+func (d *daemon) volumeSummary() metrics.VolumeSummary {
+	if d.definitions == nil || d.volumes == nil {
+		return metrics.VolumeSummary{}
+	}
+
+	volumes, err := d.definitions.ListVolumes()
+	if err != nil {
+		d.logger.Warn("cannot list volumes for metrics", "error", err)
+		return metrics.VolumeSummary{}
+	}
+
+	summary := metrics.VolumeSummary{Count: len(volumes)}
+	for _, v := range volumes {
+		summary.SizeBytes += v.SizeBytes
+		summary.DiskBytes += d.volumes.DiskBytes(v.ID)
 	}
 
 	return summary

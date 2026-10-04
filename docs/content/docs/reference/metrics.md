@@ -78,6 +78,14 @@ What each running or paused instance uses of the host, read from its hypervisor 
 | `dicer_kernel_fetch_duration_seconds` | histogram |  | Time a kernel fetch took, including verifying its checksum. |
 | `dicer_kernel_fetched_bytes_total` | counter |  | Bytes of kernels fetched, including fetches that failed. |
 
+## Volumes
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `dicer_volumes` | gauge |  | Volumes defined on this host. |
+| `dicer_volume_size_bytes` | gauge |  | Total size of those volumes, as their guests see it. |
+| `dicer_volume_disk_bytes` | gauge |  | Disk those volumes take up on this host. Volumes are sparse files that take up disk as guests write to them, so it is less than `dicer_volume_size_bytes` until they fill. A block a guest frees may stay taken. |
+
 ## Networks
 
 | Metric | Type | Labels | Description |

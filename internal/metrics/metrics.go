@@ -25,6 +25,7 @@ const (
 	GroupInstanceStats = "instance_stats"
 	GroupImages        = "images"
 	GroupKernels       = "kernels"
+	GroupVolumes       = "volumes"
 	GroupNetworks      = "networks"
 	GroupAPI           = "api"
 )
@@ -67,6 +68,7 @@ type Sources struct {
 	Networks      func() []NetworkSummary
 	Images        func() ImageSummary
 	Kernels       func() KernelSummary
+	Volumes       func() VolumeSummary
 }
 
 // Options configures a Metrics.
@@ -133,6 +135,10 @@ func New(opts Options) *Metrics {
 		m.registry.MustRegister(m.newKernelCollector(src))
 	}
 	m.kernel = m.newKernelMetrics()
+
+	if src := opts.Sources.Volumes; src != nil {
+		m.registry.MustRegister(m.newVolumeCollector(src))
+	}
 
 	if src := opts.Sources.Networks; src != nil {
 		m.registry.MustRegister(m.newNetworkCollector(src))

@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/nrednav/cuid2"
@@ -89,6 +90,23 @@ func (m *Manager) Create(ctx context.Context, name string, sizeBytes int64) (*ty
 
 	return &vol, nil
 }
+
+// DiskBytes returns the disk a volume's file takes up, which for a sparse
+// file is less than its size, or 0 if the volume has no disk.
+func (m *Manager) DiskBytes(id string) int64 {
+	info, err := os.Stat(m.Path(id))
+	if err != nil {
+		return 0
+	}
+	if st, ok := info.Sys().(*syscall.Stat_t); ok {
+		return st.Blocks * statBlockSize
+	}
+
+	return info.Size()
+}
+
+// statBlockSize is the unit of st_blocks.
+const statBlockSize = 512
 
 // Delete removes a volume's disk.
 func (m *Manager) Delete(id string) error {

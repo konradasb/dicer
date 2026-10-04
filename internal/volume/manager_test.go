@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -97,5 +98,39 @@ func TestManager_Delete_Idempotent(t *testing.T) {
 
 	if err := m.Delete("ghost"); err != nil {
 		t.Errorf("Delete() nonexistent error = %v, want nil", err)
+	}
+}
+
+// TestDiskBytesCountsWhatASparseDiskTakesUp covers a volume's disk taking up
+// only what has been written to it, not its size.
+func TestDiskBytesCountsWhatASparseDiskTakesUp(t *testing.T) {
+	m := NewManager(Config{DataDir: t.TempDir()})
+	const size = 64 << 20
+	m.createDisk = func(_ context.Context, path string, _ int64) error {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			return err
+		}
+		f, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = f.Close() }()
+		if err := f.Truncate(size); err != nil {
+			return err
+		}
+		_, err = f.Write(make([]byte, 4096))
+		return err
+	}
+
+	vol, err := m.Create(t.Context(), "data", size)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if got := m.DiskBytes(vol.ID); got <= 0 || got >= size {
+		t.Errorf("DiskBytes() = %d, want more than 0 and less than the size, %d", got, size)
+	}
+	if got := m.DiskBytes("missing"); got != 0 {
+		t.Errorf("DiskBytes() of a volume with no disk = %d, want 0", got)
 	}
 }

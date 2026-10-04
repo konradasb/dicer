@@ -49,6 +49,10 @@ var metricSections = []metricSection{
 		heading: "Kernels",
 	},
 	{
+		group:   metrics.GroupVolumes,
+		heading: "Volumes",
+	},
+	{
 		group:   metrics.GroupNetworks,
 		heading: "Networks",
 	},
@@ -76,6 +80,7 @@ func writeMetrics(dir string) error {
 		Networks:      func() []metrics.NetworkSummary { return nil },
 		Images:        func() metrics.ImageSummary { return metrics.ImageSummary{} },
 		Kernels:       func() metrics.KernelSummary { return metrics.KernelSummary{} },
+		Volumes:       func() metrics.VolumeSummary { return metrics.VolumeSummary{} },
 	}})
 
 	byGroup := map[string][]metrics.Description{}
