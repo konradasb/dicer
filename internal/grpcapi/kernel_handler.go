@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/filestore"
 	"github.com/konradasb/dicer/internal/kernel"
 	"github.com/konradasb/dicer/internal/naming"
@@ -26,6 +27,7 @@ import (
 type kernelHandler struct {
 	definitions *filestore.Manager
 	kernels     *kernel.Manager
+	events      recorder
 }
 
 // ImportKernel records a kernel by URL. It is downloaded on first use.
@@ -69,6 +71,12 @@ func (h *kernelHandler) ImportKernel(
 	if err := h.definitions.CreateKernel(k); err != nil {
 		return nil, err
 	}
+
+	message := fmt.Sprintf("Imported kernel for %s from %s, to be fetched when an instance first starts with it", k.Arch, k.URL)
+	if k.SHA256 == "" {
+		message += "; no checksum to verify it by"
+	}
+	h.record(k, events.ActionImported, message)
 
 	return kernelToProto(k), nil
 }
@@ -121,13 +129,31 @@ func (h *kernelHandler) DeleteKernel(
 		return nil, err
 	}
 
+	message := "Deleted kernel and its fetched copy"
+	if h.kernels.DiskBytes(k.ID) == 0 {
+		message = "Deleted kernel, never fetched"
+	}
 	if err := h.definitions.DeleteKernel(k.Name); err != nil {
 		return nil, err
 	}
+	h.record(k, events.ActionDeleted, message)
 
 	if err := h.kernels.Delete(k.ID); err != nil {
 		return nil, fmt.Errorf("remove kernel binary: %w", err)
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+// record records that action happened to k, with its URL and architecture
+// among the attributes.
+func (h *kernelHandler) record(k types.Kernel, action events.Action, message string) {
+	h.events.Record(events.Event{
+		Kind:       events.KindKernel,
+		ID:         k.ID,
+		Name:       k.Name,
+		Action:     action,
+		Message:    message,
+		Attributes: map[string]string{"url": k.URL, "arch": k.Arch},
+	})
 }

@@ -90,7 +90,8 @@ func (p palette) dot(state string) string {
 func (p palette) event(action dicerdv1.EventAction, s string) string {
 	switch action {
 	case dicerdv1.EventAction_EVENT_ACTION_STARTED, dicerdv1.EventAction_EVENT_ACTION_RESUMED,
-		dicerdv1.EventAction_EVENT_ACTION_HEALTHY, dicerdv1.EventAction_EVENT_ACTION_PULLED:
+		dicerdv1.EventAction_EVENT_ACTION_HEALTHY, dicerdv1.EventAction_EVENT_ACTION_PULLED,
+		dicerdv1.EventAction_EVENT_ACTION_FETCHED:
 		return p.paint(ansiGreen, s)
 	case dicerdv1.EventAction_EVENT_ACTION_STOPPED, dicerdv1.EventAction_EVENT_ACTION_PAUSED,
 		dicerdv1.EventAction_EVENT_ACTION_RESTARTING, dicerdv1.EventAction_EVENT_ACTION_COLLECTED:

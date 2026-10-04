@@ -558,6 +558,7 @@ const (
 	EventKind_EVENT_KIND_IMAGE       EventKind = 2
 	EventKind_EVENT_KIND_NETWORK     EventKind = 3
 	EventKind_EVENT_KIND_VOLUME      EventKind = 4
+	EventKind_EVENT_KIND_KERNEL      EventKind = 5
 )
 
 // Enum value maps for EventKind.
@@ -568,6 +569,7 @@ var (
 		2: "EVENT_KIND_IMAGE",
 		3: "EVENT_KIND_NETWORK",
 		4: "EVENT_KIND_VOLUME",
+		5: "EVENT_KIND_KERNEL",
 	}
 	EventKind_value = map[string]int32{
 		"EVENT_KIND_UNSPECIFIED": 0,
@@ -575,6 +577,7 @@ var (
 		"EVENT_KIND_IMAGE":       2,
 		"EVENT_KIND_NETWORK":     3,
 		"EVENT_KIND_VOLUME":      4,
+		"EVENT_KIND_KERNEL":      5,
 	}
 )
 
@@ -636,6 +639,10 @@ const (
 	EventAction_EVENT_ACTION_PULLED EventAction = 17
 	// Garbage collection removed the image.
 	EventAction_EVENT_ACTION_COLLECTED EventAction = 18
+	// A kernel, recorded by its URL to be fetched on first use.
+	EventAction_EVENT_ACTION_IMPORTED EventAction = 19
+	// The kernel was downloaded, or copied from a local path, and verified.
+	EventAction_EVENT_ACTION_FETCHED EventAction = 20
 )
 
 // Enum value maps for EventAction.
@@ -660,6 +667,8 @@ var (
 		16: "EVENT_ACTION_SNAPSHOT_DELETED",
 		17: "EVENT_ACTION_PULLED",
 		18: "EVENT_ACTION_COLLECTED",
+		19: "EVENT_ACTION_IMPORTED",
+		20: "EVENT_ACTION_FETCHED",
 	}
 	EventAction_value = map[string]int32{
 		"EVENT_ACTION_UNSPECIFIED":       0,
@@ -681,6 +690,8 @@ var (
 		"EVENT_ACTION_SNAPSHOT_DELETED":  16,
 		"EVENT_ACTION_PULLED":            17,
 		"EVENT_ACTION_COLLECTED":         18,
+		"EVENT_ACTION_IMPORTED":          19,
+		"EVENT_ACTION_FETCHED":           20,
 	}
 )
 
@@ -7196,13 +7207,14 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\fArchitecture\x12\x1c\n" +
 	"\x18ARCHITECTURE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13ARCHITECTURE_X86_64\x10\x01\x12\x18\n" +
-	"\x14ARCHITECTURE_AARCH64\x10\x02*\x85\x01\n" +
+	"\x14ARCHITECTURE_AARCH64\x10\x02*\x9c\x01\n" +
 	"\tEventKind\x12\x1a\n" +
 	"\x16EVENT_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13EVENT_KIND_INSTANCE\x10\x01\x12\x14\n" +
 	"\x10EVENT_KIND_IMAGE\x10\x02\x12\x16\n" +
 	"\x12EVENT_KIND_NETWORK\x10\x03\x12\x15\n" +
-	"\x11EVENT_KIND_VOLUME\x10\x04*\x9c\x04\n" +
+	"\x11EVENT_KIND_VOLUME\x10\x04\x12\x15\n" +
+	"\x11EVENT_KIND_KERNEL\x10\x05*\xd1\x04\n" +
 	"\vEventAction\x12\x1c\n" +
 	"\x18EVENT_ACTION_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14EVENT_ACTION_CREATED\x10\x01\x12\x18\n" +
@@ -7223,7 +7235,9 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\x1eEVENT_ACTION_SNAPSHOT_RESTORED\x10\x0f\x12!\n" +
 	"\x1dEVENT_ACTION_SNAPSHOT_DELETED\x10\x10\x12\x17\n" +
 	"\x13EVENT_ACTION_PULLED\x10\x11\x12\x1a\n" +
-	"\x16EVENT_ACTION_COLLECTED\x10\x12*X\n" +
+	"\x16EVENT_ACTION_COLLECTED\x10\x12\x12\x19\n" +
+	"\x15EVENT_ACTION_IMPORTED\x10\x13\x12\x18\n" +
+	"\x14EVENT_ACTION_FETCHED\x10\x14*X\n" +
 	"\tLogSource\x12\x1a\n" +
 	"\x16LOG_SOURCE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10LOG_SOURCE_GUEST\x10\x01\x12\x19\n" +

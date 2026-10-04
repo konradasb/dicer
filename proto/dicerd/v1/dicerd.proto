@@ -290,6 +290,7 @@ enum EventKind {
   EVENT_KIND_IMAGE = 2;
   EVENT_KIND_NETWORK = 3;
   EVENT_KIND_VOLUME = 4;
+  EVENT_KIND_KERNEL = 5;
 }
 
 // EventAction is what happened to the resource.
@@ -321,6 +322,10 @@ enum EventAction {
   EVENT_ACTION_PULLED = 17;
   // Garbage collection removed the image.
   EVENT_ACTION_COLLECTED = 18;
+  // A kernel, recorded by its URL to be fetched on first use.
+  EVENT_ACTION_IMPORTED = 19;
+  // The kernel was downloaded, or copied from a local path, and verified.
+  EVENT_ACTION_FETCHED = 20;
 }
 
 // Instance combines an instance's definition with its observed runtime state.

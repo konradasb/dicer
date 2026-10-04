@@ -12,11 +12,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/types"
 )
 
@@ -194,6 +196,50 @@ func TestFetchesAreRecorded(t *testing.T) {
 	}
 	if got := metrics.fetches[1]; got.err != nil || got.fetchedBytes != 7 {
 		t.Errorf("successful fetch recorded as %+v, want no error and 7 bytes", got)
+	}
+}
+
+// recordedEvents keeps the events recorded.
+type recordedEvents struct {
+	events []events.Event
+}
+
+func (r *recordedEvents) Record(e events.Event) { r.events = append(r.events, e) }
+
+// TestFetchedIsRecorded covers the fetched event: one for a kernel fetched
+// and verified, saying so, and none for a fetch that failed or a kernel
+// already on disk.
+func TestFetchedIsRecorded(t *testing.T) {
+	var calls int
+	c := newTestManager(t, writeFetcher("vmlinux", &calls))
+	recorded := &recordedEvents{}
+	c.events = recorded
+
+	bad := types.Kernel{ID: "k1", Name: "bad", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("other")}
+	if _, err := c.Path(t.Context(), bad); err == nil {
+		t.Fatal("Path should fail when the download does not match the expected checksum")
+	}
+
+	good := types.Kernel{ID: "k2", Name: "good", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("vmlinux")}
+	for range 2 {
+		if _, err := c.Path(t.Context(), good); err != nil {
+			t.Fatalf("Path: %v", err)
+		}
+	}
+
+	if len(recorded.events) != 1 {
+		t.Fatalf("recorded %+v, want one event for the kernel fetched", recorded.events)
+	}
+	e := recorded.events[0]
+	if e.Kind != events.KindKernel || e.ID != "k2" || e.Name != "good" || e.Action != events.ActionFetched {
+		t.Errorf("event = %+v, want kernel good fetched", e)
+	}
+	if !strings.HasPrefix(e.Message, "Fetched kernel from https://example.invalid/vmlinux in ") ||
+		!strings.HasSuffix(e.Message, ": 7 B, checksum verified") {
+		t.Errorf("message = %q, want where it came from, its size and that it was verified", e.Message)
+	}
+	if e.Attributes["url"] != good.URL || e.Attributes["fetched_bytes"] != "7" {
+		t.Errorf("attributes = %v, want its URL and size", e.Attributes)
 	}
 }
 

@@ -965,6 +965,8 @@ EventAction is what happened to the resource.
 | `EVENT_ACTION_SNAPSHOT_DELETED` | 16 |  |
 | `EVENT_ACTION_PULLED` | 17 | An image. |
 | `EVENT_ACTION_COLLECTED` | 18 | Garbage collection removed the image. |
+| `EVENT_ACTION_IMPORTED` | 19 | A kernel, recorded by its URL to be fetched on first use. |
+| `EVENT_ACTION_FETCHED` | 20 | The kernel was downloaded, or copied from a local path, and verified. |
 
 ### EventKind
 
@@ -977,6 +979,7 @@ EventKind is the kind of resource an event is about.
 | `EVENT_KIND_IMAGE` | 2 |  |
 | `EVENT_KIND_NETWORK` | 3 |  |
 | `EVENT_KIND_VOLUME` | 4 |  |
+| `EVENT_KIND_KERNEL` | 5 |  |
 
 ### HealthStatus
 

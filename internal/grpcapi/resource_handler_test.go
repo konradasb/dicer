@@ -12,6 +12,7 @@ import (
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/filestore"
+	"github.com/konradasb/dicer/internal/kernel"
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/types"
 	"github.com/konradasb/dicer/internal/vm"
@@ -46,6 +47,11 @@ func newResourceServer(t *testing.T) (*Server, *filestore.Manager) {
 		t.Fatal(err)
 	}
 
+	kernels, err := kernel.NewManager(kernel.Config{DataDir: dataDir, Logger: logger})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	instances := vm.NewManager(vm.Config{
 		Definitions: definitions,
 		RunDir:      filepath.Join(t.TempDir(), "run"),
@@ -58,6 +64,7 @@ func newResourceServer(t *testing.T) (*Server, *filestore.Manager) {
 		Networks:    networkManager,
 		Instances:   instances,
 		Volumes:     volume.NewManager(volume.Config{DataDir: dataDir, Logger: logger}),
+		Kernels:     kernels,
 		DataDir:     dataDir,
 		Logger:      logger,
 	}), definitions

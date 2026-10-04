@@ -16,11 +16,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/docker/go-units"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/types"
 )
 
@@ -28,8 +31,21 @@ import (
 type Config struct {
 	DataDir string
 	Metrics Metrics
+	Events  Events
 	Logger  *slog.Logger
 }
+
+// Events records the kernels fetched. It is declared here, and satisfied by
+// internal/events, so that this package reports what it does without knowing
+// who listens.
+type Events interface {
+	Record(e events.Event)
+}
+
+// discardEvents is the Events used when none is configured.
+type discardEvents struct{}
+
+func (discardEvents) Record(events.Event) {}
 
 // Metrics records how fetches went. It is declared here, and satisfied by
 // internal/metrics, so this package measures itself without depending on a
@@ -55,6 +71,7 @@ type Manager struct {
 	fetchFunc fetchFunc
 	fetches   singleflight.Group // one download per kernel at a time
 	metrics   Metrics
+	events    Events
 	logger    *slog.Logger
 }
 
@@ -66,6 +83,9 @@ func NewManager(cfg Config) (*Manager, error) {
 	if cfg.Metrics == nil {
 		cfg.Metrics = discardMetrics{}
 	}
+	if cfg.Events == nil {
+		cfg.Events = discardEvents{}
+	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
@@ -74,6 +94,7 @@ func NewManager(cfg Config) (*Manager, error) {
 		dataDir:   cfg.DataDir,
 		fetchFunc: fetchURL,
 		metrics:   cfg.Metrics,
+		events:    cfg.Events,
 		logger:    cfg.Logger.With("component", "kernel"),
 	}
 
@@ -164,7 +185,27 @@ func (m *Manager) fetch(ctx context.Context, k types.Kernel, path string) (err e
 	}
 
 	m.logger.InfoContext(ctx, "kernel ready", "kernel", k.Name, "path", path)
+	m.recordFetched(k, time.Since(started), fetched)
 	return nil
+}
+
+// recordFetched records that k was fetched, in d, as fetchedBytes.
+func (m *Manager) recordFetched(k types.Kernel, d time.Duration, fetchedBytes int64) {
+	verified := "no checksum to verify"
+	if k.SHA256 != "" {
+		verified = "checksum verified"
+	}
+
+	m.events.Record(events.Event{
+		Kind:   events.KindKernel,
+		ID:     k.ID,
+		Name:   k.Name,
+		Action: events.ActionFetched,
+		Message: fmt.Sprintf("Fetched kernel from %s in %s: %s, %s", k.URL, d.Round(time.Millisecond),
+			units.CustomSize("%.4g %s", float64(fetchedBytes), 1024, []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}),
+			verified),
+		Attributes: map[string]string{"url": k.URL, "fetched_bytes": strconv.FormatInt(fetchedBytes, 10)},
+	})
 }
 
 // cached reports whether a usable copy is already on disk. An unverifiable or

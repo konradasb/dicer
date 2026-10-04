@@ -33,12 +33,12 @@ const maxNameWidth = 40
 func newEventsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "events",
-		Short: "Show what has happened to the instances, images, networks and volumes on the host",
+		Short: "Show what has happened to the instances, images, networks, volumes and kernels on the host",
 		Long: "Shows what has happened on the host: instances created, started, stopped,\n" +
 			"crashed and restarted, health checks failing and recovering, images pulled\n" +
-			"and collected, networks and volumes created and deleted. The daemon keeps\n" +
-			"them, so they explain what happened while nobody was looking, and they\n" +
-			"survive it restarting.\n\n" +
+			"and collected, networks and volumes created and deleted, kernels imported\n" +
+			"and fetched. The daemon keeps them, so they explain what happened while\n" +
+			"nobody was looking, and they survive it restarting.\n\n" +
 			"Like logs, it prints what is kept and exits; -f keeps following new\n" +
 			"events. With --format json it prints one JSON object a line, for scripts.",
 		Example: "  dicer events\n" +
@@ -54,10 +54,10 @@ func newEventsCommand() *cobra.Command {
 	cmd.Flags().BoolP("follow", "f", false, "Keep writing new events as they happen")
 	cmd.Flags().Int32P("tail", "n", 0, "Show only the last events (default: all kept)")
 	cmd.Flags().String("since", "", "Show only events since a time, or for a duration: 2026-09-22, 10:30, 1h")
-	cmd.Flags().String("kind", "", "Show only events about one kind of resource: instance, image, network or volume")
+	cmd.Flags().String("kind", "", "Show only events about one kind of resource: instance, image, network, volume or kernel")
 	cmd.Flags().String("name", "", "Show only events about the resource with this name")
 	cmd.Flags().String("format", "text", "Output format: text or json")
-	_ = cmd.RegisterFlagCompletionFunc("kind", fixedCompletions("instance", "image", "network", "volume"))
+	_ = cmd.RegisterFlagCompletionFunc("kind", fixedCompletions("instance", "image", "network", "volume", "kernel"))
 	_ = cmd.RegisterFlagCompletionFunc("format", fixedCompletions("text", "json"))
 
 	return cmd

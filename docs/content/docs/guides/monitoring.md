@@ -11,9 +11,9 @@ related:
 
 A Dicer host tells you what it is doing in four ways: Prometheus metrics,
 for dashboards and alerts; `dicer stats`, for what each instance uses of the
-host right now; events, for what happened to each instance, image, network
-and volume; and the daemon's log, which includes an audit of every change
-made through the API.
+host right now; events, for what happened to each instance, image, network,
+volume and kernel; and the daemon's log, which includes an audit of every
+change made through the API.
 
 ## Metrics
 
@@ -136,10 +136,10 @@ and network packets, drops and errors besides: see
 
 ## Events
 
-The daemon records what happens to each instance, image, network and
-volume: created, started, exited, died, restarting, healthy, unhealthy,
-pulled, collected, deleted and more. Each event carries a message that says
-why.
+The daemon records what happens to each instance, image, network, volume
+and kernel: created, started, exited, died, restarting, healthy, unhealthy,
+pulled, collected, fetched, deleted and more. Each event carries a message
+that says why.
 
 ```console
 $ dicer events --since 1h             # the last hour

@@ -17,6 +17,7 @@ const (
 	KindImage    Kind = "image"
 	KindNetwork  Kind = "network"
 	KindVolume   Kind = "volume"
+	KindKernel   Kind = "kernel"
 )
 
 // Action is what happened to the resource.
@@ -63,6 +64,17 @@ const (
 
 	// ActionCollected is an image garbage collection removed.
 	ActionCollected Action = "collected"
+)
+
+// What happens to a kernel.
+const (
+	// ActionImported is a kernel recorded by its URL, to be fetched when an
+	// instance first starts with it.
+	ActionImported Action = "imported"
+
+	// ActionFetched is a kernel downloaded, or copied from a local path, and
+	// verified.
+	ActionFetched Action = "fetched"
 )
 
 // Event is one thing that happened to one resource.

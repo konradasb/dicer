@@ -102,6 +102,7 @@ var eventKinds = enum[events.Kind, dicerdv1.EventKind]{"event kind", map[events.
 	events.KindImage:    dicerdv1.EventKind_EVENT_KIND_IMAGE,
 	events.KindNetwork:  dicerdv1.EventKind_EVENT_KIND_NETWORK,
 	events.KindVolume:   dicerdv1.EventKind_EVENT_KIND_VOLUME,
+	events.KindKernel:   dicerdv1.EventKind_EVENT_KIND_KERNEL,
 }}
 
 var eventActions = enum[events.Action, dicerdv1.EventAction]{"event action", map[events.Action]dicerdv1.EventAction{
@@ -123,6 +124,8 @@ var eventActions = enum[events.Action, dicerdv1.EventAction]{"event action", map
 	events.ActionSnapshotDeleted:  dicerdv1.EventAction_EVENT_ACTION_SNAPSHOT_DELETED,
 	events.ActionPulled:           dicerdv1.EventAction_EVENT_ACTION_PULLED,
 	events.ActionCollected:        dicerdv1.EventAction_EVENT_ACTION_COLLECTED,
+	events.ActionImported:         dicerdv1.EventAction_EVENT_ACTION_IMPORTED,
+	events.ActionFetched:          dicerdv1.EventAction_EVENT_ACTION_FETCHED,
 }}
 
 var logSources = enum[vm.LogSource, dicerdv1.LogSource]{"log source", map[vm.LogSource]dicerdv1.LogSource{

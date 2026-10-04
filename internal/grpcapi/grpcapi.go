@@ -118,7 +118,11 @@ func NewServer(cfg Config) *Server {
 			volumes:     cfg.Volumes,
 			events:      recorderOf(cfg.Events),
 		},
-		kernelHandler: kernelHandler{definitions: cfg.Definitions, kernels: cfg.Kernels},
+		kernelHandler: kernelHandler{
+			definitions: cfg.Definitions,
+			kernels:     cfg.Kernels,
+			events:      recorderOf(cfg.Events),
+		},
 		imageHandler: imageHandler{
 			definitions: cfg.Definitions,
 			instances:   cfg.Instances,

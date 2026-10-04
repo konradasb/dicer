@@ -1,7 +1,7 @@
 ---
 title: Events
 weight: 6
-description: "The events recorded for instances, images, networks and volumes, and what each says."
+description: "The events recorded for instances, images, networks, volumes and kernels, and what each says."
 icon: bell
 ---
 
