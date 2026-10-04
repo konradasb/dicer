@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/konradasb/dicer/internal/metrics"
+	"github.com/konradasb/dicer/internal/types"
 )
 
 // metricSection is a section of the metrics reference: a group's table, and
@@ -31,6 +32,13 @@ var metricSections = []metricSection{
 		after: "The allocatable amounts are the host's CPUs and memory, less the reserve, multiplied by " +
 			"the overcommit, as the configuration's [`resources`]({{< relref \"/docs/reference/configuration#resources\" >}}) " +
 			"sets them. See [Capacity]({{< relref \"/docs/guides/capacity\" >}}).",
+	},
+	{
+		group:   metrics.GroupInstanceStats,
+		heading: "Instance stats",
+		after: "What each running or paused instance uses of the host, read from its hypervisor process " +
+			"and TAP device, with nothing asked of the guest. A series begins again each time the instance " +
+			"starts, and is gone while it is stopped. `dicer stats` shows the same live.",
 	},
 	{
 		group:   metrics.GroupImages,
@@ -59,9 +67,10 @@ func writeMetrics(dir string) error {
 	// Every source given, so that the gauges read from them are registered
 	// too; they are never read here.
 	m := metrics.New(metrics.Options{Sources: metrics.Sources{
-		Instances: func() metrics.InstanceStats { return metrics.InstanceStats{} },
-		Networks:  func() []metrics.NetworkStats { return nil },
-		Images:    func() metrics.ImageStats { return metrics.ImageStats{} },
+		Instances:     func() metrics.InstanceSummary { return metrics.InstanceSummary{} },
+		InstanceStats: func() []types.InstanceStats { return nil },
+		Networks:      func() []metrics.NetworkSummary { return nil },
+		Images:        func() metrics.ImageSummary { return metrics.ImageSummary{} },
 	}})
 
 	byGroup := map[string][]metrics.Description{}

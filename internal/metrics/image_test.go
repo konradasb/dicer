@@ -45,10 +45,10 @@ func TestRecordImageCacheLookup(t *testing.T) {
 }
 
 func TestImageGaugesAreReadPerScrape(t *testing.T) {
-	stats := ImageStats{Count: 3, DiskBytes: 900}
+	stats := ImageSummary{Count: 3, DiskBytes: 900}
 
 	m := New(Options{Sources: Sources{
-		Images: func() ImageStats { return stats },
+		Images: func() ImageSummary { return stats },
 	}})
 
 	body := scrape(t, m)

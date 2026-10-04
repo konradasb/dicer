@@ -44,7 +44,6 @@ expose them.
 
 | Feature | Description |
 |---------|-------------|
-| Per-guest metrics | CPU, memory, disk and network usage per instance, read from the VMM, and `dicer stats` / `dicer top` to watch it live |
 | Tracing | OpenTelemetry traces across the API and lifecycle operations |
 
 ## How to influence the roadmap

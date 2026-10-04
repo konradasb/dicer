@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/procfs"
+
 	"github.com/konradasb/dicer/internal/defaults"
 	"github.com/konradasb/dicer/internal/guest"
 	"github.com/konradasb/dicer/internal/hypervisor"
@@ -145,6 +147,9 @@ type Manager struct {
 	events      Events
 	logger      *slog.Logger
 
+	// procDir is where procfs is mounted, from which stats are read.
+	procDir string
+
 	// Seams replaced by tests.
 	provisionConfigDisk func(ctx context.Context, path string, cfg *guest.Config) error
 	attach              func(pid int, arg string) (*process.Process, error)
@@ -222,6 +227,7 @@ func NewManager(cfg Config) *Manager {
 		metrics:     cfg.Metrics,
 		events:      cfg.Events,
 		logger:      cfg.Logger.With("component", "vm"),
+		procDir:     procfs.DefaultMountPoint,
 
 		provisionConfigDisk: provisionConfigDisk,
 		attach:              process.Attach,

@@ -1,7 +1,7 @@
 ---
 title: Monitoring
 weight: 10
-description: "Prometheus metrics, events, and the daemon's log and audit."
+description: "Prometheus metrics, live instance stats, events, and the daemon's log and audit."
 icon: chart-bar
 related:
   - /docs/reference/metrics
@@ -9,10 +9,11 @@ related:
   - /docs/guides/troubleshooting
 ---
 
-A Dicer host tells you what it is doing in three ways: Prometheus metrics,
-for dashboards and alerts; events, for what happened to each instance and
-image; and the daemon's log, which includes an audit of every change made
-through the API.
+A Dicer host tells you what it is doing in four ways: Prometheus metrics,
+for dashboards and alerts; `dicer stats`, for what each instance uses of the
+host right now; events, for what happened to each instance and image; and
+the daemon's log, which includes an audit of every change made through the
+API.
 
 ## Metrics
 
@@ -34,7 +35,8 @@ dicer_instances{state="stopped"} 1
 ```
 
 The endpoint, `/metrics`, has no authentication. It says how busy the host
-is and what it runs, but nothing about what is inside the guests. Serve it
+is, what it runs and what each instance uses of it, but nothing about what
+is inside the guests. Serve it
 on an address only your Prometheus can reach, such as `0.0.0.0:9101` behind
 a firewall, and scrape it:
 
@@ -75,13 +77,62 @@ rules:
   expr: rate(dicer_instance_operations_total{outcome="error"}[10m]) > 0
 ```
 
-Metrics count instances, but do not name them: to find which instance
-failed, ask the host with `dicer ps --filter state=failed`, or read its
-events.
+The lifecycle metrics count instances, but do not name them: to find which
+instance failed, ask the host with `dicer ps --filter state=failed`, or read
+its events.
+
+The [instance stats](../../reference/metrics#instance-stats) do name them,
+by `instance_id` and `name`, one series each while an instance runs. What an
+instance keeps busy, and what it moves:
+
+```promql
+rate(dicer_instance_cpu_seconds_total[5m])            # host CPUs, 1 = one CPU
+dicer_instance_resident_memory_bytes                  # host memory resident
+rate(dicer_instance_network_receive_bytes_total[5m])  # bytes a second in
+rate(dicer_instance_disk_written_bytes_total[5m])     # bytes a second to disk
+```
 
 Watch the host's disk as well, with the node exporter or the like: instance
 disks are sparse, so the space they take grows as guests write. `dicer info`
 shows how much is in use and how much has been promised.
+
+## Instance stats
+
+`dicer stats` shows what each running instance uses of the host, redrawn
+every second:
+
+```console
+$ dicer stats
+ID                        NAME  CPUPERC  MEMUSAGE           MEMPERC  NETIO                 BLOCKIO
+k3x9m2p4q8r7s6t5u1v0w9x8  db    200.00%  392.9 MiB / 2 GiB  19.19%   491.2 KiB / 11.4 KiB  0 B / 212.6 MiB
+nmd8u47u0r2pn1isdl6f2l16  web   0.00%    158.7 MiB / 1 GiB  15.50%   1.3 KiB / 0 B         0 B / 12.5 MiB
+```
+
+It is read on the host, from each instance's hypervisor process and its TAP
+device, so it works for any image, with nothing installed in the guest:
+
+- **CPUPerc** is a share of one host CPU: 200% is two kept busy. It counts the
+  guest's vCPUs and the hypervisor's own threads, which emulate its devices.
+- **MemUsage** is the hypervisor's resident host memory / the guest memory
+  committed to the instance, and **MemPerc** the one as a share of the
+  other. A guest's memory is backed as it first touches it, and stays
+  resident when the guest frees it, so this grows towards the guest's memory
+  and does not come down; it is what the instance costs the host, not what
+  the guest is using now.
+- **NetIO** is what the guest received / transmitted.
+- **BlockIO** is what the hypervisor read from / wrote to the host's
+  storage: the instance's disks, and its own files, such as the serial
+  console log and a snapshot's memory. Reads the host serves from its page
+  cache are not counted, and writes are counted as the hypervisor makes
+  them, before they reach the disk.
+
+NetIO and BlockIO are totals since the instance started. The column names
+are also the fields of a `--format` template, and the keys of
+`--format json`. Name instances to watch only those, and use `--no-stream`
+to print the stats once, for scripts:
+`dicer stats --no-stream --format json`. Prometheus has the same counters,
+and network packets, drops and errors besides: see
+[Metrics](../../reference/metrics).
 
 ## Events
 

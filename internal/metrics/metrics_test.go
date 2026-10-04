@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/konradasb/dicer/internal/types"
 )
 
 // A source left nil exports no series at all, rather than a misleading zero.
@@ -56,11 +58,14 @@ func TestHandlerServesOnlyOurRegistry(t *testing.T) {
 // reference, as it is served.
 func TestReferenceListsEverything(t *testing.T) {
 	m := New(Options{Sources: Sources{
-		Instances: func() InstanceStats {
-			return InstanceStats{ByState: map[string]int{"running": 1}, ByHealth: map[string]int{"healthy": 1}}
+		Instances: func() InstanceSummary {
+			return InstanceSummary{ByState: map[string]int{"running": 1}, ByHealth: map[string]int{"healthy": 1}}
 		},
-		Networks: func() []NetworkStats { return []NetworkStats{{Name: "default"}} },
-		Images:   func() ImageStats { return ImageStats{} },
+		Networks: func() []NetworkSummary { return []NetworkSummary{{Name: "default"}} },
+		Images:   func() ImageSummary { return ImageSummary{} },
+		InstanceStats: func() []types.InstanceStats {
+			return []types.InstanceStats{{InstanceID: "i-web", Name: "web"}}
+		},
 	}})
 
 	// Every vector is empty until something is recorded, and an empty one

@@ -9,9 +9,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// InstanceStats is a point-in-time summary of the instances on this host,
+// InstanceSummary is a point-in-time summary of the instances on this host,
 // read when a scrape arrives.
-type InstanceStats struct {
+type InstanceSummary struct {
 	// ByState counts instances per state, including zeros, each state named
 	// in lower case: running, stopped.
 	ByState map[string]int
@@ -85,7 +85,7 @@ func (m *Metrics) RecordInstanceRestart() {
 // instanceCollector exports the gauges describing the instances that exist
 // right now. See collector.go for why these are read per scrape.
 type instanceCollector struct {
-	source func() InstanceStats
+	source func() InstanceSummary
 
 	count             *prometheus.Desc
 	health            *prometheus.Desc
@@ -95,7 +95,7 @@ type instanceCollector struct {
 	allocatableMemory *prometheus.Desc
 }
 
-func (m *Metrics) newInstanceCollector(source func() InstanceStats) *instanceCollector {
+func (m *Metrics) newInstanceCollector(source func() InstanceSummary) *instanceCollector {
 	return &instanceCollector{
 		source: source,
 		count: m.desc(Description{

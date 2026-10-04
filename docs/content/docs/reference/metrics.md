@@ -33,6 +33,27 @@ The endpoint also serves the Go runtime's `go_*` metrics and the daemon process'
 
 The allocatable amounts are the host's CPUs and memory, less the reserve, multiplied by the overcommit, as the configuration's [`resources`]({{< relref "/docs/reference/configuration#resources" >}}) sets them. See [Capacity]({{< relref "/docs/guides/capacity" >}}).
 
+## Instance stats
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `dicer_instance_cpu_seconds_total` | counter | `instance_id`, `name` | CPU time an instance's hypervisor process has used, user and system. Its vCPUs and the threads emulating its devices together. `rate()` of it is the host CPUs it keeps busy. |
+| `dicer_instance_vcpus` | gauge | `instance_id`, `name` | vCPUs committed to an instance. `rate(dicer_instance_cpu_seconds_total[1m]) / dicer_instance_vcpus` is how busy it keeps them. |
+| `dicer_instance_resident_memory_bytes` | gauge | `instance_id`, `name` | Host memory resident for an instance's hypervisor process. The guest memory backed so far, and the hypervisor's own. Memory a guest frees stays resident. |
+| `dicer_instance_memory_bytes` | gauge | `instance_id`, `name` | Guest memory committed to an instance. `dicer_instance_resident_memory_bytes / dicer_instance_memory_bytes` is how much of it is resident. |
+| `dicer_instance_disk_read_bytes_total` | counter | `instance_id`, `name` | Bytes an instance's hypervisor process read from storage. The instance's disks, and the hypervisor's own files, such as the serial console log and a snapshot's memory. Reads served from the host's page cache are not counted. |
+| `dicer_instance_disk_written_bytes_total` | counter | `instance_id`, `name` | Bytes an instance's hypervisor process wrote to storage. The instance's disks, and the hypervisor's own files, such as the serial console log and a snapshot's memory. Counted as the process writes, before the data reaches the disk. |
+| `dicer_instance_network_receive_bytes_total` | counter | `instance_id`, `name` | Bytes an instance's guest received on its network interface. |
+| `dicer_instance_network_transmit_bytes_total` | counter | `instance_id`, `name` | Bytes an instance's guest transmitted on its network interface. |
+| `dicer_instance_network_receive_packets_total` | counter | `instance_id`, `name` | Packets an instance's guest received on its network interface. |
+| `dicer_instance_network_transmit_packets_total` | counter | `instance_id`, `name` | Packets an instance's guest transmitted on its network interface. |
+| `dicer_instance_network_receive_drops_total` | counter | `instance_id`, `name` | Packets dropped on their way to an instance's guest. Mostly the guest not taking packets as fast as they come. |
+| `dicer_instance_network_transmit_drops_total` | counter | `instance_id`, `name` | Packets an instance's guest transmitted that the host dropped. |
+| `dicer_instance_network_receive_errors_total` | counter | `instance_id`, `name` | Packets to an instance's guest that failed with an error. |
+| `dicer_instance_network_transmit_errors_total` | counter | `instance_id`, `name` | Packets from an instance's guest that failed with an error. |
+
+What each running or paused instance uses of the host, read from its hypervisor process and TAP device, with nothing asked of the guest. A series begins again each time the instance starts, and is gone while it is stopped. `dicer stats` shows the same live.
+
 ## Images
 
 | Metric | Type | Labels | Description |

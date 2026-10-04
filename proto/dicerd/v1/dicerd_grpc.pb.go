@@ -34,6 +34,7 @@ const (
 	DaemonService_ListInstances_FullMethodName          = "/dicerd.v1.DaemonService/ListInstances"
 	DaemonService_GetInstance_FullMethodName            = "/dicerd.v1.DaemonService/GetInstance"
 	DaemonService_GetInstanceLogs_FullMethodName        = "/dicerd.v1.DaemonService/GetInstanceLogs"
+	DaemonService_GetInstanceStats_FullMethodName       = "/dicerd.v1.DaemonService/GetInstanceStats"
 	DaemonService_CreateSnapshot_FullMethodName         = "/dicerd.v1.DaemonService/CreateSnapshot"
 	DaemonService_ListSnapshots_FullMethodName          = "/dicerd.v1.DaemonService/ListSnapshots"
 	DaemonService_GetSnapshot_FullMethodName            = "/dicerd.v1.DaemonService/GetSnapshot"
@@ -129,6 +130,11 @@ type DaemonServiceClient interface {
 	// GetInstanceLogs streams an instance's log. The guest's console is kept
 	// with the instance, so it can be read after a stop to explain one.
 	GetInstanceLogs(ctx context.Context, in *GetInstanceLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InstanceLogChunk], error)
+	// GetInstanceStats streams what running and paused instances use of the
+	// host, read from their hypervisor processes rather than asked of their
+	// guests: a batch a second while it follows, or a single batch. Each batch
+	// is read over a second, so the first comes a second after the call.
+	GetInstanceStats(ctx context.Context, in *GetInstanceStatsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetInstanceStatsResponse], error)
 	// CreateSnapshot freezes a running or paused instance to disk: its memory,
 	// its device state and a copy of its overlay disk. A running instance is
 	// paused for as long as it takes and resumed afterwards.
@@ -338,6 +344,25 @@ func (c *daemonServiceClient) GetInstanceLogs(ctx context.Context, in *GetInstan
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DaemonService_GetInstanceLogsClient = grpc.ServerStreamingClient[InstanceLogChunk]
 
+func (c *daemonServiceClient) GetInstanceStats(ctx context.Context, in *GetInstanceStatsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetInstanceStatsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[1], DaemonService_GetInstanceStats_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[GetInstanceStatsRequest, GetInstanceStatsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_GetInstanceStatsClient = grpc.ServerStreamingClient[GetInstanceStatsResponse]
+
 func (c *daemonServiceClient) CreateSnapshot(ctx context.Context, in *CreateSnapshotRequest, opts ...grpc.CallOption) (*Snapshot, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Snapshot)
@@ -390,7 +415,7 @@ func (c *daemonServiceClient) RestoreSnapshot(ctx context.Context, in *RestoreSn
 
 func (c *daemonServiceClient) ExecInstance(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ExecInstanceRequest, ExecInstanceResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[1], DaemonService_ExecInstance_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[2], DaemonService_ExecInstance_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +428,7 @@ type DaemonService_ExecInstanceClient = grpc.BidiStreamingClient[ExecInstanceReq
 
 func (c *daemonServiceClient) CopyToInstance(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[CopyToInstanceRequest, emptypb.Empty], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[2], DaemonService_CopyToInstance_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[3], DaemonService_CopyToInstance_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +441,7 @@ type DaemonService_CopyToInstanceClient = grpc.ClientStreamingClient[CopyToInsta
 
 func (c *daemonServiceClient) CopyFromInstance(ctx context.Context, in *CopyFromInstanceRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CopyFromInstanceResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[3], DaemonService_CopyFromInstance_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[4], DaemonService_CopyFromInstance_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -525,7 +550,7 @@ func (c *daemonServiceClient) DeleteVolume(ctx context.Context, in *DeleteVolume
 
 func (c *daemonServiceClient) PullImage(ctx context.Context, in *PullImageRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PullImageProgress], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[4], DaemonService_PullImage_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[5], DaemonService_PullImage_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -644,7 +669,7 @@ func (c *daemonServiceClient) GetResources(ctx context.Context, in *GetResources
 
 func (c *daemonServiceClient) GetEvents(ctx context.Context, in *GetEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetEventsResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[5], DaemonService_GetEvents_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[6], DaemonService_GetEvents_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -725,6 +750,11 @@ type DaemonServiceServer interface {
 	// GetInstanceLogs streams an instance's log. The guest's console is kept
 	// with the instance, so it can be read after a stop to explain one.
 	GetInstanceLogs(*GetInstanceLogsRequest, grpc.ServerStreamingServer[InstanceLogChunk]) error
+	// GetInstanceStats streams what running and paused instances use of the
+	// host, read from their hypervisor processes rather than asked of their
+	// guests: a batch a second while it follows, or a single batch. Each batch
+	// is read over a second, so the first comes a second after the call.
+	GetInstanceStats(*GetInstanceStatsRequest, grpc.ServerStreamingServer[GetInstanceStatsResponse]) error
 	// CreateSnapshot freezes a running or paused instance to disk: its memory,
 	// its device state and a copy of its overlay disk. A running instance is
 	// paused for as long as it takes and resumed afterwards.
@@ -846,6 +876,9 @@ func (UnimplementedDaemonServiceServer) GetInstance(context.Context, *GetInstanc
 }
 func (UnimplementedDaemonServiceServer) GetInstanceLogs(*GetInstanceLogsRequest, grpc.ServerStreamingServer[InstanceLogChunk]) error {
 	return status.Errorf(codes.Unimplemented, "method GetInstanceLogs not implemented")
+}
+func (UnimplementedDaemonServiceServer) GetInstanceStats(*GetInstanceStatsRequest, grpc.ServerStreamingServer[GetInstanceStatsResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method GetInstanceStats not implemented")
 }
 func (UnimplementedDaemonServiceServer) CreateSnapshot(context.Context, *CreateSnapshotRequest) (*Snapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateSnapshot not implemented")
@@ -1144,6 +1177,17 @@ func _DaemonService_GetInstanceLogs_Handler(srv interface{}, stream grpc.ServerS
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DaemonService_GetInstanceLogsServer = grpc.ServerStreamingServer[InstanceLogChunk]
+
+func _DaemonService_GetInstanceStats_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetInstanceStatsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonServiceServer).GetInstanceStats(m, &grpc.GenericServerStream[GetInstanceStatsRequest, GetInstanceStatsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_GetInstanceStatsServer = grpc.ServerStreamingServer[GetInstanceStatsResponse]
 
 func _DaemonService_CreateSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateSnapshotRequest)
@@ -1772,6 +1816,11 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "GetInstanceLogs",
 			Handler:       _DaemonService_GetInstanceLogs_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "GetInstanceStats",
+			Handler:       _DaemonService_GetInstanceStats_Handler,
 			ServerStreams: true,
 		},
 		{

@@ -58,6 +58,7 @@ was, and whose message says it for a person:
 | `ListInstances` | [`ListInstancesRequest`](#listinstancesrequest) | [`ListInstancesResponse`](#listinstancesresponse) | ListInstances returns every defined instance. |
 | `GetInstance` | [`GetInstanceRequest`](#getinstancerequest) | [`Instance`](#instance) | GetInstance returns one instance. |
 | `GetInstanceLogs` | [`GetInstanceLogsRequest`](#getinstancelogsrequest) | stream [`InstanceLogChunk`](#instancelogchunk) | GetInstanceLogs streams an instance's log. The guest's console is kept with the instance, so it can be read after a stop to explain one. |
+| `GetInstanceStats` | [`GetInstanceStatsRequest`](#getinstancestatsrequest) | stream [`GetInstanceStatsResponse`](#getinstancestatsresponse) | GetInstanceStats streams what running and paused instances use of the host, read from their hypervisor processes rather than asked of their guests: a batch a second while it follows, or a single batch. Each batch is read over a second, so the first comes a second after the call. |
 | `CreateSnapshot` | [`CreateSnapshotRequest`](#createsnapshotrequest) | [`Snapshot`](#snapshot) | CreateSnapshot freezes a running or paused instance to disk: its memory, its device state and a copy of its overlay disk. A running instance is paused for as long as it takes and resumed afterwards. |
 | `ListSnapshots` | [`ListSnapshotsRequest`](#listsnapshotsrequest) | [`ListSnapshotsResponse`](#listsnapshotsresponse) | ListSnapshots returns an instance's snapshots, oldest first. |
 | `GetSnapshot` | [`GetSnapshotRequest`](#getsnapshotrequest) | [`Snapshot`](#snapshot) | GetSnapshot returns one snapshot. |
@@ -364,6 +365,20 @@ GetEventsResponse is a batch of events, oldest first.
 |---|---|---|
 | `name` | `string` |  |
 
+### GetInstanceStatsRequest
+
+| Field | Type | Description |
+|---|---|---|
+| `names` | repeated `string` | The instances to report on, by name or ID. Empty means every instance running or paused, as they come and go. A named instance is left out of a batch while it is not running or paused. |
+| `follow` | `bool` | Keeps the stream open, sending a batch a second until the client goes away. Otherwise a single batch is sent. |
+
+### GetInstanceStatsResponse
+
+| Field | Type | Description |
+|---|---|---|
+| `read_time` | `google.protobuf.Timestamp` | When the batch was read. |
+| `instances` | repeated [`InstanceStats`](#instancestats) | The instances, in name order. |
+
 ### GetKernelRequest
 
 | Field | Type | Description |
@@ -561,6 +576,33 @@ InstanceResources is what one instance holds.
 | `state` | [`InstanceState`](#instancestate) |  |
 | `vcpus` | `int32` |  |
 | `memory_bytes` | `int64` |  |
+
+### InstanceStats
+
+InstanceStats is what an instance's hypervisor process uses of the host.
+Its vCPUs and the threads emulating its devices are counted together, and
+totals are since the process started: each start of the instance begins
+them again.
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `string` |  |
+| `id` | `string` |  |
+| `cpu_percent` | `double` | CPU used over the last second, as a percentage of one host CPU: 200 is two CPUs kept busy. |
+| `cpu_time` | `google.protobuf.Duration` | CPU time used in total. |
+| `vcpus` | `int32` | The vCPUs committed to the instance. |
+| `resident_memory_bytes` | `int64` | The process's resident host memory: the guest memory backed so far, and the hypervisor's own. Memory a guest frees stays resident. |
+| `memory_bytes` | `int64` | The guest memory committed to the instance. |
+| `disk_read_bytes` | `int64` | What the process read from and wrote to storage: the instance's disks, and the hypervisor's own files, such as the serial console log and a snapshot's memory. Reads served from the host's page cache are not counted; writes are counted as the process makes them, before they reach the disk. |
+| `disk_written_bytes` | `int64` |  |
+| `network_receive_bytes` | `int64` | What the guest received and transmitted on its network interface. |
+| `network_transmit_bytes` | `int64` |  |
+| `network_receive_drops` | `int64` | Packets dropped on their way to and from the guest. Receive drops mostly mean the guest does not take packets as fast as they come. |
+| `network_transmit_drops` | `int64` |  |
+| `network_receive_errors` | `int64` | Packets to and from the guest that failed with an error. |
+| `network_transmit_errors` | `int64` |  |
+| `network_receive_packets` | `int64` | Packets the guest received and transmitted. |
+| `network_transmit_packets` | `int64` |  |
 
 ### Kernel
 

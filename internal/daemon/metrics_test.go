@@ -149,7 +149,7 @@ func get(t *testing.T, url string) string {
 	}
 }
 
-func TestNetworkStatsJoinsDefinitionsAndAllocations(t *testing.T) {
+func TestNetworkSummariesJoinsDefinitionsAndAllocations(t *testing.T) {
 	d := newTestDaemon(t, MetricsConfig{})
 	openTestStores(t, d)
 
@@ -169,7 +169,7 @@ func TestNetworkStatsJoinsDefinitionsAndAllocations(t *testing.T) {
 		}
 	}
 
-	stats := d.networkStats()
+	stats := d.networkSummaries()
 	if len(stats) != 1 {
 		t.Fatalf("got %d networks, want 1: %+v", len(stats), stats)
 	}
@@ -187,22 +187,22 @@ func TestNetworkStatsJoinsDefinitionsAndAllocations(t *testing.T) {
 }
 
 // A host with no networks reports none, rather than an error or a series.
-func TestNetworkStatsWithNoNetworks(t *testing.T) {
+func TestNetworkSummariesWithNoNetworks(t *testing.T) {
 	d := newTestDaemon(t, MetricsConfig{})
 	openTestStores(t, d)
 
-	if stats := d.networkStats(); len(stats) != 0 {
-		t.Errorf("networkStats() = %+v, want none", stats)
+	if stats := d.networkSummaries(); len(stats) != 0 {
+		t.Errorf("networkSummaries() = %+v, want none", stats)
 	}
 }
 
 // The sources are registered before the stores are opened, so they have to
 // cope with being called first.
-func TestNetworkStatsBeforeTheStoresExist(t *testing.T) {
+func TestNetworkSummariesBeforeTheStoresExist(t *testing.T) {
 	d := newTestDaemon(t, MetricsConfig{})
 
-	if stats := d.networkStats(); stats != nil {
-		t.Errorf("networkStats() = %+v, want nil before the stores are opened", stats)
+	if stats := d.networkSummaries(); stats != nil {
+		t.Errorf("networkSummaries() = %+v, want nil before the stores are opened", stats)
 	}
 }
 

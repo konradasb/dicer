@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/konradasb/dicer/internal/metrics"
+	"github.com/konradasb/dicer/internal/types"
 	"github.com/konradasb/dicer/internal/version"
 )
 
@@ -39,18 +40,19 @@ func (d *daemon) newMetrics() *metrics.Metrics {
 		Commit:  version.Commit,
 		Logger:  d.logger.With("component", "metrics"),
 		Sources: metrics.Sources{
-			Instances: d.instanceStats,
-			Networks:  d.networkStats,
-			Images:    d.imageStats,
+			Instances:     d.instanceSummary,
+			InstanceStats: d.instanceStats,
+			Networks:      d.networkSummaries,
+			Images:        d.imageSummary,
 		},
 	})
 }
 
-// instanceStats reads the current instance counts for a scrape. It reports
+// instanceSummary reads the current instance counts for a scrape. It reports
 // nothing before the instance manager exists.
-func (d *daemon) instanceStats() metrics.InstanceStats {
+func (d *daemon) instanceSummary() metrics.InstanceSummary {
 	if d.instances == nil {
-		return metrics.InstanceStats{}
+		return metrics.InstanceSummary{}
 	}
 
 	usage := d.instances.Usage()
@@ -66,7 +68,7 @@ func (d *daemon) instanceStats() metrics.InstanceStats {
 
 	allocatable := usage.Capacity.Allocatable()
 
-	return metrics.InstanceStats{
+	return metrics.InstanceSummary{
 		ByState:                byState,
 		ByHealth:               byHealth,
 		VCPUs:                  usage.Allocated.VCPUs,
@@ -76,9 +78,19 @@ func (d *daemon) instanceStats() metrics.InstanceStats {
 	}
 }
 
-// networkStats reads each network's address pool usage for a scrape. A
+// instanceStats reads what each instance uses of the host for a scrape. It
+// reports nothing before the instance manager exists.
+func (d *daemon) instanceStats() []types.InstanceStats {
+	if d.instances == nil {
+		return nil
+	}
+
+	return d.instances.Stats()
+}
+
+// networkSummaries reads each network's address pool usage for a scrape. A
 // network whose allocations cannot be read is skipped.
-func (d *daemon) networkStats() []metrics.NetworkStats {
+func (d *daemon) networkSummaries() []metrics.NetworkSummary {
 	if d.definitions == nil || d.addresses == nil {
 		return nil
 	}
@@ -89,7 +101,7 @@ func (d *daemon) networkStats() []metrics.NetworkStats {
 		return nil
 	}
 
-	stats := make([]metrics.NetworkStats, 0, len(networks))
+	stats := make([]metrics.NetworkSummary, 0, len(networks))
 	for _, nw := range networks {
 		allocations, err := d.addresses.List(nw.Name)
 		if err != nil {
@@ -99,7 +111,7 @@ func (d *daemon) networkStats() []metrics.NetworkStats {
 		}
 
 		_, available := nw.Usage(len(allocations))
-		stats = append(stats, metrics.NetworkStats{
+		stats = append(stats, metrics.NetworkSummary{
 			Name:      nw.Name,
 			Allocated: len(allocations),
 			Available: available,
@@ -109,16 +121,16 @@ func (d *daemon) networkStats() []metrics.NetworkStats {
 	return stats
 }
 
-// imageStats sums what the image store holds for a scrape. It reports
+// imageSummary sums what the image store holds for a scrape. It reports
 // nothing before the store exists.
-func (d *daemon) imageStats() metrics.ImageStats {
+func (d *daemon) imageSummary() metrics.ImageSummary {
 	if d.images == nil {
-		return metrics.ImageStats{}
+		return metrics.ImageSummary{}
 	}
 
 	images := d.images.List()
 
-	stats := metrics.ImageStats{Count: len(images)}
+	stats := metrics.ImageSummary{Count: len(images)}
 	for _, img := range images {
 		stats.DiskBytes += img.SizeBytes
 	}

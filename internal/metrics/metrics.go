@@ -13,15 +13,19 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
+
+	"github.com/konradasb/dicer/internal/types"
 )
 
 // Metric groups: the sections of the reference.
 const (
 	GroupDaemon    = "daemon"
 	GroupInstances = "instances"
-	GroupImages    = "images"
-	GroupNetworks  = "networks"
-	GroupAPI       = "api"
+	// GroupInstanceStats holds what each running instance uses of the host.
+	GroupInstanceStats = "instance_stats"
+	GroupImages        = "images"
+	GroupNetworks      = "networks"
+	GroupAPI           = "api"
 )
 
 // Description describes one of Dicer's metrics. Every metric is built from
@@ -57,9 +61,10 @@ const (
 // Sources are read at scrape time to fill the state gauges. A nil source's
 // gauges are not exported.
 type Sources struct {
-	Instances func() InstanceStats
-	Networks  func() []NetworkStats
-	Images    func() ImageStats
+	Instances     func() InstanceSummary
+	InstanceStats func() []types.InstanceStats
+	Networks      func() []NetworkSummary
+	Images        func() ImageSummary
 }
 
 // Options configures a Metrics.
@@ -111,6 +116,10 @@ func New(opts Options) *Metrics {
 		m.registry.MustRegister(m.newInstanceCollector(src))
 	}
 	m.instance = m.newInstanceMetrics()
+
+	if src := opts.Sources.InstanceStats; src != nil {
+		m.registry.MustRegister(m.newInstanceStatsCollector(src))
+	}
 
 	if src := opts.Sources.Images; src != nil {
 		m.registry.MustRegister(m.newImageCollector(src))

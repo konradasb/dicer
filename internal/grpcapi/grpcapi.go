@@ -84,6 +84,8 @@ func NewServer(cfg Config) *Server {
 			instances:   cfg.Instances,
 			defaults:    defaults,
 			logger:      cfg.Logger,
+
+			statsInterval: instanceStatsInterval,
 		},
 		snapshotHandler: snapshotHandler{definitions: cfg.Definitions, instances: cfg.Instances, logger: cfg.Logger},
 		networkHandler: networkHandler{

@@ -27,6 +27,9 @@ type instanceHandler struct {
 	instances   *vm.Manager
 	defaults    defaultResolver
 	logger      *slog.Logger
+
+	// statsInterval is how often GetInstanceStats reads stats.
+	statsInterval time.Duration
 }
 
 // CreateInstance records an instance definition, pulling its image as the

@@ -15,8 +15,8 @@ const (
 	resultMiss = "miss"
 )
 
-// ImageStats is a point-in-time summary of the images held on this host.
-type ImageStats struct {
+// ImageSummary is a point-in-time summary of the images held on this host.
+type ImageSummary struct {
 	Count     int
 	DiskBytes int64
 }
@@ -111,13 +111,13 @@ func (m *Metrics) RecordImageCacheLookup(hit bool) {
 // imageCollector exports what the local image store currently holds. See
 // collector.go for why this is read per scrape.
 type imageCollector struct {
-	source func() ImageStats
+	source func() ImageSummary
 
 	count *prometheus.Desc
 	bytes *prometheus.Desc
 }
 
-func (m *Metrics) newImageCollector(source func() ImageStats) *imageCollector {
+func (m *Metrics) newImageCollector(source func() ImageSummary) *imageCollector {
 	return &imageCollector{
 		source: source,
 		count: m.desc(Description{

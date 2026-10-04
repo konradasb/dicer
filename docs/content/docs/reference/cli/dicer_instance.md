@@ -29,6 +29,7 @@ Manage instances.
 | [`dicer instance snapshot restore`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_restore" >}}) | Restore a stopped instance from a snapshot and resume it. |
 | [`dicer instance snapshot show`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_show" >}}) | Show a snapshot. |
 | [`dicer instance start`]({{< relref "/docs/reference/cli/dicer_instance_start" >}}) | Start one or more defined instances. |
+| [`dicer instance stats`]({{< relref "/docs/reference/cli/dicer_instance_stats" >}}) | Show what instances use of the host, live. |
 | [`dicer instance stop`]({{< relref "/docs/reference/cli/dicer_instance_stop" >}}) | Stop one or more running instances, keeping their definitions and disks. |
 | [`dicer instance update`]({{< relref "/docs/reference/cli/dicer_instance_update" >}}) | Change a stopped instance's definition. |
 | [`dicer instance wait`]({{< relref "/docs/reference/cli/dicer_instance_wait" >}}) | Wait until one or more instances stop, and print their exit codes. |

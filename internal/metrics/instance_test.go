@@ -47,7 +47,7 @@ func TestRecordInstanceRestart(t *testing.T) {
 }
 
 func TestInstanceGaugesAreReadPerScrape(t *testing.T) {
-	stats := InstanceStats{
+	stats := InstanceSummary{
 		ByState:     map[string]int{"running": 1, "stopped": 0},
 		ByHealth:    map[string]int{"healthy": 1, "unhealthy": 0},
 		VCPUs:       2,
@@ -59,7 +59,7 @@ func TestInstanceGaugesAreReadPerScrape(t *testing.T) {
 	reads := 0
 
 	m := New(Options{Sources: Sources{
-		Instances: func() InstanceStats {
+		Instances: func() InstanceSummary {
 			reads++
 			return stats
 		},

@@ -5,8 +5,8 @@ package metrics
 
 import "github.com/prometheus/client_golang/prometheus"
 
-// NetworkStats summarises one network's address pool.
-type NetworkStats struct {
+// NetworkSummary summarises one network's address pool.
+type NetworkSummary struct {
 	Name string
 
 	// Allocated is how many addresses the network has handed out.
@@ -19,13 +19,13 @@ type NetworkStats struct {
 
 // networkCollector exports address pool usage per network.
 type networkCollector struct {
-	source func() []NetworkStats
+	source func() []NetworkSummary
 
 	allocated *prometheus.Desc
 	available *prometheus.Desc
 }
 
-func (m *Metrics) newNetworkCollector(source func() []NetworkStats) *networkCollector {
+func (m *Metrics) newNetworkCollector(source func() []NetworkSummary) *networkCollector {
 	return &networkCollector{
 		source: source,
 		allocated: m.desc(Description{

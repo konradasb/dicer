@@ -118,6 +118,7 @@ func NewCommand() *cobra.Command {
 		shortcut(newInstanceListCommand(), "ps"),
 		shortcut(newInstanceExecCommand(), "exec"),
 		shortcut(newInstanceLogsCommand(), "logs"),
+		shortcut(newInstanceStatsCommand(), "stats"),
 		shortcut(newInstanceStartCommand(), "start"),
 		shortcut(newInstanceStopCommand(), "stop"),
 		shortcut(newInstanceRestartCommand(), "restart"),
