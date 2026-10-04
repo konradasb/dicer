@@ -315,6 +315,7 @@ func (d *daemon) initServices() error {
 		// instances, and it starts and stops the servers.
 		d.dnsServers = dns.NewServers(dns.Config{
 			Resolver:           instanceNames{d},
+			Metrics:            d.metrics,
 			DefaultNameservers: []string{network.DefaultNameserver},
 			Logger:             d.logger,
 		})

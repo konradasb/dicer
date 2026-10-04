@@ -57,6 +57,12 @@ var metricSections = []metricSection{
 		heading: "Networks",
 	},
 	{
+		group:   metrics.GroupDNS,
+		heading: "DNS",
+		after: "What each network's DNS server, on its gateway address, has answered. There is none while the " +
+			"configuration's [`network.dns`]({{< relref \"/docs/reference/configuration#network-dns\" >}}) is off.",
+	},
+	{
 		group:   metrics.GroupAPI,
 		heading: "API",
 	},

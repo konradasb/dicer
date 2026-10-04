@@ -93,6 +93,15 @@ What each running or paused instance uses of the host, read from its hypervisor 
 | `dicer_network_addresses_allocated` | gauge | `network` | Addresses currently assigned to instances on a network. |
 | `dicer_network_addresses_available` | gauge | `network` | Assignable addresses still free on a network. The network, broadcast and gateway addresses are not counted. |
 
+## DNS
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `dicer_dns_queries_total` | counter | `network`, `result` | DNS queries guests sent a network's server, by how they were answered. `result` is `local`, from the network's own names, found or not; `forwarded`, answered by an upstream nameserver; `failed`, by none, with SERVFAIL; `invalid`, not one query; or `dropped`, for the server being too busy. A TCP connection closed for that counts as one query dropped. |
+| `dicer_dns_forward_duration_seconds` | histogram | `network` | Time asking a network's upstream nameservers for an answer took, answered or not. Each is asked in turn until one answers, for up to 3 seconds each. |
+
+What each network's DNS server, on its gateway address, has answered. There is none while the configuration's [`network.dns`]({{< relref "/docs/reference/configuration#network-dns" >}}) is off.
+
 ## API
 
 | Metric | Type | Labels | Description |

@@ -27,6 +27,7 @@ const (
 	GroupKernels       = "kernels"
 	GroupVolumes       = "volumes"
 	GroupNetworks      = "networks"
+	GroupDNS           = "dns"
 	GroupAPI           = "api"
 )
 
@@ -99,6 +100,7 @@ type Metrics struct {
 	grpc     grpcMetrics
 	image    imageMetrics
 	kernel   kernelMetrics
+	dns      dnsMetrics
 }
 
 // New creates the registry and registers every metric on it.
@@ -143,6 +145,7 @@ func New(opts Options) *Metrics {
 	if src := opts.Sources.Networks; src != nil {
 		m.registry.MustRegister(m.newNetworkCollector(src))
 	}
+	m.dns = m.newDNSMetrics()
 
 	m.grpc = m.newGRPCMetrics()
 

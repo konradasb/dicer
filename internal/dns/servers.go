@@ -24,6 +24,8 @@ const Port = 53
 type Config struct {
 	// Resolver knows the networks' instances.
 	Resolver Resolver
+	// Metrics records what the servers answer. Nil records nothing.
+	Metrics Metrics
 	// DefaultNameservers are the nameservers a network that names none
 	// forwards to.
 	DefaultNameservers []string
@@ -55,6 +57,9 @@ type runningServer struct {
 func NewServers(cfg Config) *Servers {
 	if cfg.Port == 0 {
 		cfg.Port = Port
+	}
+	if cfg.Metrics == nil {
+		cfg.Metrics = discardMetrics{}
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
@@ -92,7 +97,7 @@ func (s *Servers) Serve(ctx context.Context, nw types.Network) error {
 	if ok {
 		r.server.close()
 	}
-	srv, err := listen(ctx, listenAddr, want, s.cfg.Resolver, s.logger)
+	srv, err := listen(ctx, listenAddr, want, s.cfg.Resolver, s.cfg.Metrics, s.logger)
 	if err != nil {
 		return fmt.Errorf("serve DNS for network %q on %s: %w", nw.Name, listenAddr, err)
 	}

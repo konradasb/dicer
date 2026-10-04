@@ -79,6 +79,44 @@ const (
 	maxMessage = 65535
 )
 
+// How a server answered a query, as Metrics.RecordDNSQuery is told.
+const (
+	// QueryLocal is a query answered from the network's own names, found
+	// or not.
+	QueryLocal = "local"
+	// QueryForwarded is a query an upstream nameserver answered.
+	QueryForwarded = "forwarded"
+	// QueryFailed is a query no upstream nameserver answered, failed with
+	// SERVFAIL.
+	QueryFailed = "failed"
+	// QueryInvalid is a message that is not one query, refused with
+	// FORMERR or not answered at all.
+	QueryInvalid = "invalid"
+	// QueryDropped is a query dropped, or a TCP connection closed, because
+	// the server was too busy.
+	QueryDropped = "dropped"
+)
+
+// Metrics records what the servers answer. It is declared here, and
+// satisfied by internal/metrics, so this package measures itself without
+// depending on a metrics library. It must be safe for concurrent use.
+type Metrics interface {
+	// RecordDNSQuery records a query to a network's server, and how it
+	// was answered: QueryLocal, QueryForwarded, QueryFailed, QueryInvalid
+	// or QueryDropped.
+	RecordDNSQuery(network, result string)
+
+	// RecordDNSForward records how long asking a network's upstream
+	// nameservers took, answered or not.
+	RecordDNSForward(network string, d time.Duration)
+}
+
+// discardMetrics is the Metrics used when none is configured.
+type discardMetrics struct{}
+
+func (discardMetrics) RecordDNSQuery(string, string)          {}
+func (discardMetrics) RecordDNSForward(string, time.Duration) {}
+
 // network is what a server needs to know of the network it serves.
 type network struct {
 	name string
@@ -99,6 +137,7 @@ type network struct {
 type server struct {
 	network  network
 	resolver Resolver
+	metrics  Metrics
 	logger   *slog.Logger
 
 	udp net.PacketConn
@@ -117,7 +156,9 @@ type server struct {
 }
 
 // listen starts a server on addr.
-func listen(ctx context.Context, addr string, nw network, resolver Resolver, logger *slog.Logger) (*server, error) {
+func listen(
+	ctx context.Context, addr string, nw network, resolver Resolver, metrics Metrics, logger *slog.Logger,
+) (*server, error) {
 	var lc net.ListenConfig
 	udp, err := lc.ListenPacket(ctx, "udp4", addr)
 	if err != nil {
@@ -136,6 +177,7 @@ func listen(ctx context.Context, addr string, nw network, resolver Resolver, log
 	s := &server{
 		network:     nw,
 		resolver:    resolver,
+		metrics:     metrics,
 		logger:      logger,
 		udp:         udp,
 		tcp:         tcp,
@@ -174,6 +216,7 @@ func (s *server) serveUDP(ctx context.Context) {
 		select {
 		case s.inFlight <- struct{}{}:
 		default:
+			s.metrics.RecordDNSQuery(s.network.name, QueryDropped)
 			continue // too busy: the guest asks again
 		}
 
@@ -201,6 +244,7 @@ func (s *server) serveTCP(ctx context.Context) {
 		select {
 		case s.connections <- struct{}{}:
 		default:
+			s.metrics.RecordDNSQuery(s.network.name, QueryDropped)
 			_ = conn.Close() // too busy: the guest asks again
 			continue
 		}
@@ -243,25 +287,32 @@ func (s *server) answer(
 	var p dnsmessage.Parser
 	header, err := p.Start(query)
 	if err != nil || header.Response {
+		s.metrics.RecordDNSQuery(s.network.name, QueryInvalid)
 		return nil
 	}
 	questions, err := p.AllQuestions()
 	if err != nil || len(questions) != 1 {
+		s.metrics.RecordDNSQuery(s.network.name, QueryInvalid)
 		return reply(header, questions, dnsmessage.RCodeFormatError, nil)
 	}
 	q := questions[0]
 
 	if q.Class == dnsmessage.ClassINET {
 		if records, rcode, ok := s.ownRecords(q); ok {
+			s.metrics.RecordDNSQuery(s.network.name, QueryLocal)
 			return reply(header, questions, rcode, records)
 		}
 	}
 
+	started := time.Now()
 	upstream, err := forward(ctx, query)
+	s.metrics.RecordDNSForward(s.network.name, time.Since(started))
 	if err != nil {
+		s.metrics.RecordDNSQuery(s.network.name, QueryFailed)
 		s.logger.Debug("forward DNS query", "network", s.network.name, "name", q.Name.String(), "error", err)
 		return reply(header, questions, dnsmessage.RCodeServerFailure, nil)
 	}
+	s.metrics.RecordDNSQuery(s.network.name, QueryForwarded)
 	return upstream
 }
 

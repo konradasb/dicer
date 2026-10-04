@@ -80,6 +80,8 @@ func TestReferenceListsEverything(t *testing.T) {
 	m.RecordImageCollected("unused")
 	m.RecordImageGCReclaimed(1)
 	m.RecordKernelFetch(nil, time.Second, 1)
+	m.RecordDNSQuery("default", "local")
+	m.RecordDNSForward("default", time.Millisecond)
 	m.recordCall("/dicerd.v1.InstanceService/Start", nil, time.Second)
 
 	listed := map[string]Description{}

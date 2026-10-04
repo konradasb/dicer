@@ -48,6 +48,35 @@ func (f fakeResolver) LookupAddr(_ string, addr netip.Addr) []string {
 	return out
 }
 
+// fakeMetrics counts the queries recorded, by result, and the forwards.
+type fakeMetrics struct {
+	mu       sync.Mutex
+	queries  map[string]int
+	forwards int
+}
+
+func (f *fakeMetrics) RecordDNSQuery(network, result string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.queries == nil {
+		f.queries = map[string]int{}
+	}
+	f.queries[network+" "+result]++
+}
+
+func (f *fakeMetrics) RecordDNSForward(string, time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.forwards++
+}
+
+// recorded returns the queries recorded on network shop with result.
+func (f *fakeMetrics) recorded(result string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.queries["shop "+result]
+}
+
 // upstream is a nameserver that answers every A query with 192.0.2.99, over
 // UDP and TCP, and counts what it was asked.
 type upstream struct {
@@ -118,7 +147,8 @@ func newUpstream(t *testing.T) *upstream {
 	return u
 }
 
-// startServer serves network shop on loopback, with the instances given.
+// startServer serves network shop on loopback, with the instances given,
+// recording into a fakeMetrics: see metricsOf.
 func startServer(t *testing.T, instances fakeResolver, upstreams []string, isolated bool) *server {
 	t.Helper()
 
@@ -129,12 +159,22 @@ func startServer(t *testing.T, instances fakeResolver, upstreams []string, isola
 		gateway:          netip.MustParseAddr("10.8.0.1"),
 		upstreams:        upstreams,
 		answersInstances: !isolated,
-	}, instances, slog.New(slog.DiscardHandler))
+	}, instances, &fakeMetrics{}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(srv.close)
 	return srv
+}
+
+// metricsOf returns what a server from startServer records into.
+func metricsOf(t *testing.T, srv *server) *fakeMetrics {
+	t.Helper()
+	m, ok := srv.metrics.(*fakeMetrics)
+	if !ok {
+		t.Fatalf("server records into %T, not a fakeMetrics", srv.metrics)
+	}
+	return m
 }
 
 // ask sends a query over network ("udp" or "tcp") and returns the answer.
@@ -241,7 +281,7 @@ func TestServerAnswersUnderANetworkNamedInCapitals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv, err := listen(t.Context(), "127.0.0.1:0", nw, resolver, slog.New(slog.DiscardHandler))
+	srv, err := listen(t.Context(), "127.0.0.1:0", nw, resolver, discardMetrics{}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,6 +461,9 @@ func TestServerAnswersOverUDPWhileTCPIsFull(t *testing.T) {
 	if _, err := extra.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
 		t.Errorf("read on a connection beyond maxConnections = %v, want it closed", err)
 	}
+	if got := metricsOf(t, srv).recorded(QueryDropped); got != 1 {
+		t.Errorf("dropped queries = %d, want 1 for the connection closed", got)
+	}
 }
 
 func TestServerReverseLookups(t *testing.T) {
@@ -490,6 +533,48 @@ func TestServerRefusesWhatIsNotAQuery(t *testing.T) {
 	q.Questions = q.Questions[:1]
 	if resp, _ := q.Pack(); srv.answer(t.Context(), resp, nil) != nil {
 		t.Error("a response was answered")
+	}
+}
+
+// TestServerRecordsHowItAnswered covers the result each query is recorded
+// with, and that only a forwarded one is timed.
+func TestServerRecordsHowItAnswered(t *testing.T) {
+	srv := startServer(t, fakeResolver{"db": "10.8.0.5"}, nil, false)
+	metrics := metricsOf(t, srv)
+
+	query := func(name string) []byte {
+		t.Helper()
+		q := dnsmessage.Message{Questions: []dnsmessage.Question{
+			{Name: dnsmessage.MustNewName(name), Type: dnsmessage.TypeA, Class: dnsmessage.ClassINET},
+		}}
+		b, err := q.Pack()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	answers := func(context.Context, []byte) ([]byte, error) { return []byte{0}, nil }
+	fails := func(context.Context, []byte) ([]byte, error) { return nil, errors.New("unreachable") }
+
+	srv.answer(t.Context(), query("db."), nil)
+	srv.answer(t.Context(), query("gone.shop."), nil)
+	srv.answer(t.Context(), query("example.com."), answers)
+	srv.answer(t.Context(), query("example.com."), fails)
+	srv.answer(t.Context(), []byte{1, 2, 3}, nil)
+
+	for result, want := range map[string]int{
+		QueryLocal:     2,
+		QueryForwarded: 1,
+		QueryFailed:    1,
+		QueryInvalid:   1,
+		QueryDropped:   0,
+	} {
+		if got := metrics.recorded(result); got != want {
+			t.Errorf("%s queries = %d, want %d", result, got, want)
+		}
+	}
+	if metrics.forwards != 2 {
+		t.Errorf("forwards timed = %d, want 2", metrics.forwards)
 	}
 }
 
