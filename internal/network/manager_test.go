@@ -258,7 +258,8 @@ func TestExhaustedSubnet(t *testing.T) {
 func TestInstanceAtIsTheOneHoldingTheAddress(t *testing.T) {
 	a := newTestManager(t)
 	n := testNetwork()
-	web, err := a.Allocate(n, "id-web", "")
+	// A fixed address, so that the free one below cannot be the one picked.
+	web, err := a.Allocate(n, "id-web", "10.0.0.5")
 	if err != nil {
 		t.Fatalf("Allocate: %v", err)
 	}
