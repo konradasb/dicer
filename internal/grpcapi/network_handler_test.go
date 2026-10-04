@@ -5,9 +5,11 @@ package grpcapi
 
 import (
 	"net/netip"
+	"strings"
 	"testing"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -65,5 +67,48 @@ func TestCreateNetworkRefusesATakenSubnet(t *testing.T) {
 			_, err := s.CreateNetwork(t.Context(), &dicerdv1.CreateNetworkRequest{Name: "other", Subnet: subnet})
 			wantClass(t, err, errdefs.ErrExists)
 		})
+	}
+}
+
+// fakeRecorder keeps the events recorded.
+type fakeRecorder struct {
+	events []events.Event
+}
+
+func (f *fakeRecorder) Record(e events.Event) { f.events = append(f.events, e) }
+
+// TestNetworkCreatedAndDeletedAreRecorded checks a network's creation and
+// deletion are recorded, with its subnet and gateway, and a refused request
+// is not.
+func TestNetworkCreatedAndDeletedAreRecorded(t *testing.T) {
+	s, _ := newResourceServer(t)
+	recorded := &fakeRecorder{}
+	s.networkHandler.events = recorded
+
+	n, err := s.CreateNetwork(t.Context(), &dicerdv1.CreateNetworkRequest{Name: "lan", Subnet: "10.9.0.0/24"})
+	if err != nil {
+		t.Fatalf("CreateNetwork: %v", err)
+	}
+	if _, err := s.CreateNetwork(t.Context(), &dicerdv1.CreateNetworkRequest{Name: "lan", Subnet: "10.8.0.0/24"}); err == nil {
+		t.Fatal("CreateNetwork of a name taken succeeded")
+	}
+	if _, err := s.DeleteNetwork(t.Context(), &dicerdv1.DeleteNetworkRequest{Name: "lan"}); err != nil {
+		t.Fatalf("DeleteNetwork: %v", err)
+	}
+
+	want := []events.Action{events.ActionCreated, events.ActionDeleted}
+	if len(recorded.events) != len(want) {
+		t.Fatalf("recorded %+v, want %v", recorded.events, want)
+	}
+	for i, e := range recorded.events {
+		if e.Kind != events.KindNetwork || e.ID != n.GetId() || e.Name != "lan" || e.Action != want[i] {
+			t.Errorf("event %d = %+v, want network lan %s", i, e, want[i])
+		}
+		if e.Attributes["subnet"] != "10.9.0.0/24" || e.Attributes["gateway"] != "10.9.0.1" {
+			t.Errorf("event %d attributes = %v, want its subnet and gateway", i, e.Attributes)
+		}
+		if !strings.Contains(e.Message, "10.9.0.0/24") {
+			t.Errorf("event %d message = %q, want it to name the subnet", i, e.Message)
+		}
 	}
 }

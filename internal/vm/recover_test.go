@@ -305,7 +305,7 @@ func TestRecoverReleasesOrphanedAllocations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get network: %v", err)
 	}
-	if _, err := mgr.addresses.Allocate(n, "id-ghost", ""); err != nil {
+	if _, err := mgr.networks.Allocate(n, "id-ghost", ""); err != nil {
 		t.Fatalf("allocate: %v", err)
 	}
 
@@ -313,11 +313,11 @@ func TestRecoverReleasesOrphanedAllocations(t *testing.T) {
 		t.Fatalf("Recover: %v", err)
 	}
 
-	addrs, ok := mgr.addresses.(*fakeAddresses)
+	networks, ok := mgr.networks.(*fakeNetworks)
 	if !ok {
-		t.Fatalf("addresses is %T, want *fakeAddresses", mgr.addresses)
+		t.Fatalf("networks is %T, want *fakeNetworks", mgr.networks)
 	}
-	allocs := addrs.allocations("default")
+	allocs := networks.allocations("default")
 	for _, a := range allocs {
 		if a.InstanceID == "id-ghost" {
 			t.Errorf("orphaned allocation for %s survived recovery", a.InstanceID)

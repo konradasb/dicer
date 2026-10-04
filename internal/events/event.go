@@ -15,6 +15,7 @@ type Kind string
 const (
 	KindInstance Kind = "instance"
 	KindImage    Kind = "image"
+	KindNetwork  Kind = "network"
 )
 
 // Action is what happened to the resource.

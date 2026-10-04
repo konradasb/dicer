@@ -164,7 +164,7 @@ func TestNetworkSummariesJoinsDefinitionsAndAllocations(t *testing.T) {
 	}
 
 	for _, id := range []string{"i-1", "i-2"} {
-		if _, err := d.addresses.Allocate(nw, id, ""); err != nil {
+		if _, err := d.networks.Allocate(nw, id, ""); err != nil {
 			t.Fatalf("allocate for %s: %v", id, err)
 		}
 	}

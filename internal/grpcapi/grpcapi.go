@@ -30,7 +30,7 @@ import (
 // Config holds the dependencies for creating a Server.
 type Config struct {
 	Definitions *filestore.Manager
-	Addresses   *network.Manager
+	Networks    *network.Manager
 	Instances   *vm.Manager
 
 	Hypervisors map[types.HypervisorType][]hypervisor.Starter
@@ -54,6 +54,25 @@ type Config struct {
 
 	Version string
 	Logger  *slog.Logger
+}
+
+// recorder records what happens to the resources the API changes.
+type recorder interface {
+	Record(e events.Event)
+}
+
+// discardRecorder is the recorder used when no event log is configured.
+type discardRecorder struct{}
+
+func (discardRecorder) Record(events.Event) {}
+
+// recorderOf returns log as a recorder, or one that discards if log is nil.
+func recorderOf(log *events.Log) recorder {
+	if log == nil {
+		return discardRecorder{}
+	}
+
+	return log
 }
 
 // Server implements dicerdv1.DaemonServiceServer through its embedded
@@ -90,8 +109,9 @@ func NewServer(cfg Config) *Server {
 		snapshotHandler: snapshotHandler{definitions: cfg.Definitions, instances: cfg.Instances, logger: cfg.Logger},
 		networkHandler: networkHandler{
 			definitions: cfg.Definitions,
-			addresses:   cfg.Addresses,
+			networks:    cfg.Networks,
 			hostSubnets: cfg.HostSubnets,
+			events:      recorderOf(cfg.Events),
 		},
 		volumeHandler: volumeHandler{definitions: cfg.Definitions, volumes: cfg.Volumes},
 		kernelHandler: kernelHandler{definitions: cfg.Definitions, kernels: cfg.Kernels},

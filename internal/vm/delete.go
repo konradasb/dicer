@@ -39,8 +39,8 @@ func (m *Manager) Delete(ctx context.Context, inst types.InstanceSpec, force boo
 
 	m.teardownNetwork(ctx, inst)
 
-	if err := m.addresses.Release(inst.NetworkName, inst.ID); err != nil {
-		m.logger.WarnContext(ctx, "failed to release address allocation",
+	if err := m.networks.Release(inst.NetworkName, inst.ID); err != nil {
+		m.logger.WarnContext(ctx, "failed to release network allocation",
 			"instance", inst.Name, "error", err)
 	}
 

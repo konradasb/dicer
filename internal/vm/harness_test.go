@@ -34,7 +34,7 @@ func newTestManager(t *testing.T) (*Manager, *fakeDefinitions, *fakeHostNetwork)
 
 	mgr := NewManager(Config{
 		Definitions: definitions,
-		Addresses:   newFakeAddresses(),
+		Networks:    newFakeNetworks(),
 		RunDir:      filepath.Join(dir, "run"),
 		HostNetwork: hostNetwork,
 		Logger:      slog.New(slog.DiscardHandler),

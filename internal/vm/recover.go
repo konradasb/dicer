@@ -53,9 +53,9 @@ func (m *Manager) Recover(ctx context.Context) error {
 		}
 	}
 
-	released, err := m.addresses.Reconcile(slices.Collect(maps.Keys(networks)), live)
+	released, err := m.networks.Reconcile(slices.Collect(maps.Keys(networks)), live)
 	if err != nil {
-		m.logger.WarnContext(ctx, "failed to reconcile address allocations", "error", err)
+		m.logger.WarnContext(ctx, "failed to reconcile network allocations", "error", err)
 	}
 
 	m.restoreAdoptedNetworks(ctx, instances)

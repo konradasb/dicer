@@ -40,6 +40,11 @@ func newResourceServer(t *testing.T) (*Server, *filestore.Manager) {
 		t.Fatal(err)
 	}
 
+	networkManager, err := network.NewManager(network.Config{Dir: filepath.Join(dataDir, "allocations"), Logger: logger})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	instances := vm.NewManager(vm.Config{
 		Definitions: definitions,
 		RunDir:      filepath.Join(t.TempDir(), "run"),
@@ -49,6 +54,7 @@ func newResourceServer(t *testing.T) (*Server, *filestore.Manager) {
 
 	return NewServer(Config{
 		Definitions: definitions,
+		Networks:    networkManager,
 		Instances:   instances,
 		DataDir:     dataDir,
 		Logger:      logger,

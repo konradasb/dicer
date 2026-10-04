@@ -45,8 +45,8 @@ type Definitions interface {
 	GetVolume(nameOrID string) (types.Volume, error)
 }
 
-// Addresses assigns and releases guest addresses.
-type Addresses interface {
+// Networks assigns and releases guest addresses.
+type Networks interface {
 	Allocate(n types.Network, instanceID, staticIP string) (types.NetworkAllocation, error)
 	Get(networkName, instanceID string) (types.NetworkAllocation, error)
 	InstanceAt(networkName, ip string) (instanceID string, ok bool)
@@ -103,7 +103,7 @@ type DNSServers interface {
 // Config holds the dependencies for a Manager.
 type Config struct {
 	Definitions Definitions
-	Addresses   Addresses
+	Networks    Networks
 
 	// RunDir holds ephemeral runtime state. Defaults to defaults.RunDir.
 	RunDir string
@@ -133,7 +133,7 @@ type Config struct {
 // that describes them.
 type Manager struct {
 	definitions Definitions
-	addresses   Addresses
+	networks    Networks
 	runDir      string
 	images      Images
 	kernels     Kernels
@@ -214,7 +214,7 @@ func NewManager(cfg Config) *Manager {
 
 	return &Manager{
 		definitions: cfg.Definitions,
-		addresses:   cfg.Addresses,
+		networks:    cfg.Networks,
 		runDir:      cfg.RunDir,
 		images:      cfg.Images,
 		kernels:     cfg.Kernels,

@@ -125,9 +125,9 @@ func TestStartWithoutDNSGivesTheUpstreamNameservers(t *testing.T) {
 
 func TestLookupFindsRunningInstancesByNameOrHostname(t *testing.T) {
 	mgr, definitions, _ := newTestManager(t)
-	addresses, ok := mgr.addresses.(*fakeAddresses)
+	networks, ok := mgr.networks.(*fakeNetworks)
 	if !ok {
-		t.Fatal("test manager's addresses are not the fake")
+		t.Fatal("test manager's networks are not the fake")
 	}
 
 	place := func(name, hostname, network string, state types.InstanceState) netip.Addr {
@@ -138,7 +138,7 @@ func TestLookupFindsRunningInstancesByNameOrHostname(t *testing.T) {
 		if _, ok := definitions.networks[network]; !ok {
 			definitions.networks[network] = types.Network{Name: network, Subnet: "10.1.0.0/24", Gateway: "10.1.0.1"}
 		}
-		alloc, err := addresses.Allocate(definitions.networks[network], inst.ID, "")
+		alloc, err := networks.Allocate(definitions.networks[network], inst.ID, "")
 		if err != nil {
 			t.Fatal(err)
 		}

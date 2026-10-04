@@ -16,7 +16,7 @@ import (
 
 // Address returns the address assigned to an instance, if it holds one.
 func (m *Manager) Address(inst types.InstanceSpec) (types.NetworkAllocation, error) {
-	return m.addresses.Get(inst.NetworkName, inst.ID)
+	return m.networks.Get(inst.NetworkName, inst.ID)
 }
 
 // networkSetup holds the result of attaching an instance to its network.
@@ -36,9 +36,9 @@ func (m *Manager) setupNetwork(ctx context.Context, inst types.InstanceSpec) (*n
 		return nil, fmt.Errorf("get network %q: %w", inst.NetworkName, err)
 	}
 
-	alloc, err := m.addresses.Allocate(nw, inst.ID, inst.StaticIP)
+	alloc, err := m.networks.Allocate(nw, inst.ID, inst.StaticIP)
 	if err != nil {
-		return nil, fmt.Errorf("allocate address on network %q: %w", nw.Name, err)
+		return nil, fmt.Errorf("allocate address on network %q: %w", inst.NetworkName, err)
 	}
 
 	// The address is kept on failure; only host devices are undone. The undo

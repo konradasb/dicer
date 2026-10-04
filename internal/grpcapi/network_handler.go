@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/filestore"
 	"github.com/konradasb/dicer/internal/naming"
 	"github.com/konradasb/dicer/internal/network"
@@ -25,8 +26,9 @@ import (
 // networkHandler handles network-related RPCs.
 type networkHandler struct {
 	definitions *filestore.Manager
-	addresses   *network.Manager
+	networks    *network.Manager
 	hostSubnets func() ([]netip.Prefix, error)
+	events      recorder
 }
 
 func (h *networkHandler) CreateNetwork(
@@ -80,6 +82,12 @@ func (h *networkHandler) CreateNetwork(
 	if err := h.definitions.CreateNetwork(n); err != nil {
 		return nil, err
 	}
+
+	message := fmt.Sprintf("Created network with subnet %s, gateway %s", n.Subnet, n.Gateway)
+	if n.Isolated {
+		message += "; isolated: its instances cannot reach each other"
+	}
+	h.record(n, events.ActionCreated, message)
 
 	return networkToProto(n, 0), nil
 }
@@ -180,7 +188,7 @@ func (h *networkHandler) ListNetworks(
 		Networks: make([]*dicerdv1.Network, 0, len(networks)),
 	}
 	for _, n := range networks {
-		allocs, err := h.addresses.List(n.Name)
+		allocs, err := h.networks.List(n.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -198,7 +206,7 @@ func (h *networkHandler) GetNetwork(
 		return nil, err
 	}
 
-	allocs, err := h.addresses.List(n.Name)
+	allocs, err := h.networks.List(n.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -222,13 +230,27 @@ func (h *networkHandler) DeleteNetwork(
 	if err := h.definitions.DeleteNetwork(n.Name); err != nil {
 		return nil, err
 	}
+	h.record(n, events.ActionDeleted, "Deleted network with subnet "+n.Subnet)
 
 	// Drop the network's address table.
-	if err := h.addresses.Forget(n.Name); err != nil {
+	if err := h.networks.Forget(n.Name); err != nil {
 		return nil, fmt.Errorf("discard allocations: %w", err)
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+// record records that action happened to n, with its subnet and gateway
+// among the attributes.
+func (h *networkHandler) record(n types.Network, action events.Action, message string) {
+	h.events.Record(events.Event{
+		Kind:       events.KindNetwork,
+		ID:         n.ID,
+		Name:       n.Name,
+		Action:     action,
+		Message:    message,
+		Attributes: map[string]string{"subnet": n.Subnet, "gateway": n.Gateway},
+	})
 }
 
 func (h *networkHandler) ListNetworkAllocations(
@@ -239,7 +261,7 @@ func (h *networkHandler) ListNetworkAllocations(
 		return nil, err
 	}
 
-	allocs, err := h.addresses.List(n.Name)
+	allocs, err := h.networks.List(n.Name)
 	if err != nil {
 		return nil, err
 	}

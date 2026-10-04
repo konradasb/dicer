@@ -43,7 +43,7 @@ type daemon struct {
 	logger *slog.Logger
 
 	definitions *filestore.Manager
-	addresses   *network.Manager
+	networks    *network.Manager
 	instances   *vm.Manager
 	hostnet     *hostnet.Host
 	// dnsServers serves each network's guests their nameserver. Nil if
@@ -209,14 +209,14 @@ func (d *daemon) openDefinitions() error {
 	}
 	d.definitions = s
 
-	a, err := network.NewManager(network.Config{
+	networkManager, err := network.NewManager(network.Config{
 		Dir:    filepath.Join(d.cfg.DataDir, "allocations"),
 		Logger: d.logger,
 	})
 	if err != nil {
-		return fmt.Errorf("open address manager: %w", err)
+		return fmt.Errorf("open network manager: %w", err)
 	}
-	d.addresses = a
+	d.networks = networkManager
 
 	return nil
 }
@@ -301,7 +301,7 @@ func (d *daemon) initServices() error {
 
 	vmCfg := vm.Config{
 		Definitions: d.definitions,
-		Addresses:   d.addresses,
+		Networks:    d.networks,
 		RunDir:      d.cfg.RunDir,
 		Images:      d.images,
 		Kernels:     d.kernels,

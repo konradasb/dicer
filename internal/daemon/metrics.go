@@ -93,7 +93,7 @@ func (d *daemon) instanceStats() []types.InstanceStats {
 // networkSummaries reads each network's address pool usage for a scrape. A
 // network whose allocations cannot be read is skipped.
 func (d *daemon) networkSummaries() []metrics.NetworkSummary {
-	if d.definitions == nil || d.addresses == nil {
+	if d.definitions == nil || d.networks == nil {
 		return nil
 	}
 
@@ -105,7 +105,7 @@ func (d *daemon) networkSummaries() []metrics.NetworkSummary {
 
 	stats := make([]metrics.NetworkSummary, 0, len(networks))
 	for _, nw := range networks {
-		allocations, err := d.addresses.List(nw.Name)
+		allocations, err := d.networks.List(nw.Name)
 		if err != nil {
 			d.logger.Warn("cannot read allocations for metrics",
 				"network", nw.Name, "error", err)

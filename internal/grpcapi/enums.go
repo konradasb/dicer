@@ -100,6 +100,7 @@ var architectures = enum[string, dicerdv1.Architecture]{"architecture", map[stri
 var eventKinds = enum[events.Kind, dicerdv1.EventKind]{"event kind", map[events.Kind]dicerdv1.EventKind{
 	events.KindInstance: dicerdv1.EventKind_EVENT_KIND_INSTANCE,
 	events.KindImage:    dicerdv1.EventKind_EVENT_KIND_IMAGE,
+	events.KindNetwork:  dicerdv1.EventKind_EVENT_KIND_NETWORK,
 }}
 
 var eventActions = enum[events.Action, dicerdv1.EventAction]{"event action", map[events.Action]dicerdv1.EventAction{

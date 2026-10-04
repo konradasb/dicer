@@ -556,6 +556,7 @@ const (
 	EventKind_EVENT_KIND_UNSPECIFIED EventKind = 0
 	EventKind_EVENT_KIND_INSTANCE    EventKind = 1
 	EventKind_EVENT_KIND_IMAGE       EventKind = 2
+	EventKind_EVENT_KIND_NETWORK     EventKind = 3
 )
 
 // Enum value maps for EventKind.
@@ -564,11 +565,13 @@ var (
 		0: "EVENT_KIND_UNSPECIFIED",
 		1: "EVENT_KIND_INSTANCE",
 		2: "EVENT_KIND_IMAGE",
+		3: "EVENT_KIND_NETWORK",
 	}
 	EventKind_value = map[string]int32{
 		"EVENT_KIND_UNSPECIFIED": 0,
 		"EVENT_KIND_INSTANCE":    1,
 		"EVENT_KIND_IMAGE":       2,
+		"EVENT_KIND_NETWORK":     3,
 	}
 )
 
@@ -7190,11 +7193,12 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\fArchitecture\x12\x1c\n" +
 	"\x18ARCHITECTURE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13ARCHITECTURE_X86_64\x10\x01\x12\x18\n" +
-	"\x14ARCHITECTURE_AARCH64\x10\x02*V\n" +
+	"\x14ARCHITECTURE_AARCH64\x10\x02*n\n" +
 	"\tEventKind\x12\x1a\n" +
 	"\x16EVENT_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13EVENT_KIND_INSTANCE\x10\x01\x12\x14\n" +
-	"\x10EVENT_KIND_IMAGE\x10\x02*\x9c\x04\n" +
+	"\x10EVENT_KIND_IMAGE\x10\x02\x12\x16\n" +
+	"\x12EVENT_KIND_NETWORK\x10\x03*\x9c\x04\n" +
 	"\vEventAction\x12\x1c\n" +
 	"\x18EVENT_ACTION_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14EVENT_ACTION_CREATED\x10\x01\x12\x18\n" +

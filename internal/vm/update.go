@@ -45,7 +45,7 @@ func (m *Manager) Update(ctx context.Context, updated types.InstanceSpec) error 
 	m.record(updated, events.ActionUpdated, updateMessage(current, updated, rt.State), nil)
 
 	if current.NetworkName != updated.NetworkName || current.StaticIP != updated.StaticIP {
-		if err := m.addresses.Release(current.NetworkName, current.ID); err != nil {
+		if err := m.networks.Release(current.NetworkName, current.ID); err != nil {
 			m.logger.WarnContext(ctx, "failed to release the address of a moved instance",
 				"instance", current.Name, "network", current.NetworkName, "error", err)
 		}

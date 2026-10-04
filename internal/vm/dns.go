@@ -31,7 +31,7 @@ func (m *Manager) LookupHost(network, name string) []netip.Addr {
 // LookupAddr returns the name of the running instance on a network that
 // holds addr, and its hostname if it is another.
 func (m *Manager) LookupAddr(network string, addr netip.Addr) []string {
-	instanceID, ok := m.addresses.InstanceAt(network, addr.String())
+	instanceID, ok := m.networks.InstanceAt(network, addr.String())
 	if !ok {
 		return nil
 	}
@@ -69,7 +69,7 @@ func (m *Manager) answerableInstances(network string, matches func(types.Instanc
 		if err != nil || (!rt.State.IsActive() && rt.State != types.StateStarting) {
 			continue
 		}
-		alloc, err := m.addresses.Get(network, inst.ID)
+		alloc, err := m.networks.Get(network, inst.ID)
 		if err != nil {
 			continue
 		}

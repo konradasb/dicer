@@ -71,7 +71,7 @@ func (d *daemon) listenAPI(ctx context.Context) (listeners []apiListener, err er
 		Hypervisors: d.hypervisors,
 		Definitions: d.definitions,
 		APIAddress:  apiAddress,
-		Addresses:   d.addresses,
+		Networks:    d.networks,
 		Instances:   d.instances,
 		Images:      d.images,
 		Kernels:     d.kernels,
