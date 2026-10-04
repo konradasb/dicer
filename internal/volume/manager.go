@@ -11,13 +11,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/nrednav/cuid2"
 
+	"github.com/konradasb/dicer/internal/diskfile"
 	"github.com/konradasb/dicer/internal/types"
 )
 
@@ -49,7 +48,7 @@ func NewManager(cfg Config) *Manager {
 	return &Manager{
 		dataDir:    cfg.DataDir,
 		logger:     cfg.Logger.With("component", "volume"),
-		createDisk: createVolumeDisk,
+		createDisk: diskfile.CreateExt4,
 	}
 }
 
@@ -94,50 +93,10 @@ func (m *Manager) Create(ctx context.Context, name string, sizeBytes int64) (*ty
 // DiskBytes returns the disk a volume's file takes up, which for a sparse
 // file is less than its size, or 0 if the volume has no disk.
 func (m *Manager) DiskBytes(id string) int64 {
-	info, err := os.Stat(m.Path(id))
-	if err != nil {
-		return 0
-	}
-	if st, ok := info.Sys().(*syscall.Stat_t); ok {
-		return st.Blocks * statBlockSize
-	}
-
-	return info.Size()
+	return diskfile.AllocatedBytes(m.Path(id))
 }
-
-// statBlockSize is the unit of st_blocks.
-const statBlockSize = 512
 
 // Delete removes a volume's disk.
 func (m *Manager) Delete(id string) error {
 	return os.RemoveAll(m.volumeDir(id))
-}
-
-// createVolumeDisk creates a sparse ext4-formatted disk file at path.
-func createVolumeDisk(ctx context.Context, path string, sizeBytes int64) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
-	}
-
-	f, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("create disk file: %w", err)
-	}
-	if err := f.Truncate(sizeBytes); err != nil {
-		_ = f.Close()
-		_ = os.Remove(path)
-		return fmt.Errorf("allocate disk: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		_ = os.Remove(path)
-		return err
-	}
-
-	out, err := exec.CommandContext(ctx, "mkfs.ext4", "-F", path).CombinedOutput()
-	if err != nil {
-		_ = os.Remove(path)
-		return fmt.Errorf("format disk: %w: %s", err, out)
-	}
-
-	return nil
 }

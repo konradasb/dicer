@@ -48,10 +48,10 @@ func TestVolumeDeletedIsRecorded(t *testing.T) {
 }
 
 // TestVolumeCreatedIsRecorded checks a volume's creation is recorded with its
-// size. Creating one formats it with mkfs.ext4.
+// size. Creating one formats it with mke2fs.
 func TestVolumeCreatedIsRecorded(t *testing.T) {
-	if _, err := exec.LookPath("mkfs.ext4"); err != nil {
-		t.Skip("mkfs.ext4 is not installed")
+	if _, err := exec.LookPath("mke2fs"); err != nil {
+		t.Skip("mke2fs is not installed")
 	}
 
 	s, _ := newResourceServer(t)

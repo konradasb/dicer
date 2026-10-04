@@ -10,53 +10,21 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"syscall"
 
 	"github.com/konradasb/dicer/internal/atomicfile"
+	"github.com/konradasb/dicer/internal/diskfile"
 	"github.com/konradasb/dicer/internal/guest"
 )
 
-// createSparseFile creates a sparse file of the given size at path.
-// The file is created fresh; any existing file at path is truncated.
-func createSparseFile(path string, size int64) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	if err := f.Truncate(size); err != nil {
-		_ = f.Close()
-		_ = os.Remove(path)
-		return err
-	}
-	return f.Close()
-}
-
 // ensureOverlayDisk creates the writable ext4 overlay disk if it does not
-// exist. It is formatted under a temporary name and renamed into place.
+// exist.
 func ensureOverlayDisk(ctx context.Context, path string, sizeBytes int64) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
-	}
 	if _, err := os.Stat(path); err == nil {
 		return nil
 	}
-
-	tmp := path + ".tmp"
-	if err := createSparseFile(tmp, sizeBytes); err != nil {
-		return fmt.Errorf("allocate overlay disk: %w", err)
-	}
-
-	out, err := exec.CommandContext(ctx, "mkfs.ext4", "-F", tmp).CombinedOutput()
-	if err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("format overlay disk: %w: %s", err, out)
-	}
-
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("install overlay disk: %w", err)
+	if err := diskfile.CreateExt4(ctx, path, sizeBytes); err != nil {
+		return fmt.Errorf("create overlay disk: %w", err)
 	}
 	return nil
 }
@@ -83,7 +51,7 @@ func readStatusDisk(path string) (guest.Status, error) {
 const configDiskSize = 4 << 20
 
 // provisionConfigDisk creates the ext4 disk holding dicer-init's
-// configuration, using mke2fs -d (e2fsprogs >= 1.43). The config may hold
+// configuration. The config may hold
 // secrets, so it is staged in the instance's runtime directory.
 func provisionConfigDisk(ctx context.Context, path string, cfg *guest.Config) error {
 	tmpDir, err := os.MkdirTemp(filepath.Dir(path), "config-*")
@@ -100,14 +68,8 @@ func provisionConfigDisk(ctx context.Context, path string, cfg *guest.Config) er
 		return fmt.Errorf("write %s: %w", guest.ConfigFile, err)
 	}
 
-	if err := createSparseFile(path, configDiskSize+2*int64(len(data))); err != nil {
-		return fmt.Errorf("allocate config disk: %w", err)
-	}
-
-	out, err := exec.CommandContext(ctx, "mke2fs", "-t", "ext4", "-d", tmpDir, path).CombinedOutput()
-	if err != nil {
-		_ = os.Remove(path)
-		return fmt.Errorf("format config disk: %w: %s", err, out)
+	if err := diskfile.CreateExt4From(ctx, path, configDiskSize+2*int64(len(data)), tmpDir); err != nil {
+		return fmt.Errorf("create config disk: %w", err)
 	}
 	return nil
 }
@@ -200,26 +162,13 @@ func isZero(b []byte) bool {
 func dirSize(dir string) (int64, error) {
 	var total int64
 
-	err := filepath.WalkDir(dir, func(_ string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-
-		if st, ok := info.Sys().(*syscall.Stat_t); ok {
-			total += st.Blocks * statBlockSize
-			return nil
-		}
-		total += info.Size()
-
+		total += diskfile.AllocatedBytes(path)
 		return nil
 	})
 
 	return total, err
 }
-
-// statBlockSize is the unit of st_blocks.
-const statBlockSize = 512

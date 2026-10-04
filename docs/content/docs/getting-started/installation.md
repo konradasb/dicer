@@ -22,8 +22,7 @@ from source and sets the daemon up.
 - Linux on x86_64 or aarch64, with systemd.
 - KVM: `/dev/kvm` must exist. On a cloud virtual machine, that means one
   with nested virtualisation enabled.
-- `erofs-utils`, for `mkfs.erofs`, and `e2fsprogs`, for `mkfs.ext4` and
-  `mke2fs`.
+- `erofs-utils`, for `mkfs.erofs`, and `e2fsprogs`, for `mke2fs`.
 - `iptables`.
 - With firewalld (Fedora, RHEL and its rebuilds, openSUSE), its `dicer`
   zone, which the package and the install script install: see

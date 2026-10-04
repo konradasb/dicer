@@ -105,4 +105,4 @@ the instance's environment and the contents of its file mounts.
 
 | Variable | |
 |---|---|
-| `PATH` | Where `mkfs.erofs`, `mkfs.ext4`, `mke2fs`, `iptables` and any registry credential helpers are found. |
+| `PATH` | Where `mkfs.erofs`, `mke2fs`, `iptables` and any registry credential helpers are found. |
