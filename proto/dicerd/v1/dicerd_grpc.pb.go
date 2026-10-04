@@ -35,6 +35,7 @@ const (
 	DaemonService_GetInstance_FullMethodName            = "/dicerd.v1.DaemonService/GetInstance"
 	DaemonService_GetInstanceLogs_FullMethodName        = "/dicerd.v1.DaemonService/GetInstanceLogs"
 	DaemonService_GetInstanceStats_FullMethodName       = "/dicerd.v1.DaemonService/GetInstanceStats"
+	DaemonService_ListInstanceProcesses_FullMethodName  = "/dicerd.v1.DaemonService/ListInstanceProcesses"
 	DaemonService_CreateSnapshot_FullMethodName         = "/dicerd.v1.DaemonService/CreateSnapshot"
 	DaemonService_ListSnapshots_FullMethodName          = "/dicerd.v1.DaemonService/ListSnapshots"
 	DaemonService_GetSnapshot_FullMethodName            = "/dicerd.v1.DaemonService/GetSnapshot"
@@ -135,6 +136,10 @@ type DaemonServiceClient interface {
 	// guests: a batch a second while it follows, or a single batch. Each batch
 	// is read over a second, so the first comes a second after the call.
 	GetInstanceStats(ctx context.Context, in *GetInstanceStatsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetInstanceStatsResponse], error)
+	// ListInstanceProcesses returns the processes running in a running
+	// instance, as its guest sees them: kernel threads are left out, and PIDs
+	// are the ones a command run by ExecInstance sees.
+	ListInstanceProcesses(ctx context.Context, in *ListInstanceProcessesRequest, opts ...grpc.CallOption) (*ListInstanceProcessesResponse, error)
 	// CreateSnapshot freezes a running or paused instance to disk: its memory,
 	// its device state and a copy of its overlay disk. A running instance is
 	// paused for as long as it takes and resumed afterwards.
@@ -362,6 +367,16 @@ func (c *daemonServiceClient) GetInstanceStats(ctx context.Context, in *GetInsta
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DaemonService_GetInstanceStatsClient = grpc.ServerStreamingClient[GetInstanceStatsResponse]
+
+func (c *daemonServiceClient) ListInstanceProcesses(ctx context.Context, in *ListInstanceProcessesRequest, opts ...grpc.CallOption) (*ListInstanceProcessesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListInstanceProcessesResponse)
+	err := c.cc.Invoke(ctx, DaemonService_ListInstanceProcesses_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
 
 func (c *daemonServiceClient) CreateSnapshot(ctx context.Context, in *CreateSnapshotRequest, opts ...grpc.CallOption) (*Snapshot, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -755,6 +770,10 @@ type DaemonServiceServer interface {
 	// guests: a batch a second while it follows, or a single batch. Each batch
 	// is read over a second, so the first comes a second after the call.
 	GetInstanceStats(*GetInstanceStatsRequest, grpc.ServerStreamingServer[GetInstanceStatsResponse]) error
+	// ListInstanceProcesses returns the processes running in a running
+	// instance, as its guest sees them: kernel threads are left out, and PIDs
+	// are the ones a command run by ExecInstance sees.
+	ListInstanceProcesses(context.Context, *ListInstanceProcessesRequest) (*ListInstanceProcessesResponse, error)
 	// CreateSnapshot freezes a running or paused instance to disk: its memory,
 	// its device state and a copy of its overlay disk. A running instance is
 	// paused for as long as it takes and resumed afterwards.
@@ -879,6 +898,9 @@ func (UnimplementedDaemonServiceServer) GetInstanceLogs(*GetInstanceLogsRequest,
 }
 func (UnimplementedDaemonServiceServer) GetInstanceStats(*GetInstanceStatsRequest, grpc.ServerStreamingServer[GetInstanceStatsResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method GetInstanceStats not implemented")
+}
+func (UnimplementedDaemonServiceServer) ListInstanceProcesses(context.Context, *ListInstanceProcessesRequest) (*ListInstanceProcessesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListInstanceProcesses not implemented")
 }
 func (UnimplementedDaemonServiceServer) CreateSnapshot(context.Context, *CreateSnapshotRequest) (*Snapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateSnapshot not implemented")
@@ -1188,6 +1210,24 @@ func _DaemonService_GetInstanceStats_Handler(srv interface{}, stream grpc.Server
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type DaemonService_GetInstanceStatsServer = grpc.ServerStreamingServer[GetInstanceStatsResponse]
+
+func _DaemonService_ListInstanceProcesses_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListInstanceProcessesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ListInstanceProcesses(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ListInstanceProcesses_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ListInstanceProcesses(ctx, req.(*ListInstanceProcessesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
 
 func _DaemonService_CreateSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateSnapshotRequest)
@@ -1714,6 +1754,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetInstance",
 			Handler:    _DaemonService_GetInstance_Handler,
+		},
+		{
+			MethodName: "ListInstanceProcesses",
+			Handler:    _DaemonService_ListInstanceProcesses_Handler,
 		},
 		{
 			MethodName: "CreateSnapshot",

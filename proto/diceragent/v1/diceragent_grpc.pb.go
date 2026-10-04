@@ -22,12 +22,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_Exec_FullMethodName     = "/diceragent.v1.AgentService/Exec"
-	AgentService_CopyIn_FullMethodName   = "/diceragent.v1.AgentService/CopyIn"
-	AgentService_CopyOut_FullMethodName  = "/diceragent.v1.AgentService/CopyOut"
-	AgentService_Sync_FullMethodName     = "/diceragent.v1.AgentService/Sync"
-	AgentService_Probe_FullMethodName    = "/diceragent.v1.AgentService/Probe"
-	AgentService_Shutdown_FullMethodName = "/diceragent.v1.AgentService/Shutdown"
+	AgentService_Exec_FullMethodName          = "/diceragent.v1.AgentService/Exec"
+	AgentService_CopyIn_FullMethodName        = "/diceragent.v1.AgentService/CopyIn"
+	AgentService_CopyOut_FullMethodName       = "/diceragent.v1.AgentService/CopyOut"
+	AgentService_Sync_FullMethodName          = "/diceragent.v1.AgentService/Sync"
+	AgentService_Probe_FullMethodName         = "/diceragent.v1.AgentService/Probe"
+	AgentService_Shutdown_FullMethodName      = "/diceragent.v1.AgentService/Shutdown"
+	AgentService_ListProcesses_FullMethodName = "/diceragent.v1.AgentService/ListProcesses"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -59,6 +60,9 @@ type AgentServiceClient interface {
 	// once it has asked. The machine ends when the shutdown is done, which is
 	// what the host waits for.
 	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*ShutdownResponse, error)
+	// ListProcesses returns the processes running in the VM, in PID order.
+	// Kernel threads are left out.
+	ListProcesses(ctx context.Context, in *ListProcessesRequest, opts ...grpc.CallOption) (*ListProcessesResponse, error)
 }
 
 type agentServiceClient struct {
@@ -144,6 +148,16 @@ func (c *agentServiceClient) Shutdown(ctx context.Context, in *ShutdownRequest, 
 	return out, nil
 }
 
+func (c *agentServiceClient) ListProcesses(ctx context.Context, in *ListProcessesRequest, opts ...grpc.CallOption) (*ListProcessesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListProcessesResponse)
+	err := c.cc.Invoke(ctx, AgentService_ListProcesses_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations should embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -173,6 +187,9 @@ type AgentServiceServer interface {
 	// once it has asked. The machine ends when the shutdown is done, which is
 	// what the host waits for.
 	Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error)
+	// ListProcesses returns the processes running in the VM, in PID order.
+	// Kernel threads are left out.
+	ListProcesses(context.Context, *ListProcessesRequest) (*ListProcessesResponse, error)
 }
 
 // UnimplementedAgentServiceServer should be embedded to have
@@ -199,6 +216,9 @@ func (UnimplementedAgentServiceServer) Probe(context.Context, *ProbeRequest) (*P
 }
 func (UnimplementedAgentServiceServer) Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
+}
+func (UnimplementedAgentServiceServer) ListProcesses(context.Context, *ListProcessesRequest) (*ListProcessesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListProcesses not implemented")
 }
 func (UnimplementedAgentServiceServer) testEmbeddedByValue() {}
 
@@ -299,6 +319,24 @@ func _AgentService_Shutdown_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_ListProcesses_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListProcessesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).ListProcesses(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_ListProcesses_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).ListProcesses(ctx, req.(*ListProcessesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -317,6 +355,10 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Shutdown",
 			Handler:    _AgentService_Shutdown_Handler,
+		},
+		{
+			MethodName: "ListProcesses",
+			Handler:    _AgentService_ListProcesses_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -59,6 +59,7 @@ was, and whose message says it for a person:
 | `GetInstance` | [`GetInstanceRequest`](#getinstancerequest) | [`Instance`](#instance) | GetInstance returns one instance. |
 | `GetInstanceLogs` | [`GetInstanceLogsRequest`](#getinstancelogsrequest) | stream [`InstanceLogChunk`](#instancelogchunk) | GetInstanceLogs streams an instance's log. The guest's console is kept with the instance, so it can be read after a stop to explain one. |
 | `GetInstanceStats` | [`GetInstanceStatsRequest`](#getinstancestatsrequest) | stream [`GetInstanceStatsResponse`](#getinstancestatsresponse) | GetInstanceStats streams what running and paused instances use of the host, read from their hypervisor processes rather than asked of their guests: a batch a second while it follows, or a single batch. Each batch is read over a second, so the first comes a second after the call. |
+| `ListInstanceProcesses` | [`ListInstanceProcessesRequest`](#listinstanceprocessesrequest) | [`ListInstanceProcessesResponse`](#listinstanceprocessesresponse) | ListInstanceProcesses returns the processes running in a running instance, as its guest sees them: kernel threads are left out, and PIDs are the ones a command run by ExecInstance sees. |
 | `CreateSnapshot` | [`CreateSnapshotRequest`](#createsnapshotrequest) | [`Snapshot`](#snapshot) | CreateSnapshot freezes a running or paused instance to disk: its memory, its device state and a copy of its overlay disk. A running instance is paused for as long as it takes and resumed afterwards. |
 | `ListSnapshots` | [`ListSnapshotsRequest`](#listsnapshotsrequest) | [`ListSnapshotsResponse`](#listsnapshotsresponse) | ListSnapshots returns an instance's snapshots, oldest first. |
 | `GetSnapshot` | [`GetSnapshotRequest`](#getsnapshotrequest) | [`Snapshot`](#snapshot) | GetSnapshot returns one snapshot. |
@@ -626,6 +627,18 @@ Kernel is a guest kernel image available to instances.
 |---|---|---|
 | `images` | repeated [`Image`](#image) |  |
 
+### ListInstanceProcessesRequest
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `string` |  |
+
+### ListInstanceProcessesResponse
+
+| Field | Type | Description |
+|---|---|---|
+| `processes` | repeated [`Process`](#process) | The processes, in PID order. |
+
 ### ListInstancesRequest
 
 ### ListInstancesResponse
@@ -742,6 +755,22 @@ the host's loopback addresses is not forwarded.
 | `host_port` | `uint32` |  |
 | `guest_port` | `uint32` |  |
 | `protocol` | [`Protocol`](#protocol) |  |
+
+### Process
+
+Process is a process running in an instance's guest.
+
+| Field | Type | Description |
+|---|---|---|
+| `pid` | `int32` |  |
+| `ppid` | `int32` |  |
+| `user` | `string` | The user the process runs as, by name, or by UID if the guest has no name for it. |
+| `state` | `string` | The state code: R running, S sleeping, D waiting on I/O, Z zombie, T stopped, and so on. |
+| `name` | `string` | The command's name, which the kernel keeps even when the command line is gone, as it is for a zombie. |
+| `command` | repeated `string` | The command line. Empty for a zombie. |
+| `start_time` | `google.protobuf.Timestamp` | When the process started, by the guest's clock. |
+| `cpu_time` | `google.protobuf.Duration` | CPU time used in total, in user and kernel mode. |
+| `resident_memory_bytes` | `int64` | The guest memory the process has resident. |
 
 ### PruneImagesRequest
 

@@ -1,7 +1,7 @@
 ---
 title: Working inside guests
 weight: 6
-description: "Run commands in a guest, copy files in and out, read its console and wait for it to end."
+description: "Run commands in a guest, list its processes, copy files in and out, read its console and wait for it to end."
 icon: terminal
 related:
   - /docs/guides/troubleshooting
@@ -10,8 +10,8 @@ related:
 
 A guest has no SSH server to set up and no network access to open: the
 daemon reaches every guest through its agent, over vsock. This guide covers
-running commands in a guest, copying files in and out, reading its console,
-and waiting for it to end.
+running commands in a guest, listing its processes, copying files in and
+out, reading its console, and waiting for it to end.
 
 ## Run a command
 
@@ -59,6 +59,36 @@ killed by `--timeout`:
 ```console
 $ dicer exec --timeout 30 db pg_isready || echo "not ready: $?"
 ```
+
+## List its processes
+
+`dicer top` lists the processes running in a running instance, as its agent
+reads them from the guest's `/proc`, so it works for any image, with no `ps`
+needed in it:
+
+```console
+$ dicer top web
+PID  PPID  USER   STATE  STARTED         CPUTIME  RSS       COMMAND
+1    0     root   S      12 minutes ago  210ms    9.8 MiB   /init
+214  1     root   S      12 minutes ago  400ms    14.2 MiB  /usr/local/bin/dicer-agent
+215  1     root   S      12 minutes ago  20ms     3.1 MiB   nginx: master process nginx -g daemon off;
+216  215   nginx  S      12 minutes ago  1.87s    22.5 MiB  nginx: worker process
+```
+
+Every process in the guest is listed but the kernel's own threads,
+`dicer-init` and the agent included, since they run in the guest too. PIDs
+are the ones `dicer exec` sees, so one found here can be signalled:
+
+```console
+$ dicer exec web kill -HUP 215
+```
+
+**State** is the kernel's code for the process: R running, S sleeping, D
+waiting on I/O, Z zombie, T stopped. **CPUTime** is the CPU time it has used
+since it started, and **RSS** the guest memory it has resident. The column
+names are also the fields of a `--format` template, and the keys of
+`--format json`. For what the instance as a whole uses of the host, see
+[Instance stats](../monitoring#instance-stats).
 
 ## Copy files
 

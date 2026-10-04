@@ -6,6 +6,7 @@ syntax = "proto3";
 package diceragent.v1;
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/konradasb/dicer/proto/diceragent/v1;diceragentv1";
 
@@ -39,6 +40,10 @@ service AgentService {
   // once it has asked. The machine ends when the shutdown is done, which is
   // what the host waits for.
   rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+
+  // ListProcesses returns the processes running in the VM, in PID order.
+  // Kernel threads are left out.
+  rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
 }
 
 // ExecStart is the first message sent by the client to start a command.
@@ -153,3 +158,30 @@ message ProbeResponse {
 message ShutdownRequest {}
 
 message ShutdownResponse {}
+
+message ListProcessesRequest {}
+
+message ListProcessesResponse {
+  repeated Process processes = 1;
+}
+
+// Process is a process running in the VM, as its /proc describes it.
+message Process {
+  int32 pid = 1;
+  int32 ppid = 2;
+  // The user the process runs as, by name, or by UID if it has none.
+  string user = 3;
+  // The state code: R running, S sleeping, D waiting on I/O, Z zombie, T
+  // stopped, and so on.
+  string state = 4;
+  // The command's name, which the kernel keeps even when the command line is
+  // gone, as it is for a zombie.
+  string name = 5;
+  // The command line. Empty for a zombie.
+  repeated string command = 6;
+  google.protobuf.Timestamp start_time = 7;
+  // CPU time used in total, in user and kernel mode.
+  google.protobuf.Duration cpu_time = 8;
+  // The memory the process has resident.
+  int64 resident_memory_bytes = 9;
+}

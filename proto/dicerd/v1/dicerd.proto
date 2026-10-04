@@ -76,6 +76,10 @@ service DaemonService {
   // guests: a batch a second while it follows, or a single batch. Each batch
   // is read over a second, so the first comes a second after the call.
   rpc GetInstanceStats(GetInstanceStatsRequest) returns (stream GetInstanceStatsResponse);
+  // ListInstanceProcesses returns the processes running in a running
+  // instance, as its guest sees them: kernel threads are left out, and PIDs
+  // are the ones a command run by ExecInstance sees.
+  rpc ListInstanceProcesses(ListInstanceProcessesRequest) returns (ListInstanceProcessesResponse);
 
   // CreateSnapshot freezes a running or paused instance to disk: its memory,
   // its device state and a copy of its overlay disk. A running instance is
@@ -741,6 +745,38 @@ message InstanceStats {
   // Packets the guest received and transmitted.
   int64 network_receive_packets = 16;
   int64 network_transmit_packets = 17;
+}
+
+message ListInstanceProcessesRequest {
+  string name = 1;
+}
+
+message ListInstanceProcessesResponse {
+  // The processes, in PID order.
+  repeated Process processes = 1;
+}
+
+// Process is a process running in an instance's guest.
+message Process {
+  int32 pid = 1;
+  int32 ppid = 2;
+  // The user the process runs as, by name, or by UID if the guest has no
+  // name for it.
+  string user = 3;
+  // The state code: R running, S sleeping, D waiting on I/O, Z zombie, T
+  // stopped, and so on.
+  string state = 4;
+  // The command's name, which the kernel keeps even when the command line is
+  // gone, as it is for a zombie.
+  string name = 5;
+  // The command line. Empty for a zombie.
+  repeated string command = 6;
+  // When the process started, by the guest's clock.
+  google.protobuf.Timestamp start_time = 7;
+  // CPU time used in total, in user and kernel mode.
+  google.protobuf.Duration cpu_time = 8;
+  // The guest memory the process has resident.
+  int64 resident_memory_bytes = 9;
 }
 
 // Snapshot is a point-in-time copy of an instance: the guest's memory and

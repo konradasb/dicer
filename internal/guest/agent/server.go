@@ -3,8 +3,8 @@
 
 //go:build linux
 
-// Package agent runs inside the guest and serves the host's exec, copy, probe
-// and shutdown requests over vsock.
+// Package agent runs inside the guest and serves the host's exec, copy, probe,
+// process listing and shutdown requests over vsock.
 package agent
 
 import (
