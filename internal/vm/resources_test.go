@@ -75,7 +75,7 @@ func TestStartRefusedWhenTheHostIsFull(t *testing.T) {
 	if rt := h.runtime(t); rt.State != types.StateStopped {
 		t.Errorf("state after a refused start = %s, want Stopped", rt.State)
 	}
-	if len(h.starter.vmms) != 0 {
+	if h.starter.vmmCount() != 0 {
 		t.Error("a VMM was started for a refused instance")
 	}
 }

@@ -246,7 +246,7 @@ func (h *harness) waitForVMMs(t *testing.T, n int) {
 	for {
 		lock := h.mgr.lock(h.inst.ID)
 		lock.Lock()
-		launched := len(h.starter.vmms)
+		launched := h.starter.vmmCount()
 		lock.Unlock()
 
 		if launched >= n {

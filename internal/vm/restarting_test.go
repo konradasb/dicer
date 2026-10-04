@@ -81,7 +81,7 @@ func TestOnFailureLeavesCleanExitStopped(t *testing.T) {
 	h.waitForState(t, types.StateStopped)
 
 	time.Sleep(50 * time.Millisecond)
-	if n := len(h.starter.vmms); n != 1 {
+	if n := h.starter.vmmCount(); n != 1 {
 		t.Errorf("launched %d VMMs, want no restart after a clean exit", n)
 	}
 }

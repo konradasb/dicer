@@ -473,6 +473,9 @@ type fakeStarter struct {
 	restoreErr      error
 	startErr        error
 
+	// mu guards vmms: a restart launches from its own goroutine while the
+	// test reads them.
+	mu sync.Mutex
 	// vmms is every process the starter launched, the latest last.
 	vmms []*process.Process
 }
@@ -518,21 +521,36 @@ func (f *fakeStarter) launch() (*process.Process, error) {
 	if err != nil {
 		return nil, err
 	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.vmms = append(f.vmms, vmm)
 	return vmm, nil
 }
 
 // vmm returns the process most recently launched.
 func (f *fakeStarter) vmm() *process.Process {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if len(f.vmms) == 0 {
 		return nil
 	}
 	return f.vmms[len(f.vmms)-1]
 }
 
+// vmmCount returns how many processes the starter has launched.
+func (f *fakeStarter) vmmCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.vmms)
+}
+
 // terminateAll kills every process the starter launched.
 func (f *fakeStarter) terminateAll() {
-	for _, vmm := range f.vmms {
+	f.mu.Lock()
+	vmms := slices.Clone(f.vmms)
+	f.mu.Unlock()
+
+	for _, vmm := range vmms {
 		vmm.Terminate()
 	}
 }

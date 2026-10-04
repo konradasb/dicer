@@ -133,8 +133,8 @@ func TestUnhealthyInstanceWithoutRestartPolicyKeepsRunning(t *testing.T) {
 			}
 
 			time.Sleep(50 * time.Millisecond)
-			if rt := h.runtime(t); rt.State != types.StateRunning || len(h.starter.vmms) != 1 {
-				t.Errorf("state = %s with %d VMMs launched, want the first still running", rt.State, len(h.starter.vmms))
+			if rt := h.runtime(t); rt.State != types.StateRunning || h.starter.vmmCount() != 1 {
+				t.Errorf("state = %s with %d VMMs launched, want the first still running", rt.State, h.starter.vmmCount())
 			}
 		})
 	}

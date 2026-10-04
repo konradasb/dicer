@@ -128,7 +128,7 @@ func TestStartOfDeletedInstanceIsRefused(t *testing.T) {
 	if err := h.mgr.Start(t.Context(), h.inst); !errors.Is(err, errdefs.ErrNotFound) {
 		t.Fatalf("Start = %v, want a refusal for an instance that no longer exists", err)
 	}
-	if n := len(h.starter.vmms); n != 0 {
+	if n := h.starter.vmmCount(); n != 0 {
 		t.Errorf("%d VMMs launched for a deleted instance", n)
 	}
 }
