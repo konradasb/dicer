@@ -26,7 +26,7 @@ type ImageSummary struct {
 type imageMetrics struct {
 	pulls           *prometheus.CounterVec
 	pullDuration    prometheus.Histogram
-	downloadedBytes prometheus.Counter
+	pulledBytes     prometheus.Counter
 	convertDuration prometheus.Histogram
 	cacheLookups    *prometheus.CounterVec
 	collected       *prometheus.CounterVec
@@ -49,9 +49,9 @@ func (m *Metrics) newImageMetrics() imageMetrics {
 			Group: GroupImages,
 		}, prometheus.ExponentialBuckets(0.5, 2, 12)),
 
-		downloadedBytes: m.counter(Description{
-			Name:  "dicer_image_downloaded_bytes_total",
-			Help:  "Compressed layer bytes downloaded from registries.",
+		pulledBytes: m.counter(Description{
+			Name:  "dicer_image_pulled_bytes_total",
+			Help:  "Compressed layer bytes pulls downloaded from registries.",
 			Group: GroupImages,
 		}),
 
@@ -89,7 +89,7 @@ func (m *Metrics) newImageMetrics() imageMetrics {
 func (m *Metrics) RecordImagePull(err error, d time.Duration, downloadedBytes int64) {
 	m.image.pulls.WithLabelValues(outcome(err)).Inc()
 	m.image.pullDuration.Observe(d.Seconds())
-	m.image.downloadedBytes.Add(float64(downloadedBytes))
+	m.image.pulledBytes.Add(float64(downloadedBytes))
 }
 
 // RecordImageConversion records the time taken to pack an unpacked image into

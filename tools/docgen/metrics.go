@@ -25,6 +25,7 @@ var metricSections = []metricSection{
 	{
 		group:   metrics.GroupDaemon,
 		heading: "Daemon",
+		after:   "The daemon's uptime is `time() - process_start_time_seconds`.",
 	},
 	{
 		group:   metrics.GroupInstances,

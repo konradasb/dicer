@@ -101,6 +101,29 @@ Follow [Go Doc Comments](https://go.dev/doc/comment).
 - An error a user will see says what to do about it, when there is
   something to do.
 
+### Metrics
+
+Name metrics by Prometheus's
+[naming practices](https://prometheus.io/docs/practices/naming/):
+
+- Every metric starts with the application's prefix (`dicer_`), in
+  snake_case.
+- One quantity in one base unit, named as a plural suffix: `_seconds`, not
+  milliseconds; `_bytes`, not megabytes or bits; a `_ratio` from 0 to 1, not
+  a percentage.
+- Counters end in `_total`, after the unit: `dicer_instance_cpu_seconds_total`.
+  Nothing else ends in `_total`, and no name ends in a histogram's reserved
+  `_count`, `_sum` or `_bucket`.
+- A point in time is `_timestamp_seconds` since the Unix epoch; build and
+  version metadata is an `_info` gauge whose value is always 1.
+- `sum()` or `avg()` across every label must mean something: one metric
+  measures one thing, and its labels only split it.
+- Don't put a label's name in the metric's name, and keep labels bounded:
+  no request IDs or free text. Don't take a label Prometheus sets itself,
+  such as `instance` or `job`.
+- Order a name's words so related metrics sort together: `pull_duration`,
+  `pulled_bytes` and `pulls` beside each other.
+
 ### Tests
 
 - Table-driven where cases share a shape, with `t.Run` naming each case.

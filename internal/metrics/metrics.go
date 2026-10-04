@@ -9,7 +9,6 @@ package metrics
 import (
 	"log/slog"
 	"runtime"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -117,7 +116,6 @@ func New(opts Options) *Metrics {
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 	m.registerBuildInfo(opts.Version, opts.Commit)
-	m.registerStartTime()
 
 	if src := opts.Sources.Instances; src != nil {
 		m.registry.MustRegister(m.newInstanceCollector(src))
@@ -171,20 +169,6 @@ func (m *Metrics) registerBuildInfo(version, commit string) {
 	}).WithLabelValues(version, commit, runtime.Version()).Set(1)
 }
 
-// registerStartTime registers when this process started, as a Unix
-// timestamp. Uptime is then `time() - dicer_start_time_seconds`, which stays
-// correct across a scrape gap in a way a self-counting uptime gauge does not.
-func (m *Metrics) registerStartTime() {
-	started := float64(time.Now().Unix())
-
-	m.gaugeFunc(Description{
-		Name:  "dicer_start_time_seconds",
-		Help:  "Start time of the daemon since the Unix epoch, in seconds.",
-		Doc:   "Uptime is `time() - dicer_start_time_seconds`.",
-		Group: GroupDaemon,
-	}, func() float64 { return started })
-}
-
 // gaugeVec registers a gauge vector described by d.
 func (m *Metrics) gaugeVec(d Description) *prometheus.GaugeVec {
 	d.Type = "gauge"
@@ -192,12 +176,6 @@ func (m *Metrics) gaugeVec(d Description) *prometheus.GaugeVec {
 	m.register(d, g)
 
 	return g
-}
-
-// gaugeFunc registers a gauge described by d, read from f when scraped.
-func (m *Metrics) gaugeFunc(d Description, f func() float64) {
-	d.Type = "gauge"
-	m.register(d, prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: d.Name, Help: d.Help}, f))
 }
 
 // counter registers a counter described by d, which has no labels.

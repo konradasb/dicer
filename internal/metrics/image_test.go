@@ -24,8 +24,8 @@ func TestRecordImagePull(t *testing.T) {
 	if got := testutil.ToFloat64(m.image.pulls.WithLabelValues(outcomeError)); got != 1 {
 		t.Errorf("failed pulls = %v, want 1", got)
 	}
-	if got := testutil.ToFloat64(m.image.downloadedBytes); got != 4096 {
-		t.Errorf("downloaded bytes = %v, want 4096", got)
+	if got := testutil.ToFloat64(m.image.pulledBytes); got != 4096 {
+		t.Errorf("pulled bytes = %v, want 4096", got)
 	}
 }
 

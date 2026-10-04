@@ -15,7 +15,8 @@ The endpoint also serves the Go runtime's `go_*` metrics and the daemon process'
 | Metric | Type | Labels | Description |
 |---|---|---|---|
 | `dicer_build_info` | gauge | `version`, `commit`, `go_version` | Build information for the running daemon. Always 1. The build is in its labels. |
-| `dicer_start_time_seconds` | gauge |  | Start time of the daemon since the Unix epoch, in seconds. Uptime is `time() - dicer_start_time_seconds`. |
+
+The daemon's uptime is `time() - process_start_time_seconds`.
 
 ## Instances
 
@@ -62,7 +63,7 @@ What each running or paused instance uses of the host, read from its hypervisor 
 | `dicer_image_disk_bytes` | gauge |  | Total size of the bootable disks those images were converted to. |
 | `dicer_image_pulls_total` | counter | `outcome` | Image pulls that reached a registry, by outcome. Cache hits are not pulls. `outcome` is `success` or `error`. |
 | `dicer_image_pull_duration_seconds` | histogram |  | Time a pull took, from resolving the reference to a bootable disk. |
-| `dicer_image_downloaded_bytes_total` | counter |  | Compressed layer bytes downloaded from registries. |
+| `dicer_image_pulled_bytes_total` | counter |  | Compressed layer bytes pulls downloaded from registries. |
 | `dicer_image_conversion_duration_seconds` | histogram |  | Time spent packing an unpacked image into its EROFS disk. |
 | `dicer_image_cache_lookups_total` | counter | `result` | Image lookups by whether this host already held the image. `result` is `hit` or `miss`. |
 | `dicer_image_gc_collected_total` | counter | `reason` | Images garbage collection removed, by reason (unused, size). |
