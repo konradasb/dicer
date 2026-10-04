@@ -58,7 +58,7 @@ func newEventsHandler(t *testing.T) (*eventsHandler, *events.Log) {
 	t.Helper()
 
 	log, err := events.Open(events.Config{
-		Path:   filepath.Join(t.TempDir(), "events.jsonl"),
+		File:   filepath.Join(t.TempDir(), "events.jsonl"),
 		Logger: slog.New(slog.DiscardHandler),
 	})
 	if err != nil {

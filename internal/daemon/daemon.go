@@ -94,7 +94,11 @@ func (d *daemon) Run(ctx context.Context) error {
 
 	// Deferred first so it runs last: the instance manager records events
 	// until it is closed.
-	defer func() { _ = d.events.Close() }()
+	defer func() {
+		if err := d.events.Close(); err != nil {
+			d.logger.Warn("not every event reached the events file", "error", err)
+		}
+	}()
 	defer d.hostnet.Close()
 
 	// Deferred before the instance manager's close, so it runs after: the
@@ -223,7 +227,7 @@ const eventsFile = "events.jsonl"
 func (d *daemon) initServices() error {
 	var err error
 	d.events, err = events.Open(events.Config{
-		Path:     filepath.Join(d.cfg.DataDir, eventsFile),
+		File:     filepath.Join(d.cfg.DataDir, eventsFile),
 		MaxCount: d.cfg.Events.MaxCount,
 		MaxAge:   d.cfg.Events.MaxAge,
 		Logger:   d.logger,
