@@ -10,23 +10,24 @@ import (
 
 	"github.com/docker/go-units"
 
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/types"
 )
 
 // Events records what happens to instances.
 type Events interface {
-	Record(e types.Event)
+	Record(e events.Event)
 }
 
 // discardEvents is the Events used when none is configured.
 type discardEvents struct{}
 
-func (discardEvents) Record(types.Event) {}
+func (discardEvents) Record(events.Event) {}
 
 // record records an event about inst.
-func (m *Manager) record(inst types.InstanceSpec, action types.EventAction, message string, attrs map[string]string) {
-	m.events.Record(types.Event{
-		Kind:       types.KindInstance,
+func (m *Manager) record(inst types.InstanceSpec, action events.Action, message string, attrs map[string]string) {
+	m.events.Record(events.Event{
+		Kind:       events.KindInstance,
 		ID:         inst.ID,
 		Name:       inst.Name,
 		Action:     action,
@@ -48,13 +49,13 @@ func (m *Manager) recordEnd(inst types.InstanceSpec, exit Exit, d decision, ranF
 		after = " after running for " + duration(ranFor)
 	}
 	if exit.Clean() {
-		m.record(inst, types.ActionExited, fmt.Sprintf("Instance exited with code %d%s", *exit.Code, after), attrs)
+		m.record(inst, events.ActionExited, fmt.Sprintf("Instance exited with code %d%s", *exit.Code, after), attrs)
 	} else {
 		message := fmt.Sprintf("Instance failed%s: %v", after, exit.Failure)
 		if d.gaveUp {
 			message += fmt.Sprintf("; restart policy %s gave up after %s", inst.Restart, plural(d.restarts, "restart"))
 		}
-		m.record(inst, types.ActionDied, message, attrs)
+		m.record(inst, events.ActionDied, message, attrs)
 	}
 
 	if d.restart {
@@ -62,7 +63,7 @@ func (m *Manager) recordEnd(inst types.InstanceSpec, exit Exit, d decision, ranF
 		if exit.Clean() {
 			what = "exited"
 		}
-		m.record(inst, types.ActionRestarting,
+		m.record(inst, events.ActionRestarting,
 			fmt.Sprintf("Back-off restarting %s instance in %s (%s)", what, duration(d.delay), restartCount(inst.Restart, d.restarts)),
 			map[string]string{"delay": d.delay.String(), "restart_count": strconv.Itoa(d.restarts)})
 	}

@@ -16,6 +16,7 @@ import (
 	"gvisor.dev/gvisor/pkg/cleanup"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/guest"
 	"github.com/konradasb/dicer/internal/hypervisor"
 	"github.com/konradasb/dicer/internal/types"
@@ -47,7 +48,7 @@ func (m *Manager) Start(ctx context.Context, inst types.InstanceSpec) (err error
 
 	if err := m.boot(ctx, inst, 0); err != nil {
 		m.fail(inst.ID, err)
-		m.record(inst, types.ActionDied, "Failed to start instance: "+err.Error(), nil)
+		m.record(inst, events.ActionDied, "Failed to start instance: "+err.Error(), nil)
 		return err
 	}
 	return nil
@@ -120,7 +121,7 @@ func (m *Manager) boot(ctx context.Context, inst types.InstanceSpec, restarts in
 	message := fmt.Sprintf("%s instance on %s %s in %s%s: %s, %s memory, IP %s, PID %d",
 		verb, inst.Hypervisor(), starter.Version(), duration(time.Since(booting)), why,
 		vcpus(inst.VCPUs), size(inst.MemoryBytes), netSetup.nic.IP, vmm.PID())
-	m.record(inst, types.ActionStarted, message, attrs)
+	m.record(inst, events.ActionStarted, message, attrs)
 
 	m.logger.InfoContext(ctx, "started instance",
 		"instance", inst.Name, "pid", vmm.PID(), "ip", netSetup.nic.IP)

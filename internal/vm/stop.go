@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/types"
 )
 
@@ -52,7 +53,7 @@ func (m *Manager) Stop(ctx context.Context, inst types.InstanceSpec) (err error)
 	if !rt.StartedAt.IsZero() {
 		ranFor = time.Since(rt.StartedAt)
 	}
-	m.record(inst, types.ActionStopped, stopMessage(outcome, m.stopGracePeriod, took, ranFor), nil)
+	m.record(inst, events.ActionStopped, stopMessage(outcome, m.stopGracePeriod, took, ranFor), nil)
 	m.logger.InfoContext(ctx, "stopped instance", "instance", inst.Name)
 
 	m.scheduleRemoval(ctx, inst)

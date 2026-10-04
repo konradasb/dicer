@@ -12,8 +12,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/konradasb/dicer/internal/types"
 )
 
 var t0 = time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)
@@ -38,12 +36,12 @@ func openLog(t *testing.T, cfg Config) (*Log, *time.Time) {
 	return l, &now
 }
 
-func instanceEvent(name string, action types.EventAction) types.Event {
-	return types.Event{Kind: types.KindInstance, ID: "id-" + name, Name: name, Action: action}
+func instanceEvent(name string, action Action) Event {
+	return Event{Kind: KindInstance, ID: "id-" + name, Name: name, Action: action}
 }
 
-func actions(events []types.Event) []types.EventAction {
-	out := make([]types.EventAction, 0, len(events))
+func actions(events []Event) []Action {
+	out := make([]Action, 0, len(events))
 	for _, e := range events {
 		out = append(out, e.Action)
 	}
@@ -53,28 +51,28 @@ func actions(events []types.Event) []types.EventAction {
 func TestRecordAndList(t *testing.T) {
 	l, now := openLog(t, Config{})
 
-	l.Record(instanceEvent("web", types.ActionCreated))
+	l.Record(instanceEvent("web", ActionCreated))
 	*now = now.Add(time.Minute)
-	l.Record(instanceEvent("web", types.ActionStarted))
-	l.Record(types.Event{Kind: types.KindImage, Name: "nginx:1.27", Action: types.ActionPulled})
-	l.Record(instanceEvent("db", types.ActionStarted))
+	l.Record(instanceEvent("web", ActionStarted))
+	l.Record(Event{Kind: KindImage, Name: "nginx:1.27", Action: ActionPulled})
+	l.Record(instanceEvent("db", ActionStarted))
 
-	all := l.List(types.EventFilter{}, 0)
+	all := l.List(Filter{}, 0)
 	if len(all) != 4 || !all[0].Time.Equal(t0) || !all[1].Time.Equal(t0.Add(time.Minute)) {
 		t.Fatalf("List = %+v, want all four, stamped in order", all)
 	}
 
 	tests := []struct {
 		name   string
-		filter types.EventFilter
+		filter Filter
 		limit  int
-		want   []types.EventAction
+		want   []Action
 	}{
-		{"by kind", types.EventFilter{Kind: types.KindImage}, 0, []types.EventAction{types.ActionPulled}},
-		{"by id", types.EventFilter{ID: "id-web"}, 0, []types.EventAction{types.ActionCreated, types.ActionStarted}},
-		{"by name", types.EventFilter{Names: []string{"db"}}, 0, []types.EventAction{types.ActionStarted}},
-		{"since", types.EventFilter{Since: t0.Add(time.Minute)}, 0, []types.EventAction{types.ActionStarted, types.ActionPulled, types.ActionStarted}},
-		{"the last ones", types.EventFilter{}, 2, []types.EventAction{types.ActionPulled, types.ActionStarted}},
+		{"by kind", Filter{Kind: KindImage}, 0, []Action{ActionPulled}},
+		{"by id", Filter{ID: "id-web"}, 0, []Action{ActionCreated, ActionStarted}},
+		{"by name", Filter{Names: []string{"db"}}, 0, []Action{ActionStarted}},
+		{"since", Filter{Since: t0.Add(time.Minute)}, 0, []Action{ActionStarted, ActionPulled, ActionStarted}},
+		{"the last ones", Filter{}, 2, []Action{ActionPulled, ActionStarted}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -89,15 +87,15 @@ func TestRecordAndList(t *testing.T) {
 func TestEventsAreCopied(t *testing.T) {
 	l, _ := openLog(t, Config{})
 
-	e := instanceEvent("web", types.ActionDied)
+	e := instanceEvent("web", ActionDied)
 	e.Attributes = map[string]string{"exit_code": "1"}
 	l.Record(e)
 	e.Attributes["exit_code"] = "changed by the recorder"
 
-	listed := l.List(types.EventFilter{}, 0)
+	listed := l.List(Filter{}, 0)
 	listed[0].Attributes["exit_code"] = "changed by a reader"
 
-	if got := l.List(types.EventFilter{}, 0)[0].Attributes["exit_code"]; got != "1" {
+	if got := l.List(Filter{}, 0)[0].Attributes["exit_code"]; got != "1" {
 		t.Errorf("exit_code = %q, want the event as recorded", got)
 	}
 }
@@ -107,8 +105,8 @@ func TestEventsAreCopied(t *testing.T) {
 func TestEventsSurviveAReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.jsonl")
 	l, _ := openLog(t, Config{Path: path})
-	l.Record(instanceEvent("web", types.ActionStarted))
-	l.Record(instanceEvent("web", types.ActionDied))
+	l.Record(instanceEvent("web", ActionStarted))
+	l.Record(instanceEvent("web", ActionDied))
 	_ = l.Close()
 
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
@@ -119,7 +117,7 @@ func TestEventsSurviveAReopen(t *testing.T) {
 	_ = f.Close()
 
 	reopened, _ := openLog(t, Config{Path: path})
-	if got := actions(reopened.List(types.EventFilter{}, 0)); !slices.Equal(got, []types.EventAction{types.ActionStarted, types.ActionDied}) {
+	if got := actions(reopened.List(Filter{}, 0)); !slices.Equal(got, []Action{ActionStarted, ActionDied}) {
 		t.Errorf("after reopening = %v, want both events", got)
 	}
 }
@@ -128,14 +126,14 @@ func TestEventsSurviveAReopen(t *testing.T) {
 func TestLongEventDoesNotStopTheLogOpening(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.jsonl")
 	l, _ := openLog(t, Config{Path: path})
-	long := instanceEvent("web", types.ActionDied)
+	long := instanceEvent("web", ActionDied)
 	long.Message = strings.Repeat("x", 2<<20)
 	l.Record(long)
-	l.Record(instanceEvent("web", types.ActionStarted))
+	l.Record(instanceEvent("web", ActionStarted))
 	_ = l.Close()
 
 	reopened, _ := openLog(t, Config{Path: path})
-	if got := actions(reopened.List(types.EventFilter{}, 0)); !slices.Equal(got, []types.EventAction{types.ActionDied, types.ActionStarted}) {
+	if got := actions(reopened.List(Filter{}, 0)); !slices.Equal(got, []Action{ActionDied, ActionStarted}) {
 		t.Errorf("after reopening = %v, want both events", got)
 	}
 }
@@ -146,12 +144,12 @@ func TestRetentionByCount(t *testing.T) {
 	l, _ := openLog(t, Config{Path: path, MaxCount: maxCount})
 
 	for range 10 {
-		l.Record(instanceEvent("web", types.ActionStarted))
+		l.Record(instanceEvent("web", ActionStarted))
 	}
-	l.Record(instanceEvent("web", types.ActionStopped))
+	l.Record(instanceEvent("web", ActionStopped))
 
-	kept := l.List(types.EventFilter{}, 0)
-	if len(kept) != maxCount || kept[maxCount-1].Action != types.ActionStopped {
+	kept := l.List(Filter{}, 0)
+	if len(kept) != maxCount || kept[maxCount-1].Action != ActionStopped {
 		t.Errorf("kept %d events ending in %v, want the last 4", len(kept), kept[len(kept)-1].Action)
 	}
 
@@ -168,11 +166,11 @@ func TestRetentionByCount(t *testing.T) {
 func TestRetentionByAge(t *testing.T) {
 	l, now := openLog(t, Config{MaxAge: time.Hour})
 
-	l.Record(instanceEvent("web", types.ActionStarted))
+	l.Record(instanceEvent("web", ActionStarted))
 	*now = now.Add(2 * time.Hour)
-	l.Record(instanceEvent("web", types.ActionStopped))
+	l.Record(instanceEvent("web", ActionStopped))
 
-	if got := actions(l.List(types.EventFilter{}, 0)); !slices.Equal(got, []types.EventAction{types.ActionStopped}) {
+	if got := actions(l.List(Filter{}, 0)); !slices.Equal(got, []Action{ActionStopped}) {
 		t.Errorf("kept %v, want only the event under an hour old", got)
 	}
 }
@@ -181,21 +179,21 @@ func TestRetentionByAge(t *testing.T) {
 // nothing missed and nothing twice between the two.
 func TestSubscribe(t *testing.T) {
 	l, _ := openLog(t, Config{})
-	l.Record(instanceEvent("web", types.ActionCreated))
-	l.Record(instanceEvent("db", types.ActionCreated))
+	l.Record(instanceEvent("web", ActionCreated))
+	l.Record(instanceEvent("db", ActionCreated))
 
-	history, sub := l.Subscribe(types.EventFilter{Names: []string{"web"}}, 0)
+	history, sub := l.Subscribe(Filter{Names: []string{"web"}}, 0)
 	defer sub.Close()
 
-	l.Record(instanceEvent("db", types.ActionStarted))
-	l.Record(instanceEvent("web", types.ActionStarted))
+	l.Record(instanceEvent("db", ActionStarted))
+	l.Record(instanceEvent("web", ActionStarted))
 
-	if got := actions(history); !slices.Equal(got, []types.EventAction{types.ActionCreated}) {
+	if got := actions(history); !slices.Equal(got, []Action{ActionCreated}) {
 		t.Errorf("history = %v, want web's creation", got)
 	}
 	select {
 	case e := <-sub.Events():
-		if e.Name != "web" || e.Action != types.ActionStarted {
+		if e.Name != "web" || e.Action != ActionStarted {
 			t.Errorf("followed %+v, want web started", e)
 		}
 	case <-time.After(time.Second):
@@ -212,12 +210,12 @@ func TestSubscribe(t *testing.T) {
 // lifecycle that records the events.
 func TestSlowSubscriberIsCutOff(t *testing.T) {
 	l, _ := openLog(t, Config{})
-	_, sub := l.Subscribe(types.EventFilter{}, 0)
+	_, sub := l.Subscribe(Filter{}, 0)
 
 	done := make(chan struct{})
 	go func() {
 		for range subscriberBuffer + 10 {
-			l.Record(instanceEvent("web", types.ActionStarted))
+			l.Record(instanceEvent("web", ActionStarted))
 		}
 		close(done)
 	}()
@@ -237,7 +235,7 @@ func TestSlowSubscriberIsCutOff(t *testing.T) {
 
 func TestCloseEndsSubscriptions(t *testing.T) {
 	l, _ := openLog(t, Config{})
-	_, sub := l.Subscribe(types.EventFilter{}, 0)
+	_, sub := l.Subscribe(Filter{}, 0)
 
 	if err := l.Close(); err != nil {
 		t.Fatal(err)

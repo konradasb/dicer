@@ -15,7 +15,6 @@ import (
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
-	"github.com/konradasb/dicer/internal/types"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -71,10 +70,10 @@ func newEventsHandler(t *testing.T) (*eventsHandler, *events.Log) {
 
 func TestGetEventsHistory(t *testing.T) {
 	h, log := newEventsHandler(t)
-	log.Record(types.Event{Kind: types.KindInstance, ID: "1", Name: "web", Action: types.ActionCreated})
-	log.Record(types.Event{Kind: types.KindImage, Name: "nginx", Action: types.ActionPulled})
-	log.Record(types.Event{
-		Kind: types.KindInstance, ID: "1", Name: "web", Action: types.ActionDied,
+	log.Record(events.Event{Kind: events.KindInstance, ID: "1", Name: "web", Action: events.ActionCreated})
+	log.Record(events.Event{Kind: events.KindImage, Name: "nginx", Action: events.ActionPulled})
+	log.Record(events.Event{
+		Kind: events.KindInstance, ID: "1", Name: "web", Action: events.ActionDied,
 		Message: "exit code 1", Attributes: map[string]string{"exit_code": "1"},
 	})
 
@@ -100,7 +99,7 @@ func TestGetEventsBatchesTheHistory(t *testing.T) {
 	}
 
 	for range eventBatch + 1 {
-		log.Record(types.Event{Kind: types.KindInstance, Name: "web", Action: types.ActionStarted})
+		log.Record(events.Event{Kind: events.KindInstance, Name: "web", Action: events.ActionStarted})
 	}
 	sent := history(t, h, &dicerdv1.GetEventsRequest{})
 	if len(sent) != 2 || len(sent[0].GetEvents()) != eventBatch || sent[0].GetCaughtUp() ||
@@ -112,8 +111,8 @@ func TestGetEventsBatchesTheHistory(t *testing.T) {
 // An image is known by its full reference, and found by the short one too.
 func TestGetEventsFindsAnImageByItsShortName(t *testing.T) {
 	h, log := newEventsHandler(t)
-	log.Record(types.Event{Kind: types.KindImage, Name: "docker.io/library/busybox:latest", Action: types.ActionPulled})
-	log.Record(types.Event{Kind: types.KindInstance, Name: "web", Action: types.ActionStarted})
+	log.Record(events.Event{Kind: events.KindImage, Name: "docker.io/library/busybox:latest", Action: events.ActionPulled})
+	log.Record(events.Event{Kind: events.KindInstance, Name: "web", Action: events.ActionStarted})
 
 	for _, name := range []string{"busybox", "busybox:latest", "docker.io/library/busybox:latest"} {
 		sent := history(t, h, &dicerdv1.GetEventsRequest{Name: name})
@@ -130,7 +129,7 @@ func TestGetEventsFindsAnImageByItsShortName(t *testing.T) {
 // goes.
 func TestGetEventsFollow(t *testing.T) {
 	h, log := newEventsHandler(t)
-	log.Record(types.Event{Kind: types.KindInstance, Name: "web", Action: types.ActionStarted})
+	log.Record(events.Event{Kind: events.KindInstance, Name: "web", Action: events.ActionStarted})
 
 	ctx, cancel := context.WithCancel(t.Context())
 	stream := newEventStream(ctx)
@@ -149,7 +148,7 @@ func TestGetEventsFollow(t *testing.T) {
 	if resp := next(); !resp.GetCaughtUp() || len(resp.GetEvents()) != 1 || resp.GetEvents()[0].GetAction() != dicerdv1.EventAction_EVENT_ACTION_STARTED {
 		t.Errorf("first = %v, want the history, caught up", resp)
 	}
-	log.Record(types.Event{Kind: types.KindInstance, Name: "web", Action: types.ActionStopped})
+	log.Record(events.Event{Kind: events.KindInstance, Name: "web", Action: events.ActionStopped})
 	if resp := next(); len(resp.GetEvents()) != 1 || resp.GetEvents()[0].GetAction() != dicerdv1.EventAction_EVENT_ACTION_STOPPED {
 		t.Errorf("then = %v, want the new event", resp)
 	}

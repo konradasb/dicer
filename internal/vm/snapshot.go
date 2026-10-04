@@ -19,6 +19,7 @@ import (
 
 	"github.com/konradasb/dicer/internal/atomicfile"
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/guest"
 	"github.com/konradasb/dicer/internal/hypervisor"
 	"github.com/konradasb/dicer/internal/image/reference"
@@ -88,7 +89,7 @@ func (m *Manager) CreateSnapshot(
 		return types.Snapshot{}, err
 	}
 
-	m.record(inst, types.ActionSnapshotCreated, fmt.Sprintf("Created snapshot %q of memory and disk in %s: %s", name, duration(time.Since(started)), size(snap.SizeBytes)),
+	m.record(inst, events.ActionSnapshotCreated, fmt.Sprintf("Created snapshot %q of memory and disk in %s: %s", name, duration(time.Since(started)), size(snap.SizeBytes)),
 		map[string]string{"snapshot": name, "size_bytes": strconv.FormatInt(snap.SizeBytes, 10)})
 	m.logger.InfoContext(ctx, "created snapshot",
 		"instance", inst.Name, "snapshot", name, "size_bytes", snap.SizeBytes)
@@ -211,7 +212,7 @@ func (m *Manager) DeleteSnapshot(ctx context.Context, inst types.InstanceSpec, n
 		return fmt.Errorf("remove %s: %w", dir, err)
 	}
 
-	m.record(inst, types.ActionSnapshotDeleted, fmt.Sprintf("Deleted snapshot %q", name), map[string]string{"snapshot": name})
+	m.record(inst, events.ActionSnapshotDeleted, fmt.Sprintf("Deleted snapshot %q", name), map[string]string{"snapshot": name})
 	m.logger.InfoContext(ctx, "deleted snapshot", "instance", inst.Name, "snapshot", name)
 
 	return nil
@@ -289,7 +290,7 @@ func (m *Manager) RestoreSnapshot(ctx context.Context, inst types.InstanceSpec, 
 	cu.Release()
 	m.supervise(ctx, inst, vmm, running)
 
-	m.record(inst, types.ActionSnapshotRestored, fmt.Sprintf("Restored instance from snapshot %q taken %s in %s: memory and disk rolled back",
+	m.record(inst, events.ActionSnapshotRestored, fmt.Sprintf("Restored instance from snapshot %q taken %s in %s: memory and disk rolled back",
 		name, snap.CreatedAt.Local().Format(time.DateTime), duration(time.Since(started))),
 		map[string]string{"snapshot": name})
 	m.logger.InfoContext(ctx, "restored snapshot",

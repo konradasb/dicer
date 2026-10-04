@@ -12,7 +12,6 @@ import (
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/image/reference"
-	"github.com/konradasb/dicer/internal/types"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -37,7 +36,7 @@ func (h *eventsHandler) GetEvents(
 	if err != nil {
 		return err
 	}
-	filter := types.EventFilter{
+	filter := events.Filter{
 		Kind:  kind,
 		ID:    req.GetId(),
 		Names: eventNames(req.GetName()),
@@ -91,7 +90,7 @@ func eventNames(name string) []string {
 
 // sendHistory sends list in batches, the last marked caught up. An empty
 // history is sent as one empty batch.
-func sendHistory(stream grpc.ServerStreamingServer[dicerdv1.GetEventsResponse], list []types.Event) error {
+func sendHistory(stream grpc.ServerStreamingServer[dicerdv1.GetEventsResponse], list []events.Event) error {
 	for {
 		n := min(len(list), eventBatch)
 		resp := &dicerdv1.GetEventsResponse{
@@ -111,7 +110,7 @@ func sendHistory(stream grpc.ServerStreamingServer[dicerdv1.GetEventsResponse], 
 	}
 }
 
-func eventToProto(e types.Event) *dicerdv1.Event {
+func eventToProto(e events.Event) *dicerdv1.Event {
 	return &dicerdv1.Event{
 		Time:       timestamppb.New(e.Time),
 		Kind:       eventKinds.toProto(e.Kind),

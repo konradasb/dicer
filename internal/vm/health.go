@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/guest"
 	"github.com/konradasb/dicer/internal/process"
 	"github.com/konradasb/dicer/internal/types"
@@ -205,10 +206,10 @@ func (m *Manager) handleUnhealthy(ctx context.Context, inst types.InstanceSpec, 
 func (m *Manager) recordHealth(inst types.InstanceSpec, check types.HealthCheck, state types.Health) {
 	switch state.Status {
 	case types.HealthHealthy:
-		m.record(inst, types.ActionHealthy,
+		m.record(inst, events.ActionHealthy,
 			fmt.Sprintf("Health check %q passed: %s", check.String(), firstLine(state.LastOutput)), nil)
 	case types.HealthUnhealthy:
-		m.record(inst, types.ActionUnhealthy,
+		m.record(inst, events.ActionUnhealthy,
 			fmt.Sprintf("Health check %q failed %d times in a row: %s",
 				check.String(), state.FailingStreak, firstLine(state.LastOutput)),
 			map[string]string{"failing_streak": strconv.Itoa(state.FailingStreak)})

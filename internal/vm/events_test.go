@@ -10,11 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/types"
 )
 
 // waitForAction polls until action has been recorded.
-func (h *harness) waitForAction(t *testing.T, action types.EventAction) types.Event {
+func (h *harness) waitForAction(t *testing.T, action events.Action) events.Event {
 	t.Helper()
 
 	deadline := time.Now().Add(10 * time.Second)
@@ -55,9 +56,9 @@ func TestLifecycleIsRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := []types.EventAction{
-		types.ActionCreated, types.ActionStarted, types.ActionPaused, types.ActionResumed,
-		types.ActionStopped, types.ActionUpdated, types.ActionDeleted,
+	want := []events.Action{
+		events.ActionCreated, events.ActionStarted, events.ActionPaused, events.ActionResumed,
+		events.ActionStopped, events.ActionUpdated, events.ActionDeleted,
 	}
 	if got := h.events.actions(); !slices.Equal(got, want) {
 		t.Errorf("recorded %v, want %v", got, want)
@@ -67,16 +68,16 @@ func TestLifecycleIsRecorded(t *testing.T) {
 	if bare := h.events.undescribed(); len(bare) > 0 {
 		t.Errorf("events with no description: %+v", bare)
 	}
-	stopped, _ := h.events.last(types.ActionStopped)
+	stopped, _ := h.events.last(events.ActionStopped)
 	if !strings.HasPrefix(stopped.Message, "Stopped instance after running for ") {
 		t.Errorf("stopped = %q, want how the guest was ended", stopped.Message)
 	}
 
-	first, _ := h.events.last(types.ActionCreated)
-	if first.Kind != types.KindInstance || first.ID != "new-id" || first.Name != "new" {
+	first, _ := h.events.last(events.ActionCreated)
+	if first.Kind != events.KindInstance || first.ID != "new-id" || first.Name != "new" {
 		t.Errorf("created = %+v, want the new instance", first)
 	}
-	started, _ := h.events.last(types.ActionStarted)
+	started, _ := h.events.last(events.ActionStarted)
 	if started.ID != h.inst.ID || started.Name != h.inst.Name {
 		t.Errorf("started = %+v, want it about %s", started, h.inst.Name)
 	}
@@ -93,13 +94,13 @@ func TestCrashAndRestartAreRecorded(t *testing.T) {
 	h.crash(t)
 	h.waitForVMMs(t, 2)
 	h.waitForState(t, types.StateRunning)
-	restarted, _ := h.events.last(types.ActionStarted)
+	restarted, _ := h.events.last(events.ActionStarted)
 
-	died, _ := h.events.last(types.ActionDied)
+	died, _ := h.events.last(events.ActionDied)
 	if !strings.Contains(died.Message, "exited unexpectedly") {
 		t.Errorf("died = %q, want why", died.Message)
 	}
-	restarting, _ := h.events.last(types.ActionRestarting)
+	restarting, _ := h.events.last(events.ActionRestarting)
 	if restarting.Attributes["restart_count"] != "1" || restarting.Attributes["delay"] == "" {
 		t.Errorf("restarting = %+v, want the restart count and delay", restarting.Attributes)
 	}
@@ -117,11 +118,11 @@ func TestCleanExitIsRecorded(t *testing.T) {
 	h.start(t)
 
 	h.exit(t, 0)
-	exited := h.waitForAction(t, types.ActionExited)
+	exited := h.waitForAction(t, events.ActionExited)
 	if exited.Attributes["exit_code"] != "0" {
 		t.Errorf("exited = %+v, want its exit code", exited.Attributes)
 	}
-	if _, ok := h.events.last(types.ActionDied); ok {
+	if _, ok := h.events.last(events.ActionDied); ok {
 		t.Error("a clean exit was recorded as a death")
 	}
 }
@@ -133,7 +134,7 @@ func TestFailedStartIsRecorded(t *testing.T) {
 	if err := h.mgr.Start(t.Context(), h.inst); err == nil {
 		t.Fatal("Start succeeded")
 	}
-	died, ok := h.events.last(types.ActionDied)
+	died, ok := h.events.last(events.ActionDied)
 	if !ok || !strings.HasPrefix(died.Message, "Failed to start instance: ") || !strings.Contains(died.Message, "no hypervisor today") {
 		t.Errorf("died = %+v, want the failed start and why", died)
 	}
@@ -144,13 +145,13 @@ func TestHealthVerdictsAreRecorded(t *testing.T) {
 	h, probe := monitored(t, types.RestartPolicy{}, false)
 	h.start(t)
 
-	unhealthy := h.waitForAction(t, types.ActionUnhealthy)
+	unhealthy := h.waitForAction(t, events.ActionUnhealthy)
 	if !strings.Contains(unhealthy.Message, "connection refused") {
 		t.Errorf("unhealthy = %q, want what the probe said", unhealthy.Message)
 	}
 
 	probe.set(true, nil)
-	healthy := h.waitForAction(t, types.ActionHealthy)
+	healthy := h.waitForAction(t, events.ActionHealthy)
 	if !strings.Contains(healthy.Message, "ok") {
 		t.Errorf("healthy = %q, want what the probe answered", healthy.Message)
 	}
@@ -167,8 +168,8 @@ func TestSnapshotsAreRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	created, _ := h.events.last(types.ActionSnapshotCreated)
-	deleted, _ := h.events.last(types.ActionSnapshotDeleted)
+	created, _ := h.events.last(events.ActionSnapshotCreated)
+	deleted, _ := h.events.last(events.ActionSnapshotDeleted)
 	if created.Attributes["snapshot"] != "before" || deleted.Attributes["snapshot"] != "before" {
 		t.Errorf("snapshot events = %+v, %+v; want them to name the snapshot", created, deleted)
 	}

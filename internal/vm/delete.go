@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/types"
 )
 
@@ -52,7 +53,7 @@ func (m *Manager) Delete(ctx context.Context, inst types.InstanceSpec, force boo
 		return fmt.Errorf("delete instance %q: %w", inst.Name, err)
 	}
 
-	m.record(inst, types.ActionDeleted,
+	m.record(inst, events.ActionDeleted,
 		"Deleted instance: removed its definition, disks and snapshots; released its address on network "+inst.NetworkName, nil)
 	m.logger.InfoContext(ctx, "deleted instance", "instance", inst.Name)
 	return nil

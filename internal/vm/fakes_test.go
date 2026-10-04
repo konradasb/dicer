@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/hypervisor"
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/process"
@@ -609,21 +610,21 @@ func (f *fakeProbe) count() int {
 // fakeEvents remembers the events it is given.
 type fakeEvents struct {
 	mu     sync.Mutex
-	events []types.Event
+	events []events.Event
 }
 
-func (f *fakeEvents) Record(e types.Event) {
+func (f *fakeEvents) Record(e events.Event) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.events = append(f.events, e)
 }
 
 // undescribed returns the events recorded without a description.
-func (f *fakeEvents) undescribed() []types.Event {
+func (f *fakeEvents) undescribed() []events.Event {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	var out []types.Event
+	var out []events.Event
 	for _, e := range f.events {
 		if e.Message == "" {
 			out = append(out, e)
@@ -633,11 +634,11 @@ func (f *fakeEvents) undescribed() []types.Event {
 }
 
 // actions returns the actions recorded so far, in order.
-func (f *fakeEvents) actions() []types.EventAction {
+func (f *fakeEvents) actions() []events.Action {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	out := make([]types.EventAction, 0, len(f.events))
+	out := make([]events.Action, 0, len(f.events))
 	for _, e := range f.events {
 		out = append(out, e.Action)
 	}
@@ -645,7 +646,7 @@ func (f *fakeEvents) actions() []types.EventAction {
 }
 
 // last returns the last event with action, and whether there is one.
-func (f *fakeEvents) last(action types.EventAction) (types.Event, bool) {
+func (f *fakeEvents) last(action events.Action) (events.Event, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -654,5 +655,5 @@ func (f *fakeEvents) last(action types.EventAction) (types.Event, bool) {
 			return e, true
 		}
 	}
-	return types.Event{}, false
+	return events.Event{}, false
 }

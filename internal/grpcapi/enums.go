@@ -5,6 +5,7 @@ package grpcapi
 
 import (
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/types"
 	"github.com/konradasb/dicer/internal/vm"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
@@ -96,30 +97,30 @@ var architectures = enum[string, dicerdv1.Architecture]{"architecture", map[stri
 	types.ArchAArch64: dicerdv1.Architecture_ARCHITECTURE_AARCH64,
 }}
 
-var eventKinds = enum[types.EventKind, dicerdv1.EventKind]{"event kind", map[types.EventKind]dicerdv1.EventKind{
-	types.KindInstance: dicerdv1.EventKind_EVENT_KIND_INSTANCE,
-	types.KindImage:    dicerdv1.EventKind_EVENT_KIND_IMAGE,
+var eventKinds = enum[events.Kind, dicerdv1.EventKind]{"event kind", map[events.Kind]dicerdv1.EventKind{
+	events.KindInstance: dicerdv1.EventKind_EVENT_KIND_INSTANCE,
+	events.KindImage:    dicerdv1.EventKind_EVENT_KIND_IMAGE,
 }}
 
-var eventActions = enum[types.EventAction, dicerdv1.EventAction]{"event action", map[types.EventAction]dicerdv1.EventAction{
-	types.ActionCreated:          dicerdv1.EventAction_EVENT_ACTION_CREATED,
-	types.ActionUpdated:          dicerdv1.EventAction_EVENT_ACTION_UPDATED,
-	types.ActionDeleted:          dicerdv1.EventAction_EVENT_ACTION_DELETED,
-	types.ActionStarted:          dicerdv1.EventAction_EVENT_ACTION_STARTED,
-	types.ActionStopped:          dicerdv1.EventAction_EVENT_ACTION_STOPPED,
-	types.ActionPaused:           dicerdv1.EventAction_EVENT_ACTION_PAUSED,
-	types.ActionResumed:          dicerdv1.EventAction_EVENT_ACTION_RESUMED,
-	types.ActionExited:           dicerdv1.EventAction_EVENT_ACTION_EXITED,
-	types.ActionDied:             dicerdv1.EventAction_EVENT_ACTION_DIED,
-	types.ActionRestarting:       dicerdv1.EventAction_EVENT_ACTION_RESTARTING,
-	types.ActionRenamed:          dicerdv1.EventAction_EVENT_ACTION_RENAMED,
-	types.ActionHealthy:          dicerdv1.EventAction_EVENT_ACTION_HEALTHY,
-	types.ActionUnhealthy:        dicerdv1.EventAction_EVENT_ACTION_UNHEALTHY,
-	types.ActionSnapshotCreated:  dicerdv1.EventAction_EVENT_ACTION_SNAPSHOT_CREATED,
-	types.ActionSnapshotRestored: dicerdv1.EventAction_EVENT_ACTION_SNAPSHOT_RESTORED,
-	types.ActionSnapshotDeleted:  dicerdv1.EventAction_EVENT_ACTION_SNAPSHOT_DELETED,
-	types.ActionPulled:           dicerdv1.EventAction_EVENT_ACTION_PULLED,
-	types.ActionCollected:        dicerdv1.EventAction_EVENT_ACTION_COLLECTED,
+var eventActions = enum[events.Action, dicerdv1.EventAction]{"event action", map[events.Action]dicerdv1.EventAction{
+	events.ActionCreated:          dicerdv1.EventAction_EVENT_ACTION_CREATED,
+	events.ActionUpdated:          dicerdv1.EventAction_EVENT_ACTION_UPDATED,
+	events.ActionDeleted:          dicerdv1.EventAction_EVENT_ACTION_DELETED,
+	events.ActionStarted:          dicerdv1.EventAction_EVENT_ACTION_STARTED,
+	events.ActionStopped:          dicerdv1.EventAction_EVENT_ACTION_STOPPED,
+	events.ActionPaused:           dicerdv1.EventAction_EVENT_ACTION_PAUSED,
+	events.ActionResumed:          dicerdv1.EventAction_EVENT_ACTION_RESUMED,
+	events.ActionExited:           dicerdv1.EventAction_EVENT_ACTION_EXITED,
+	events.ActionDied:             dicerdv1.EventAction_EVENT_ACTION_DIED,
+	events.ActionRestarting:       dicerdv1.EventAction_EVENT_ACTION_RESTARTING,
+	events.ActionRenamed:          dicerdv1.EventAction_EVENT_ACTION_RENAMED,
+	events.ActionHealthy:          dicerdv1.EventAction_EVENT_ACTION_HEALTHY,
+	events.ActionUnhealthy:        dicerdv1.EventAction_EVENT_ACTION_UNHEALTHY,
+	events.ActionSnapshotCreated:  dicerdv1.EventAction_EVENT_ACTION_SNAPSHOT_CREATED,
+	events.ActionSnapshotRestored: dicerdv1.EventAction_EVENT_ACTION_SNAPSHOT_RESTORED,
+	events.ActionSnapshotDeleted:  dicerdv1.EventAction_EVENT_ACTION_SNAPSHOT_DELETED,
+	events.ActionPulled:           dicerdv1.EventAction_EVENT_ACTION_PULLED,
+	events.ActionCollected:        dicerdv1.EventAction_EVENT_ACTION_COLLECTED,
 }}
 
 var logSources = enum[vm.LogSource, dicerdv1.LogSource]{"log source", map[vm.LogSource]dicerdv1.LogSource{

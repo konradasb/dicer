@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/image/reference"
 	"github.com/konradasb/dicer/internal/types"
 )
@@ -41,7 +42,7 @@ func (m *Manager) Update(ctx context.Context, updated types.InstanceSpec) error 
 	if err := m.definitions.UpdateInstance(updated); err != nil {
 		return fmt.Errorf("update instance %q: %w", current.Name, err)
 	}
-	m.record(updated, types.ActionUpdated, updateMessage(current, updated, rt.State), nil)
+	m.record(updated, events.ActionUpdated, updateMessage(current, updated, rt.State), nil)
 
 	if current.NetworkName != updated.NetworkName || current.StaticIP != updated.StaticIP {
 		if err := m.addresses.Release(current.NetworkName, current.ID); err != nil {

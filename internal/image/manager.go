@@ -20,6 +20,7 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/image/reference"
 	"github.com/konradasb/dicer/internal/registry"
 	"github.com/konradasb/dicer/internal/types"
@@ -253,7 +254,7 @@ func (m *Manager) Delete(ref string) error {
 	if err := m.deleteImage(digestHex(img.Digest)); err != nil {
 		m.logger.Warn("failed to delete image files", "digest", img.Digest, "error", err)
 	}
-	m.record(img, types.ActionDeleted, fmt.Sprintf("Deleted image %s (%s): %s boot disk removed",
+	m.record(img, events.ActionDeleted, fmt.Sprintf("Deleted image %s (%s): %s boot disk removed",
 		img.Name, shortDigest(img.Digest), humanSize(img.SizeBytes)), map[string]string{"by": "user"})
 
 	return nil
@@ -384,7 +385,7 @@ func (m *Manager) executePull(
 	if n := downloaded.total(); n > 0 {
 		fetched = "downloaded " + humanSize(n)
 	}
-	m.record(img, types.ActionPulled, fmt.Sprintf("Pulled image %s (%s) in %s: %s, %s boot disk",
+	m.record(img, events.ActionPulled, fmt.Sprintf("Pulled image %s (%s) in %s: %s, %s boot disk",
 		resolved.String(), shortDigest(digest), roundDuration(time.Since(started)), fetched, humanSize(sizeBytes)),
 		map[string]string{"size_bytes": strconv.FormatInt(sizeBytes, 10)})
 	m.logger.InfoContext(ctx, "image ready",

@@ -1,8 +1,8 @@
 // Copyright 2026 Dicer Authors
 // SPDX-License-Identifier: MIT
 
-// Package events keeps the log of types.Events recorded on this host and
-// delivers new ones to subscribers.
+// Package events defines the events recorded about what happens on this
+// host, keeps their log, and delivers new ones to subscribers.
 package events
 
 import (
@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/konradasb/dicer/internal/atomicfile"
-	"github.com/konradasb/dicer/internal/types"
 )
 
 // DefaultMaxCount is how many events a Log keeps unless told otherwise.
@@ -62,8 +61,8 @@ type Log struct {
 
 	mu      sync.Mutex
 	file    *os.File
-	events  []types.Event // oldest first
-	written int           // events in the file, kept or not
+	events  []Event // oldest first
+	written int     // events in the file, kept or not
 	subs    map[*Subscription]struct{}
 }
 
@@ -109,7 +108,7 @@ func (l *Log) load() error {
 		if len(bytes.TrimSpace(line)) == 0 {
 			continue
 		}
-		var e types.Event
+		var e Event
 		if err := json.Unmarshal(line, &e); err != nil {
 			l.logger.Warn("skipping an unreadable event", "error", err)
 			continue
@@ -121,7 +120,7 @@ func (l *Log) load() error {
 
 // Record timestamps e if needed, keeps it, and passes it to every matching
 // subscriber. Write errors are logged.
-func (l *Log) Record(e types.Event) {
+func (l *Log) Record(e Event) {
 	if e.Time.IsZero() {
 		e.Time = l.now()
 	}
@@ -150,7 +149,7 @@ func (l *Log) Record(e types.Event) {
 }
 
 // append writes e to the end of the file. The caller must hold l.mu.
-func (l *Log) append(e types.Event) error {
+func (l *Log) append(e Event) error {
 	if l.file == nil {
 		return errors.New("the events file is not open")
 	}
@@ -212,15 +211,15 @@ func (l *Log) compact() error {
 
 // List returns the events f picks, oldest first: the last limit of them, or
 // all if limit is zero.
-func (l *Log) List(f types.EventFilter, limit int) []types.Event {
+func (l *Log) List(f Filter, limit int) []Event {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.list(f, limit)
 }
 
 // list is List. The caller must hold l.mu.
-func (l *Log) list(f types.EventFilter, limit int) []types.Event {
-	var out []types.Event
+func (l *Log) list(f Filter, limit int) []Event {
+	var out []Event
 	for _, e := range l.events {
 		if f.Matches(e) {
 			out = append(out, clone(e))
@@ -234,10 +233,10 @@ func (l *Log) list(f types.EventFilter, limit int) []types.Event {
 
 // Subscribe returns the events f matches so far and a subscription to later
 // ones, with no gap or overlap. The caller must Close the subscription.
-func (l *Log) Subscribe(f types.EventFilter, limit int) ([]types.Event, *Subscription) {
+func (l *Log) Subscribe(f Filter, limit int) ([]Event, *Subscription) {
 	sub := &Subscription{
 		filter: f,
-		events: make(chan types.Event, subscriberBuffer),
+		events: make(chan Event, subscriberBuffer),
 		done:   make(chan struct{}),
 		log:    l,
 	}
@@ -267,8 +266,8 @@ func (l *Log) Close() error {
 
 // Subscription receives the events recorded after it was made.
 type Subscription struct {
-	filter types.EventFilter
-	events chan types.Event
+	filter Filter
+	events chan Event
 	log    *Log
 
 	// done is closed when the subscription ends; err says why, nil for a
@@ -279,7 +278,7 @@ type Subscription struct {
 
 // Events returns the events as they are recorded. It is closed when the
 // subscription ends; Err then says why.
-func (s *Subscription) Events() <-chan types.Event { return s.events }
+func (s *Subscription) Events() <-chan Event { return s.events }
 
 // Err returns why the subscription ended, once Events is closed:
 // ErrFellBehind, or nil.
@@ -298,7 +297,7 @@ func (s *Subscription) Close() {
 // send passes e on, or ends a subscription whose reader has fallen too far
 // behind: the log must not wait on a slow reader. The caller must hold the
 // log's lock.
-func (s *Subscription) send(e types.Event) {
+func (s *Subscription) send(e Event) {
 	select {
 	case s.events <- e:
 	default:
@@ -320,7 +319,7 @@ func (s *Subscription) end(err error) {
 
 // clone returns e with a copy of its attributes, so that what one holder of
 // an event does to them does not reach another's.
-func clone(e types.Event) types.Event {
+func clone(e Event) Event {
 	e.Attributes = maps.Clone(e.Attributes)
 
 	return e

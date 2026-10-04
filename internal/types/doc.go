@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Package types is the daemon's model of what it manages: instances,
-// images, networks, volumes, kernels, snapshots and the events about them.
+// images, networks, volumes, kernels and snapshots.
 //
 // It is the daemon's alone. Clients see the API's messages in
 // proto/dicerd/v1, which internal/grpcapi converts these to and from; the
