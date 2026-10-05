@@ -30,6 +30,7 @@ The common commands are shortcuts for the management commands most used: `dicer 
 | [`dicer ps`]({{< relref "/docs/reference/cli/dicer_ps" >}}) | List instances. |
 | [`dicer pull`]({{< relref "/docs/reference/cli/dicer_pull" >}}) | Pull an image and convert it to a bootable disk. |
 | [`dicer rename`]({{< relref "/docs/reference/cli/dicer_rename" >}}) | Rename a stopped instance. |
+| [`dicer resize`]({{< relref "/docs/reference/cli/dicer_resize" >}}) | Change a running instance's vCPUs and memory. |
 | [`dicer restart`]({{< relref "/docs/reference/cli/dicer_restart" >}}) | Stop one or more instances if they are running, then start them. |
 | [`dicer resume`]({{< relref "/docs/reference/cli/dicer_resume" >}}) | Resume one or more paused instances. |
 | [`dicer rm`]({{< relref "/docs/reference/cli/dicer_rm" >}}) | Delete one or more instances, or all of them. |

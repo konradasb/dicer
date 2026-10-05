@@ -134,6 +134,7 @@ func newInstanceCommand() *cobra.Command {
 		newInstanceCreateCommand(),
 		newInstanceRunCommand(),
 		newInstanceUpdateCommand(),
+		newInstanceResizeCommand(),
 		newInstanceRenameCommand(),
 		newInstanceStartCommand(),
 		newInstanceStopCommand(),

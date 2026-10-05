@@ -54,6 +54,7 @@ was, and whose message says it for a person:
 | `StopInstance` | [`StopInstanceRequest`](#stopinstancerequest) | [`Instance`](#instance) | StopInstance shuts a running instance down, keeping its definition, overlay disk and address. |
 | `PauseInstance` | [`PauseInstanceRequest`](#pauseinstancerequest) | [`Instance`](#instance) | PauseInstance halts a running instance's vCPUs, keeping it resident. |
 | `ResumeInstance` | [`ResumeInstanceRequest`](#resumeinstancerequest) | [`Instance`](#instance) | ResumeInstance continues a paused instance. |
+| `ResizeInstance` | [`ResizeInstanceRequest`](#resizeinstancerequest) | [`Instance`](#instance) | ResizeInstance changes a running instance's vCPUs and memory without restarting it, within its max_vcpus and max_memory_bytes, and its definition with them, so it keeps them when it next starts. Memory can be resized from what the instance booted with up to its maximum, in steps of 2 MiB, and waits for the guest where the hypervisor can tell: Firecracker can, Cloud Hypervisor cannot; Firecracker also needs a host CPU with at least 40 bits of physical address. vCPUs can be resized on Cloud Hypervisor only. The guest's kernel must support virtio-mem and CPU hotplug. Growing needs room on the host (RESOURCE_EXHAUSTED). If the guest fails the resize, the instance holds the larger of the two sizes until it next starts. |
 | `DeleteInstance` | [`DeleteInstanceRequest`](#deleteinstancerequest) | `google.protobuf.Empty` | DeleteInstance removes an instance and its overlay disk. It refuses a running instance unless force is set. |
 | `ListInstances` | [`ListInstancesRequest`](#listinstancesrequest) | [`ListInstancesResponse`](#listinstancesresponse) | ListInstances returns every defined instance. |
 | `GetInstance` | [`GetInstanceRequest`](#getinstancerequest) | [`Instance`](#instance) | GetInstance returns one instance. |
@@ -134,6 +135,8 @@ CopyToInstanceStart is the first message on a CopyToInstance stream.
 | `kernel_args` | `string` |  |
 | `vcpus` | `int32` |  |
 | `memory_bytes` | `int64` |  |
+| `max_vcpus` | `int32` | The most ResizeInstance can give the running instance: it boots with room for them, which costs the host nothing until it is used. Zero leaves no room, so its vCPUs or memory cannot change while it runs. Firecracker cannot add vCPUs to a running guest, so max_vcpus is Cloud Hypervisor's only. |
+| `max_memory_bytes` | `int64` |  |
 | `disk_bytes` | `int64` |  |
 | `network_name` | `string` | Empty means the daemon's default network: see GetHostInfoResponse.default_network. |
 | `static_ip` | `string` |  |
@@ -520,6 +523,8 @@ is not running.
 | `kernel_args` | `string` |  |
 | `vcpus` | `int32` |  |
 | `memory_bytes` | `int64` |  |
+| `max_vcpus` | `int32` | The most ResizeInstance can give the running instance. Zero leaves it no room to grow. See CreateInstanceRequest.max_vcpus. |
+| `max_memory_bytes` | `int64` |  |
 | `disk_bytes` | `int64` |  |
 | `network_name` | `string` |  |
 | `static_ip` | `string` |  |
@@ -803,6 +808,17 @@ Process is a process running in an instance's guest.
 | `name` | `string` |  |
 | `new_name` | `string` | The name to give it, which no other instance may have. |
 
+### ResizeInstanceRequest
+
+ResizeInstanceRequest gives a running instance the vCPUs and memory that
+are set, leaving the other as it is. At least one must be.
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `string` |  |
+| `vcpus` | optional `int32` | One of `_vcpus`.  |
+| `memory_bytes` | optional `int64` | One of `_memory_bytes`.  |
+
 ### ResourceCapacity
 
 ResourceCapacity is how much of one resource instances may be given, and
@@ -887,6 +903,8 @@ the existing value whole.
 | `kernel_args` | optional `string` | One of `_kernel_args`.  |
 | `vcpus` | optional `int32` | One of `_vcpus`.  |
 | `memory_bytes` | optional `int64` | One of `_memory_bytes`.  |
+| `max_vcpus` | optional `int32` | One of `_max_vcpus`. Zero removes the maximum. |
+| `max_memory_bytes` | optional `int64` | One of `_max_memory_bytes`.  |
 | `disk_bytes` | optional `int64` | One of `_disk_bytes`.  |
 | `network_name` | optional `string` | One of `_network_name`.  |
 | `static_ip` | optional `string` | One of `_static_ip`.  |
@@ -967,6 +985,7 @@ EventAction is what happened to the resource.
 | `EVENT_ACTION_COLLECTED` | 18 | Garbage collection removed the image. |
 | `EVENT_ACTION_IMPORTED` | 19 | A kernel, recorded by its URL to be fetched on first use. |
 | `EVENT_ACTION_FETCHED` | 20 | The kernel was downloaded, or copied from a local path, and verified. |
+| `EVENT_ACTION_RESIZED` | 21 | A running instance was given other vCPUs or memory. |
 
 ### EventKind
 

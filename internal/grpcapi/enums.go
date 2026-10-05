@@ -117,6 +117,7 @@ var eventActions = enum[events.Action, dicerdv1.EventAction]{"event action", map
 	events.ActionDied:             dicerdv1.EventAction_EVENT_ACTION_DIED,
 	events.ActionRestarting:       dicerdv1.EventAction_EVENT_ACTION_RESTARTING,
 	events.ActionRenamed:          dicerdv1.EventAction_EVENT_ACTION_RENAMED,
+	events.ActionResized:          dicerdv1.EventAction_EVENT_ACTION_RESIZED,
 	events.ActionHealthy:          dicerdv1.EventAction_EVENT_ACTION_HEALTHY,
 	events.ActionUnhealthy:        dicerdv1.EventAction_EVENT_ACTION_UNHEALTHY,
 	events.ActionSnapshotCreated:  dicerdv1.EventAction_EVENT_ACTION_SNAPSHOT_CREATED,

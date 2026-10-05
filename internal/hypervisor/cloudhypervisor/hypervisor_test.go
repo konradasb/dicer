@@ -4,11 +4,13 @@
 package cloudhypervisor
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/konradasb/dicer/internal/hypervisor"
@@ -81,5 +83,40 @@ func TestFailedRequestReportsVMMAnswer(t *testing.T) {
 	err := hv.PauseVM(t.Context())
 	if err == nil || !strings.Contains(err.Error(), "status 405: VM is not running") {
 		t.Errorf("PauseVM = %v, want the VMM's refusal", err)
+	}
+}
+
+// TestResizeVMMemoryRefusesBelowBootMemory checks that memory below what the
+// guest booted with is refused, rather than sent to Cloud Hypervisor, which
+// would ignore it and report success.
+func TestResizeVMMemoryRefusesBelowBootMemory(t *testing.T) {
+	const mib = 1 << 20
+	tests := []struct {
+		name       string
+		bytes      int64
+		wantResize bool
+	}{
+		{"within the region", 768 * mib, true},
+		{"below the boot memory", 256 * mib, false},
+		{"beyond the region", 2048 * mib, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var resized atomic.Bool
+			hv := fakeVMM(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/api/v1/vm.resize" {
+					resized.Store(true)
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"state":"Running","config":{"memory":{"size":%d,"hotplug_size":%d}}}`, 512*mib, 512*mib)
+			})
+
+			err := hv.ResizeVMMemory(t.Context(), tt.bytes)
+			if (err == nil) != tt.wantResize || resized.Load() != tt.wantResize {
+				t.Errorf("ResizeVMMemory = %v, resized = %t; want resized = %t", err, resized.Load(), tt.wantResize)
+			}
+		})
 	}
 }

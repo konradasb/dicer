@@ -147,59 +147,32 @@ func (h *Hypervisor) ResizeVMCPU(ctx context.Context, count int) error {
 	return nil
 }
 
-// ResizeVMMemory implements hypervisor.Hypervisor.
+// ResizeVMMemory implements hypervisor.Hypervisor. Cloud Hypervisor reports
+// the memory asked for, not what the guest has plugged, so it returns as
+// soon as the request is taken. It refuses memory below the boot memory,
+// which Cloud Hypervisor would ignore.
 func (h *Hypervisor) ResizeVMMemory(ctx context.Context, bytes int64) error {
+	resp, err := h.client.GetVmInfoWithResponse(ctx)
+	if err != nil {
+		return fmt.Errorf("resize memory: %w", err)
+	}
+	if resp.JSON200 == nil || resp.JSON200.Config.Memory == nil {
+		return fmt.Errorf("resize memory: no memory configuration: status %d", resp.StatusCode())
+	}
+	memory := resp.JSON200.Config.Memory
+
+	hotplugBytes := int64(0)
+	if memory.HotplugSize != nil {
+		hotplugBytes = *memory.HotplugSize
+	}
+	if err := hypervisor.CheckMemoryResize(bytes, memory.Size, hotplugBytes); err != nil {
+		return err
+	}
+
 	if _, err := h.client.PutVmResizeWithResponse(ctx, VmResize{DesiredRam: &bytes}); err != nil {
 		return fmt.Errorf("resize memory: %w", err)
 	}
 	return nil
-}
-
-// ResizeVMMemoryAndWait implements hypervisor.Hypervisor. The guest has
-// accepted the memory once its size stops changing.
-func (h *Hypervisor) ResizeVMMemoryAndWait(ctx context.Context, bytes int64, timeout time.Duration) error {
-	if err := h.ResizeVMMemory(ctx, bytes); err != nil {
-		return err
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	const (
-		pollInterval         = 20 * time.Millisecond
-		requiredStableChecks = 3
-	)
-
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	var lastSize int64 = -1
-	stableChecks := 0
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("memory resize timed out after %s", timeout)
-		case <-ticker.C:
-			info, err := h.VMInfo(ctx)
-			if err != nil {
-				return fmt.Errorf("poll memory size: %w", err)
-			}
-			// Without the guest's memory size there is nothing to wait
-			// for; assume the resize succeeded.
-			if info.MemoryBytes == nil {
-				return nil
-			}
-			if *info.MemoryBytes != lastSize {
-				lastSize = *info.MemoryBytes
-				stableChecks = 0
-				continue
-			}
-			stableChecks++
-			if stableChecks >= requiredStableChecks {
-				return nil
-			}
-		}
-	}
 }
 
 // statusCheckingClient is an HTTP client that turns a response with a

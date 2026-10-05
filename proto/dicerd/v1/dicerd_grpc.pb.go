@@ -30,6 +30,7 @@ const (
 	DaemonService_StopInstance_FullMethodName           = "/dicerd.v1.DaemonService/StopInstance"
 	DaemonService_PauseInstance_FullMethodName          = "/dicerd.v1.DaemonService/PauseInstance"
 	DaemonService_ResumeInstance_FullMethodName         = "/dicerd.v1.DaemonService/ResumeInstance"
+	DaemonService_ResizeInstance_FullMethodName         = "/dicerd.v1.DaemonService/ResizeInstance"
 	DaemonService_DeleteInstance_FullMethodName         = "/dicerd.v1.DaemonService/DeleteInstance"
 	DaemonService_ListInstances_FullMethodName          = "/dicerd.v1.DaemonService/ListInstances"
 	DaemonService_GetInstance_FullMethodName            = "/dicerd.v1.DaemonService/GetInstance"
@@ -121,6 +122,18 @@ type DaemonServiceClient interface {
 	PauseInstance(ctx context.Context, in *PauseInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
 	// ResumeInstance continues a paused instance.
 	ResumeInstance(ctx context.Context, in *ResumeInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
+	// ResizeInstance changes a running instance's vCPUs and memory without
+	// restarting it, within its max_vcpus and max_memory_bytes, and its
+	// definition with them, so it keeps them when it next starts. Memory can
+	// be resized from what the instance booted with up to its maximum, in
+	// steps of 2 MiB, and waits for the guest where the hypervisor can tell:
+	// Firecracker can, Cloud Hypervisor cannot; Firecracker also needs a host
+	// CPU with at least 40 bits of physical address. vCPUs can be resized on
+	// Cloud Hypervisor only. The guest's kernel must support virtio-mem and
+	// CPU hotplug. Growing needs room on the host (RESOURCE_EXHAUSTED). If the
+	// guest fails the resize, the instance holds the larger of the two sizes
+	// until it next starts.
+	ResizeInstance(ctx context.Context, in *ResizeInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
 	// DeleteInstance removes an instance and its overlay disk. It refuses a
 	// running instance unless force is set.
 	DeleteInstance(ctx context.Context, in *DeleteInstanceRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -294,6 +307,16 @@ func (c *daemonServiceClient) ResumeInstance(ctx context.Context, in *ResumeInst
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Instance)
 	err := c.cc.Invoke(ctx, DaemonService_ResumeInstance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ResizeInstance(ctx context.Context, in *ResizeInstanceRequest, opts ...grpc.CallOption) (*Instance, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Instance)
+	err := c.cc.Invoke(ctx, DaemonService_ResizeInstance_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -755,6 +778,18 @@ type DaemonServiceServer interface {
 	PauseInstance(context.Context, *PauseInstanceRequest) (*Instance, error)
 	// ResumeInstance continues a paused instance.
 	ResumeInstance(context.Context, *ResumeInstanceRequest) (*Instance, error)
+	// ResizeInstance changes a running instance's vCPUs and memory without
+	// restarting it, within its max_vcpus and max_memory_bytes, and its
+	// definition with them, so it keeps them when it next starts. Memory can
+	// be resized from what the instance booted with up to its maximum, in
+	// steps of 2 MiB, and waits for the guest where the hypervisor can tell:
+	// Firecracker can, Cloud Hypervisor cannot; Firecracker also needs a host
+	// CPU with at least 40 bits of physical address. vCPUs can be resized on
+	// Cloud Hypervisor only. The guest's kernel must support virtio-mem and
+	// CPU hotplug. Growing needs room on the host (RESOURCE_EXHAUSTED). If the
+	// guest fails the resize, the instance holds the larger of the two sizes
+	// until it next starts.
+	ResizeInstance(context.Context, *ResizeInstanceRequest) (*Instance, error)
 	// DeleteInstance removes an instance and its overlay disk. It refuses a
 	// running instance unless force is set.
 	DeleteInstance(context.Context, *DeleteInstanceRequest) (*emptypb.Empty, error)
@@ -883,6 +918,9 @@ func (UnimplementedDaemonServiceServer) PauseInstance(context.Context, *PauseIns
 }
 func (UnimplementedDaemonServiceServer) ResumeInstance(context.Context, *ResumeInstanceRequest) (*Instance, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResumeInstance not implemented")
+}
+func (UnimplementedDaemonServiceServer) ResizeInstance(context.Context, *ResizeInstanceRequest) (*Instance, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResizeInstance not implemented")
 }
 func (UnimplementedDaemonServiceServer) DeleteInstance(context.Context, *DeleteInstanceRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteInstance not implemented")
@@ -1131,6 +1169,24 @@ func _DaemonService_ResumeInstance_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServiceServer).ResumeInstance(ctx, req.(*ResumeInstanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ResizeInstance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResizeInstanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ResizeInstance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ResizeInstance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ResizeInstance(ctx, req.(*ResizeInstanceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1742,6 +1798,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResumeInstance",
 			Handler:    _DaemonService_ResumeInstance_Handler,
+		},
+		{
+			MethodName: "ResizeInstance",
+			Handler:    _DaemonService_ResizeInstance_Handler,
 		},
 		{
 			MethodName: "DeleteInstance",

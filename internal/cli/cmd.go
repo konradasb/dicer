@@ -128,6 +128,7 @@ func NewCommand() *cobra.Command {
 		shortcut(newInstanceDeleteCommand(), "rm"),
 		shortcut(newInstanceCreateCommand(), "create"),
 		shortcut(newInstanceUpdateCommand(), "update"),
+		shortcut(newInstanceResizeCommand(), "resize"),
 		shortcut(newInstanceRenameCommand(), "rename"),
 		shortcut(newInstanceWaitCommand(), "wait"),
 		shortcut(newInstanceShowCommand(), "inspect"),

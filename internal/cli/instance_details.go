@@ -135,8 +135,15 @@ func restartDetail(instance *dicerdv1.Instance) string {
 // machineLines describes the virtual machine: what it is given, the
 // hypervisor that runs it, and the kernel it boots.
 func machineLines(instance *dicerdv1.Instance) []string {
-	resources := fmt.Sprintf("%s, %s memory, %s disk",
-		humanize.Count(instance.GetVcpus(), "vCPU"), humanize.Bytes(instance.GetMemoryBytes()), humanize.Bytes(instance.GetDiskBytes()))
+	vcpus := humanize.Count(instance.GetVcpus(), "vCPU")
+	if n := instance.GetMaxVcpus(); n > 0 {
+		vcpus += fmt.Sprintf(" (up to %d)", n)
+	}
+	memory := humanize.Bytes(instance.GetMemoryBytes()) + " memory"
+	if n := instance.GetMaxMemoryBytes(); n > 0 {
+		memory += " (up to " + humanize.Bytes(n) + ")"
+	}
+	resources := vcpus + ", " + memory + ", " + humanize.Bytes(instance.GetDiskBytes()) + " disk"
 
 	hypervisor := enumName(instance.GetHypervisorType())
 	if v := instance.GetHypervisorVersion(); v != "" {

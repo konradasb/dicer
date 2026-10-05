@@ -55,10 +55,16 @@ func cpusConfig(c hypervisor.CPUConfig) CpusConfig {
 	return cpus
 }
 
+// virtioMemAlignment is what Cloud Hypervisor requires the memory set aside
+// for virtio-mem to be a multiple of.
+const virtioMemAlignment = 128 << 20
+
+// memoryConfig translates the memory, rounding what is set aside for hotplug
+// up to virtioMemAlignment.
 func memoryConfig(m hypervisor.MemoryConfig) MemoryConfig {
 	memory := MemoryConfig{Size: m.SizeBytes}
 	if m.HotplugBytes > 0 {
-		memory.HotplugSize = ptr(m.HotplugBytes)
+		memory.HotplugSize = ptr((m.HotplugBytes + virtioMemAlignment - 1) / virtioMemAlignment * virtioMemAlignment)
 		memory.HotplugMethod = ptr("VirtioMem")
 	}
 	return memory

@@ -37,6 +37,11 @@ type InstanceSpec struct {
 	NetworkName       string         `yaml:"network_name" json:"network_name"`
 	StaticIP          string         `yaml:"static_ip,omitempty" json:"static_ip,omitempty"`
 
+	// MaxVCPUs and MaxMemoryBytes are the most the instance can be resized
+	// to while it runs: it boots with room for them. Zero leaves no room.
+	MaxVCPUs       int   `yaml:"max_vcpus,omitempty" json:"max_vcpus,omitempty"`
+	MaxMemoryBytes int64 `yaml:"max_memory_bytes,omitempty" json:"max_memory_bytes,omitempty"`
+
 	Ports  []PortMapping     `yaml:"ports,omitempty" json:"ports,omitempty"`
 	Mounts []Mount           `yaml:"mounts,omitempty" json:"mounts,omitempty"`
 	Env    map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
@@ -70,6 +75,12 @@ type InstanceSpec struct {
 // Resources returns what the instance asks for.
 func (s InstanceSpec) Resources() Resources {
 	return Resources{VCPUs: s.VCPUs, MemoryBytes: s.MemoryBytes}
+}
+
+// MaxResources returns the most the instance can hold: its maximums where
+// set, otherwise what it asks for.
+func (s InstanceSpec) MaxResources() Resources {
+	return Resources{VCPUs: max(s.VCPUs, s.MaxVCPUs), MemoryBytes: max(s.MemoryBytes, s.MaxMemoryBytes)}
 }
 
 // VolumeMount returns the mount by which the instance attaches the named

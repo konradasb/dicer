@@ -24,7 +24,6 @@ expose them.
 | Feature | Description |
 |---------|-------------|
 | Disk and network rate limits | Per-instance disk I/O and bandwidth limits. Both hypervisors support disk limits and the host network layer supports shaping; neither is exposed |
-| Live resize | Change a running instance's memory, and its vCPUs on Cloud Hypervisor. Both hypervisors implement it; there is no RPC |
 
 ### Snapshots and cloning
 

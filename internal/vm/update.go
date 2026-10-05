@@ -82,10 +82,19 @@ func definitionChanges(a, b types.InstanceSpec) []string {
 			out = append(out, name+" changed")
 		}
 	}
+	// maximum is a maximum as written, of which zero is none.
+	maximum := func(n int64, written string) string {
+		if n == 0 {
+			return ""
+		}
+		return written
+	}
 
 	from("image", reference.FamiliarString(a.ImageRef), reference.FamiliarString(b.ImageRef))
 	from("vCPUs", strconv.Itoa(a.VCPUs), strconv.Itoa(b.VCPUs))
 	from("memory", humanize.Bytes(a.MemoryBytes), humanize.Bytes(b.MemoryBytes))
+	from("max vCPUs", maximum(int64(a.MaxVCPUs), strconv.Itoa(a.MaxVCPUs)), maximum(int64(b.MaxVCPUs), strconv.Itoa(b.MaxVCPUs)))
+	from("max memory", maximum(a.MaxMemoryBytes, humanize.Bytes(a.MaxMemoryBytes)), maximum(b.MaxMemoryBytes, humanize.Bytes(b.MaxMemoryBytes)))
 	from("disk", humanize.Bytes(a.DiskBytes), humanize.Bytes(b.DiskBytes))
 	from("restart policy", a.Restart.String(), b.Restart.String())
 	from("network", a.NetworkName, b.NetworkName)

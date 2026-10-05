@@ -35,6 +35,7 @@ type fakeInstanceDaemon struct {
 	calls     []string
 	created   *dicerdv1.CreateInstanceRequest
 	updated   *dicerdv1.UpdateInstanceRequest
+	resized   *dicerdv1.ResizeInstanceRequest
 
 	// cached are the images already on the host: pulling one of them
 	// downloads nothing.
@@ -228,6 +229,27 @@ func (d *fakeInstanceDaemon) UpdateInstance(
 
 	d.updated = req
 	return reply(d.get(req.GetName()))
+}
+
+// ResizeInstance gives an instance the sizes asked for.
+func (d *fakeInstanceDaemon) ResizeInstance(
+	_ context.Context, req *dicerdv1.ResizeInstanceRequest,
+) (*dicerdv1.Instance, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	d.resized = req
+	instance, err := reply(d.get(req.GetName()))
+	if err != nil {
+		return nil, err
+	}
+	if req.Vcpus != nil {
+		instance.Vcpus = req.GetVcpus()
+	}
+	if req.MemoryBytes != nil {
+		instance.MemoryBytes = req.GetMemoryBytes()
+	}
+	return instance, nil
 }
 
 // RenameInstance moves an instance to a new name, as the daemon does for a
@@ -776,6 +798,41 @@ func TestUpdateSendsOnlyWhatChanged(t *testing.T) {
 
 	if _, err := run(t, "update", "db"); err == nil || !strings.Contains(err.Error(), "needs something to change") {
 		t.Errorf("an update with nothing to change should say so, got %v", err)
+	}
+}
+
+func TestResizeSendsOnlyWhatChanged(t *testing.T) {
+	d := newFakeInstanceDaemon(fakeInstances()...)
+	serveFakeDaemon(t, d)
+
+	out, err := run(t, "resize", "web", "--memory", "2GiB")
+	if err != nil {
+		t.Fatalf("resize: %v\n%s", err, out)
+	}
+	memory := int64(2 << 30)
+	if want := (&dicerdv1.ResizeInstanceRequest{Name: "web", MemoryBytes: &memory}); !proto.Equal(d.resized, want) {
+		t.Errorf("request = %v\nwant      %v", d.resized, want)
+	}
+	if !strings.Contains(out, "Instance web resized to") || !strings.Contains(out, "2 GiB memory") {
+		t.Errorf("output = %q, want the new sizes", out)
+	}
+
+	if _, err := run(t, "resize", "web"); err == nil || !strings.Contains(err.Error(), "needs --vcpus, --memory or both") {
+		t.Errorf("a resize with nothing to change should say so, got %v", err)
+	}
+}
+
+func TestUpdateSetsAndRemovesMaximums(t *testing.T) {
+	d := newFakeInstanceDaemon(fakeInstances()...)
+	serveFakeDaemon(t, d)
+
+	if out, err := run(t, "update", "db", "--max-vcpus", "8", "--max-memory", "0"); err != nil {
+		t.Fatalf("update: %v\n%s", err, out)
+	}
+	vcpus, memory := int32(8), int64(0)
+	want := &dicerdv1.UpdateInstanceRequest{Name: "db", MaxVcpus: &vcpus, MaxMemoryBytes: &memory}
+	if !proto.Equal(d.updated, want) {
+		t.Errorf("request = %v\nwant      %v", d.updated, want)
 	}
 }
 

@@ -643,6 +643,8 @@ const (
 	EventAction_EVENT_ACTION_IMPORTED EventAction = 19
 	// The kernel was downloaded, or copied from a local path, and verified.
 	EventAction_EVENT_ACTION_FETCHED EventAction = 20
+	// A running instance was given other vCPUs or memory.
+	EventAction_EVENT_ACTION_RESIZED EventAction = 21
 )
 
 // Enum value maps for EventAction.
@@ -669,6 +671,7 @@ var (
 		18: "EVENT_ACTION_COLLECTED",
 		19: "EVENT_ACTION_IMPORTED",
 		20: "EVENT_ACTION_FETCHED",
+		21: "EVENT_ACTION_RESIZED",
 	}
 	EventAction_value = map[string]int32{
 		"EVENT_ACTION_UNSPECIFIED":       0,
@@ -692,6 +695,7 @@ var (
 		"EVENT_ACTION_COLLECTED":         18,
 		"EVENT_ACTION_IMPORTED":          19,
 		"EVENT_ACTION_FETCHED":           20,
+		"EVENT_ACTION_RESIZED":           21,
 	}
 )
 
@@ -848,29 +852,33 @@ type Instance struct {
 	ImageRef       string                 `protobuf:"bytes,4,opt,name=image_ref,json=imageRef,proto3" json:"image_ref,omitempty"`
 	HypervisorType HypervisorType         `protobuf:"varint,5,opt,name=hypervisor_type,json=hypervisorType,proto3,enum=dicerd.v1.HypervisorType" json:"hypervisor_type,omitempty"`
 	// A version that hypervisor ships; the newest by default.
-	HypervisorVersion string                 `protobuf:"bytes,6,opt,name=hypervisor_version,json=hypervisorVersion,proto3" json:"hypervisor_version,omitempty"`
-	KernelName        string                 `protobuf:"bytes,7,opt,name=kernel_name,json=kernelName,proto3" json:"kernel_name,omitempty"`
-	KernelArgs        string                 `protobuf:"bytes,8,opt,name=kernel_args,json=kernelArgs,proto3" json:"kernel_args,omitempty"`
-	Vcpus             int32                  `protobuf:"varint,9,opt,name=vcpus,proto3" json:"vcpus,omitempty"`
-	MemoryBytes       int64                  `protobuf:"varint,10,opt,name=memory_bytes,json=memoryBytes,proto3" json:"memory_bytes,omitempty"`
-	DiskBytes         int64                  `protobuf:"varint,11,opt,name=disk_bytes,json=diskBytes,proto3" json:"disk_bytes,omitempty"`
-	NetworkName       string                 `protobuf:"bytes,12,opt,name=network_name,json=networkName,proto3" json:"network_name,omitempty"`
-	StaticIp          string                 `protobuf:"bytes,13,opt,name=static_ip,json=staticIp,proto3" json:"static_ip,omitempty"`
-	Mounts            []*Mount               `protobuf:"bytes,39,rep,name=mounts,proto3" json:"mounts,omitempty"`
-	Env               map[string]string      `protobuf:"bytes,16,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Cmd               []string               `protobuf:"bytes,17,rep,name=cmd,proto3" json:"cmd,omitempty"`
-	Labels            map[string]string      `protobuf:"bytes,18,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	RestartPolicy     *RestartPolicy         `protobuf:"bytes,30,opt,name=restart_policy,json=restartPolicy,proto3" json:"restart_policy,omitempty"`
-	CreateTime        *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	UpdateTime        *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	State             InstanceState          `protobuf:"varint,22,opt,name=state,proto3,enum=dicerd.v1.InstanceState" json:"state,omitempty"`
-	StateError        string                 `protobuf:"bytes,23,opt,name=state_error,json=stateError,proto3" json:"state_error,omitempty"`
-	HypervisorPid     int64                  `protobuf:"varint,24,opt,name=hypervisor_pid,json=hypervisorPid,proto3" json:"hypervisor_pid,omitempty"`
-	VsockCid          int64                  `protobuf:"varint,25,opt,name=vsock_cid,json=vsockCid,proto3" json:"vsock_cid,omitempty"`
-	Ip                string                 `protobuf:"bytes,26,opt,name=ip,proto3" json:"ip,omitempty"`
-	Mac               string                 `protobuf:"bytes,27,opt,name=mac,proto3" json:"mac,omitempty"`
-	StartTime         *timestamppb.Timestamp `protobuf:"bytes,28,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	Ports             []*PortMapping         `protobuf:"bytes,29,rep,name=ports,proto3" json:"ports,omitempty"`
+	HypervisorVersion string `protobuf:"bytes,6,opt,name=hypervisor_version,json=hypervisorVersion,proto3" json:"hypervisor_version,omitempty"`
+	KernelName        string `protobuf:"bytes,7,opt,name=kernel_name,json=kernelName,proto3" json:"kernel_name,omitempty"`
+	KernelArgs        string `protobuf:"bytes,8,opt,name=kernel_args,json=kernelArgs,proto3" json:"kernel_args,omitempty"`
+	Vcpus             int32  `protobuf:"varint,9,opt,name=vcpus,proto3" json:"vcpus,omitempty"`
+	MemoryBytes       int64  `protobuf:"varint,10,opt,name=memory_bytes,json=memoryBytes,proto3" json:"memory_bytes,omitempty"`
+	// The most ResizeInstance can give the running instance. Zero leaves it
+	// no room to grow. See CreateInstanceRequest.max_vcpus.
+	MaxVcpus       int32                  `protobuf:"varint,40,opt,name=max_vcpus,json=maxVcpus,proto3" json:"max_vcpus,omitempty"`
+	MaxMemoryBytes int64                  `protobuf:"varint,41,opt,name=max_memory_bytes,json=maxMemoryBytes,proto3" json:"max_memory_bytes,omitempty"`
+	DiskBytes      int64                  `protobuf:"varint,11,opt,name=disk_bytes,json=diskBytes,proto3" json:"disk_bytes,omitempty"`
+	NetworkName    string                 `protobuf:"bytes,12,opt,name=network_name,json=networkName,proto3" json:"network_name,omitempty"`
+	StaticIp       string                 `protobuf:"bytes,13,opt,name=static_ip,json=staticIp,proto3" json:"static_ip,omitempty"`
+	Mounts         []*Mount               `protobuf:"bytes,39,rep,name=mounts,proto3" json:"mounts,omitempty"`
+	Env            map[string]string      `protobuf:"bytes,16,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Cmd            []string               `protobuf:"bytes,17,rep,name=cmd,proto3" json:"cmd,omitempty"`
+	Labels         map[string]string      `protobuf:"bytes,18,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	RestartPolicy  *RestartPolicy         `protobuf:"bytes,30,opt,name=restart_policy,json=restartPolicy,proto3" json:"restart_policy,omitempty"`
+	CreateTime     *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	UpdateTime     *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	State          InstanceState          `protobuf:"varint,22,opt,name=state,proto3,enum=dicerd.v1.InstanceState" json:"state,omitempty"`
+	StateError     string                 `protobuf:"bytes,23,opt,name=state_error,json=stateError,proto3" json:"state_error,omitempty"`
+	HypervisorPid  int64                  `protobuf:"varint,24,opt,name=hypervisor_pid,json=hypervisorPid,proto3" json:"hypervisor_pid,omitempty"`
+	VsockCid       int64                  `protobuf:"varint,25,opt,name=vsock_cid,json=vsockCid,proto3" json:"vsock_cid,omitempty"`
+	Ip             string                 `protobuf:"bytes,26,opt,name=ip,proto3" json:"ip,omitempty"`
+	Mac            string                 `protobuf:"bytes,27,opt,name=mac,proto3" json:"mac,omitempty"`
+	StartTime      *timestamppb.Timestamp `protobuf:"bytes,28,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	Ports          []*PortMapping         `protobuf:"bytes,29,rep,name=ports,proto3" json:"ports,omitempty"`
 	// The exit code the guest reported when it last ended on its own: its
 	// workload's, or 0 for a guest that powered itself off. Unset if it has
 	// not ended since it was last started, or ended without saying how.
@@ -993,6 +1001,20 @@ func (x *Instance) GetVcpus() int32 {
 func (x *Instance) GetMemoryBytes() int64 {
 	if x != nil {
 		return x.MemoryBytes
+	}
+	return 0
+}
+
+func (x *Instance) GetMaxVcpus() int32 {
+	if x != nil {
+		return x.MaxVcpus
+	}
+	return 0
+}
+
+func (x *Instance) GetMaxMemoryBytes() int64 {
+	if x != nil {
+		return x.MaxMemoryBytes
 	}
 	return 0
 }
@@ -1772,7 +1794,14 @@ type CreateInstanceRequest struct {
 	KernelArgs  string `protobuf:"bytes,6,opt,name=kernel_args,json=kernelArgs,proto3" json:"kernel_args,omitempty"`
 	Vcpus       int32  `protobuf:"varint,7,opt,name=vcpus,proto3" json:"vcpus,omitempty"`
 	MemoryBytes int64  `protobuf:"varint,8,opt,name=memory_bytes,json=memoryBytes,proto3" json:"memory_bytes,omitempty"`
-	DiskBytes   int64  `protobuf:"varint,9,opt,name=disk_bytes,json=diskBytes,proto3" json:"disk_bytes,omitempty"`
+	// The most ResizeInstance can give the running instance: it boots with
+	// room for them, which costs the host nothing until it is used. Zero
+	// leaves no room, so its vCPUs or memory cannot change while it runs.
+	// Firecracker cannot add vCPUs to a running guest, so max_vcpus is
+	// Cloud Hypervisor's only.
+	MaxVcpus       int32 `protobuf:"varint,27,opt,name=max_vcpus,json=maxVcpus,proto3" json:"max_vcpus,omitempty"`
+	MaxMemoryBytes int64 `protobuf:"varint,28,opt,name=max_memory_bytes,json=maxMemoryBytes,proto3" json:"max_memory_bytes,omitempty"`
+	DiskBytes      int64 `protobuf:"varint,9,opt,name=disk_bytes,json=diskBytes,proto3" json:"disk_bytes,omitempty"`
 	// Empty means the daemon's default network: see
 	// GetHostInfoResponse.default_network.
 	NetworkName   string            `protobuf:"bytes,10,opt,name=network_name,json=networkName,proto3" json:"network_name,omitempty"`
@@ -1882,6 +1911,20 @@ func (x *CreateInstanceRequest) GetVcpus() int32 {
 func (x *CreateInstanceRequest) GetMemoryBytes() int64 {
 	if x != nil {
 		return x.MemoryBytes
+	}
+	return 0
+}
+
+func (x *CreateInstanceRequest) GetMaxVcpus() int32 {
+	if x != nil {
+		return x.MaxVcpus
+	}
+	return 0
+}
+
+func (x *CreateInstanceRequest) GetMaxMemoryBytes() int64 {
+	if x != nil {
+		return x.MaxMemoryBytes
 	}
 	return 0
 }
@@ -2005,21 +2048,24 @@ type UpdateInstanceRequest struct {
 	KernelArgs        *string                `protobuf:"bytes,6,opt,name=kernel_args,json=kernelArgs,proto3,oneof" json:"kernel_args,omitempty"`
 	Vcpus             *int32                 `protobuf:"varint,7,opt,name=vcpus,proto3,oneof" json:"vcpus,omitempty"`
 	MemoryBytes       *int64                 `protobuf:"varint,8,opt,name=memory_bytes,json=memoryBytes,proto3,oneof" json:"memory_bytes,omitempty"`
-	DiskBytes         *int64                 `protobuf:"varint,9,opt,name=disk_bytes,json=diskBytes,proto3,oneof" json:"disk_bytes,omitempty"`
-	NetworkName       *string                `protobuf:"bytes,10,opt,name=network_name,json=networkName,proto3,oneof" json:"network_name,omitempty"`
-	StaticIp          *string                `protobuf:"bytes,11,opt,name=static_ip,json=staticIp,proto3,oneof" json:"static_ip,omitempty"`
-	Hostname          *string                `protobuf:"bytes,12,opt,name=hostname,proto3,oneof" json:"hostname,omitempty"`
-	RestartPolicy     *RestartPolicy         `protobuf:"bytes,20,opt,name=restart_policy,json=restartPolicy,proto3" json:"restart_policy,omitempty"`
-	HealthCheck       *HealthCheck           `protobuf:"bytes,21,opt,name=health_check,json=healthCheck,proto3" json:"health_check,omitempty"`
-	InitMode          InitMode               `protobuf:"varint,22,opt,name=init_mode,json=initMode,proto3,enum=dicerd.v1.InitMode" json:"init_mode,omitempty"`
-	RemoveOnExit      *bool                  `protobuf:"varint,23,opt,name=remove_on_exit,json=removeOnExit,proto3,oneof" json:"remove_on_exit,omitempty"`
-	Mounts            []*Mount               `protobuf:"bytes,24,rep,name=mounts,proto3" json:"mounts,omitempty"`
-	Env               map[string]string      `protobuf:"bytes,16,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Cmd               []string               `protobuf:"bytes,17,rep,name=cmd,proto3" json:"cmd,omitempty"`
-	Labels            map[string]string      `protobuf:"bytes,18,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Ports             []*PortMapping         `protobuf:"bytes,19,rep,name=ports,proto3" json:"ports,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Zero removes the maximum.
+	MaxVcpus       *int32            `protobuf:"varint,25,opt,name=max_vcpus,json=maxVcpus,proto3,oneof" json:"max_vcpus,omitempty"`
+	MaxMemoryBytes *int64            `protobuf:"varint,26,opt,name=max_memory_bytes,json=maxMemoryBytes,proto3,oneof" json:"max_memory_bytes,omitempty"`
+	DiskBytes      *int64            `protobuf:"varint,9,opt,name=disk_bytes,json=diskBytes,proto3,oneof" json:"disk_bytes,omitempty"`
+	NetworkName    *string           `protobuf:"bytes,10,opt,name=network_name,json=networkName,proto3,oneof" json:"network_name,omitempty"`
+	StaticIp       *string           `protobuf:"bytes,11,opt,name=static_ip,json=staticIp,proto3,oneof" json:"static_ip,omitempty"`
+	Hostname       *string           `protobuf:"bytes,12,opt,name=hostname,proto3,oneof" json:"hostname,omitempty"`
+	RestartPolicy  *RestartPolicy    `protobuf:"bytes,20,opt,name=restart_policy,json=restartPolicy,proto3" json:"restart_policy,omitempty"`
+	HealthCheck    *HealthCheck      `protobuf:"bytes,21,opt,name=health_check,json=healthCheck,proto3" json:"health_check,omitempty"`
+	InitMode       InitMode          `protobuf:"varint,22,opt,name=init_mode,json=initMode,proto3,enum=dicerd.v1.InitMode" json:"init_mode,omitempty"`
+	RemoveOnExit   *bool             `protobuf:"varint,23,opt,name=remove_on_exit,json=removeOnExit,proto3,oneof" json:"remove_on_exit,omitempty"`
+	Mounts         []*Mount          `protobuf:"bytes,24,rep,name=mounts,proto3" json:"mounts,omitempty"`
+	Env            map[string]string `protobuf:"bytes,16,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Cmd            []string          `protobuf:"bytes,17,rep,name=cmd,proto3" json:"cmd,omitempty"`
+	Labels         map[string]string `protobuf:"bytes,18,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Ports          []*PortMapping    `protobuf:"bytes,19,rep,name=ports,proto3" json:"ports,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *UpdateInstanceRequest) Reset() {
@@ -2104,6 +2150,20 @@ func (x *UpdateInstanceRequest) GetVcpus() int32 {
 func (x *UpdateInstanceRequest) GetMemoryBytes() int64 {
 	if x != nil && x.MemoryBytes != nil {
 		return *x.MemoryBytes
+	}
+	return 0
+}
+
+func (x *UpdateInstanceRequest) GetMaxVcpus() int32 {
+	if x != nil && x.MaxVcpus != nil {
+		return *x.MaxVcpus
+	}
+	return 0
+}
+
+func (x *UpdateInstanceRequest) GetMaxMemoryBytes() int64 {
+	if x != nil && x.MaxMemoryBytes != nil {
+		return *x.MaxMemoryBytes
 	}
 	return 0
 }
@@ -2243,6 +2303,68 @@ func (x *StartInstanceRequest) GetName() string {
 	return ""
 }
 
+// ResizeInstanceRequest gives a running instance the vCPUs and memory that
+// are set, leaving the other as it is. At least one must be.
+type ResizeInstanceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Vcpus         *int32                 `protobuf:"varint,2,opt,name=vcpus,proto3,oneof" json:"vcpus,omitempty"`
+	MemoryBytes   *int64                 `protobuf:"varint,3,opt,name=memory_bytes,json=memoryBytes,proto3,oneof" json:"memory_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResizeInstanceRequest) Reset() {
+	*x = ResizeInstanceRequest{}
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResizeInstanceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResizeInstanceRequest) ProtoMessage() {}
+
+func (x *ResizeInstanceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResizeInstanceRequest.ProtoReflect.Descriptor instead.
+func (*ResizeInstanceRequest) Descriptor() ([]byte, []int) {
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ResizeInstanceRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ResizeInstanceRequest) GetVcpus() int32 {
+	if x != nil && x.Vcpus != nil {
+		return *x.Vcpus
+	}
+	return 0
+}
+
+func (x *ResizeInstanceRequest) GetMemoryBytes() int64 {
+	if x != nil && x.MemoryBytes != nil {
+		return *x.MemoryBytes
+	}
+	return 0
+}
+
 type StopInstanceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -2252,7 +2374,7 @@ type StopInstanceRequest struct {
 
 func (x *StopInstanceRequest) Reset() {
 	*x = StopInstanceRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[12]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2264,7 +2386,7 @@ func (x *StopInstanceRequest) String() string {
 func (*StopInstanceRequest) ProtoMessage() {}
 
 func (x *StopInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[12]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2277,7 +2399,7 @@ func (x *StopInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopInstanceRequest.ProtoReflect.Descriptor instead.
 func (*StopInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{12}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *StopInstanceRequest) GetName() string {
@@ -2296,7 +2418,7 @@ type PauseInstanceRequest struct {
 
 func (x *PauseInstanceRequest) Reset() {
 	*x = PauseInstanceRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[13]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2308,7 +2430,7 @@ func (x *PauseInstanceRequest) String() string {
 func (*PauseInstanceRequest) ProtoMessage() {}
 
 func (x *PauseInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[13]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2321,7 +2443,7 @@ func (x *PauseInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PauseInstanceRequest.ProtoReflect.Descriptor instead.
 func (*PauseInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{13}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *PauseInstanceRequest) GetName() string {
@@ -2340,7 +2462,7 @@ type ResumeInstanceRequest struct {
 
 func (x *ResumeInstanceRequest) Reset() {
 	*x = ResumeInstanceRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[14]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2352,7 +2474,7 @@ func (x *ResumeInstanceRequest) String() string {
 func (*ResumeInstanceRequest) ProtoMessage() {}
 
 func (x *ResumeInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[14]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2365,7 +2487,7 @@ func (x *ResumeInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeInstanceRequest.ProtoReflect.Descriptor instead.
 func (*ResumeInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{14}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ResumeInstanceRequest) GetName() string {
@@ -2386,7 +2508,7 @@ type RenameInstanceRequest struct {
 
 func (x *RenameInstanceRequest) Reset() {
 	*x = RenameInstanceRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[15]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2398,7 +2520,7 @@ func (x *RenameInstanceRequest) String() string {
 func (*RenameInstanceRequest) ProtoMessage() {}
 
 func (x *RenameInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[15]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2411,7 +2533,7 @@ func (x *RenameInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameInstanceRequest.ProtoReflect.Descriptor instead.
 func (*RenameInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{15}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RenameInstanceRequest) GetName() string {
@@ -2439,7 +2561,7 @@ type DeleteInstanceRequest struct {
 
 func (x *DeleteInstanceRequest) Reset() {
 	*x = DeleteInstanceRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[16]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2451,7 +2573,7 @@ func (x *DeleteInstanceRequest) String() string {
 func (*DeleteInstanceRequest) ProtoMessage() {}
 
 func (x *DeleteInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[16]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2464,7 +2586,7 @@ func (x *DeleteInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteInstanceRequest.ProtoReflect.Descriptor instead.
 func (*DeleteInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{16}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeleteInstanceRequest) GetName() string {
@@ -2490,7 +2612,7 @@ type GetInstanceRequest struct {
 
 func (x *GetInstanceRequest) Reset() {
 	*x = GetInstanceRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[17]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2502,7 +2624,7 @@ func (x *GetInstanceRequest) String() string {
 func (*GetInstanceRequest) ProtoMessage() {}
 
 func (x *GetInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[17]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2515,7 +2637,7 @@ func (x *GetInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInstanceRequest.ProtoReflect.Descriptor instead.
 func (*GetInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{17}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetInstanceRequest) GetName() string {
@@ -2533,7 +2655,7 @@ type ListInstancesRequest struct {
 
 func (x *ListInstancesRequest) Reset() {
 	*x = ListInstancesRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[18]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2545,7 +2667,7 @@ func (x *ListInstancesRequest) String() string {
 func (*ListInstancesRequest) ProtoMessage() {}
 
 func (x *ListInstancesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[18]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2558,7 +2680,7 @@ func (x *ListInstancesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInstancesRequest.ProtoReflect.Descriptor instead.
 func (*ListInstancesRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{18}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{19}
 }
 
 type ListInstancesResponse struct {
@@ -2570,7 +2692,7 @@ type ListInstancesResponse struct {
 
 func (x *ListInstancesResponse) Reset() {
 	*x = ListInstancesResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[19]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2582,7 +2704,7 @@ func (x *ListInstancesResponse) String() string {
 func (*ListInstancesResponse) ProtoMessage() {}
 
 func (x *ListInstancesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[19]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2595,7 +2717,7 @@ func (x *ListInstancesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInstancesResponse.ProtoReflect.Descriptor instead.
 func (*ListInstancesResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{19}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListInstancesResponse) GetInstances() []*Instance {
@@ -2629,7 +2751,7 @@ type ExecInstanceStart struct {
 
 func (x *ExecInstanceStart) Reset() {
 	*x = ExecInstanceStart{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[20]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2641,7 +2763,7 @@ func (x *ExecInstanceStart) String() string {
 func (*ExecInstanceStart) ProtoMessage() {}
 
 func (x *ExecInstanceStart) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[20]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2654,7 +2776,7 @@ func (x *ExecInstanceStart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecInstanceStart.ProtoReflect.Descriptor instead.
 func (*ExecInstanceStart) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{20}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ExecInstanceStart) GetName() string {
@@ -2724,7 +2846,7 @@ type ExecInstanceResize struct {
 
 func (x *ExecInstanceResize) Reset() {
 	*x = ExecInstanceResize{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[21]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2736,7 +2858,7 @@ func (x *ExecInstanceResize) String() string {
 func (*ExecInstanceResize) ProtoMessage() {}
 
 func (x *ExecInstanceResize) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[21]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2749,7 +2871,7 @@ func (x *ExecInstanceResize) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecInstanceResize.ProtoReflect.Descriptor instead.
 func (*ExecInstanceResize) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{21}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ExecInstanceResize) GetRows() uint32 {
@@ -2780,7 +2902,7 @@ type ExecInstanceRequest struct {
 
 func (x *ExecInstanceRequest) Reset() {
 	*x = ExecInstanceRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[22]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2792,7 +2914,7 @@ func (x *ExecInstanceRequest) String() string {
 func (*ExecInstanceRequest) ProtoMessage() {}
 
 func (x *ExecInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[22]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2805,7 +2927,7 @@ func (x *ExecInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecInstanceRequest.ProtoReflect.Descriptor instead.
 func (*ExecInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{22}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ExecInstanceRequest) GetPayload() isExecInstanceRequest_Payload {
@@ -2878,7 +3000,7 @@ type ExecInstanceResponse struct {
 
 func (x *ExecInstanceResponse) Reset() {
 	*x = ExecInstanceResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[23]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2890,7 +3012,7 @@ func (x *ExecInstanceResponse) String() string {
 func (*ExecInstanceResponse) ProtoMessage() {}
 
 func (x *ExecInstanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[23]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2903,7 +3025,7 @@ func (x *ExecInstanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecInstanceResponse.ProtoReflect.Descriptor instead.
 func (*ExecInstanceResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{23}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ExecInstanceResponse) GetPayload() isExecInstanceResponse_Payload {
@@ -2978,7 +3100,7 @@ type CopyToInstanceStart struct {
 
 func (x *CopyToInstanceStart) Reset() {
 	*x = CopyToInstanceStart{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[24]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2990,7 +3112,7 @@ func (x *CopyToInstanceStart) String() string {
 func (*CopyToInstanceStart) ProtoMessage() {}
 
 func (x *CopyToInstanceStart) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[24]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3003,7 +3125,7 @@ func (x *CopyToInstanceStart) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyToInstanceStart.ProtoReflect.Descriptor instead.
 func (*CopyToInstanceStart) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{24}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CopyToInstanceStart) GetName() string {
@@ -3033,7 +3155,7 @@ type CopyToInstanceRequest struct {
 
 func (x *CopyToInstanceRequest) Reset() {
 	*x = CopyToInstanceRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[25]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3045,7 +3167,7 @@ func (x *CopyToInstanceRequest) String() string {
 func (*CopyToInstanceRequest) ProtoMessage() {}
 
 func (x *CopyToInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[25]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3058,7 +3180,7 @@ func (x *CopyToInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyToInstanceRequest.ProtoReflect.Descriptor instead.
 func (*CopyToInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{25}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CopyToInstanceRequest) GetPayload() isCopyToInstanceRequest_Payload {
@@ -3116,7 +3238,7 @@ type CopyFromInstanceRequest struct {
 
 func (x *CopyFromInstanceRequest) Reset() {
 	*x = CopyFromInstanceRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[26]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3128,7 +3250,7 @@ func (x *CopyFromInstanceRequest) String() string {
 func (*CopyFromInstanceRequest) ProtoMessage() {}
 
 func (x *CopyFromInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[26]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3141,7 +3263,7 @@ func (x *CopyFromInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyFromInstanceRequest.ProtoReflect.Descriptor instead.
 func (*CopyFromInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{26}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CopyFromInstanceRequest) GetName() string {
@@ -3168,7 +3290,7 @@ type CopyFromInstanceResponse struct {
 
 func (x *CopyFromInstanceResponse) Reset() {
 	*x = CopyFromInstanceResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[27]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3180,7 +3302,7 @@ func (x *CopyFromInstanceResponse) String() string {
 func (*CopyFromInstanceResponse) ProtoMessage() {}
 
 func (x *CopyFromInstanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[27]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3193,7 +3315,7 @@ func (x *CopyFromInstanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyFromInstanceResponse.ProtoReflect.Descriptor instead.
 func (*CopyFromInstanceResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{27}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CopyFromInstanceResponse) GetData() []byte {
@@ -3217,7 +3339,7 @@ type GetInstanceLogsRequest struct {
 
 func (x *GetInstanceLogsRequest) Reset() {
 	*x = GetInstanceLogsRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[28]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3229,7 +3351,7 @@ func (x *GetInstanceLogsRequest) String() string {
 func (*GetInstanceLogsRequest) ProtoMessage() {}
 
 func (x *GetInstanceLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[28]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3242,7 +3364,7 @@ func (x *GetInstanceLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInstanceLogsRequest.ProtoReflect.Descriptor instead.
 func (*GetInstanceLogsRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{28}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetInstanceLogsRequest) GetName() string {
@@ -3282,7 +3404,7 @@ type InstanceLogChunk struct {
 
 func (x *InstanceLogChunk) Reset() {
 	*x = InstanceLogChunk{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[29]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3294,7 +3416,7 @@ func (x *InstanceLogChunk) String() string {
 func (*InstanceLogChunk) ProtoMessage() {}
 
 func (x *InstanceLogChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[29]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3307,7 +3429,7 @@ func (x *InstanceLogChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstanceLogChunk.ProtoReflect.Descriptor instead.
 func (*InstanceLogChunk) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{29}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *InstanceLogChunk) GetData() []byte {
@@ -3332,7 +3454,7 @@ type GetInstanceStatsRequest struct {
 
 func (x *GetInstanceStatsRequest) Reset() {
 	*x = GetInstanceStatsRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[30]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3344,7 +3466,7 @@ func (x *GetInstanceStatsRequest) String() string {
 func (*GetInstanceStatsRequest) ProtoMessage() {}
 
 func (x *GetInstanceStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[30]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3357,7 +3479,7 @@ func (x *GetInstanceStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInstanceStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetInstanceStatsRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{30}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetInstanceStatsRequest) GetNames() []string {
@@ -3386,7 +3508,7 @@ type GetInstanceStatsResponse struct {
 
 func (x *GetInstanceStatsResponse) Reset() {
 	*x = GetInstanceStatsResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[31]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3398,7 +3520,7 @@ func (x *GetInstanceStatsResponse) String() string {
 func (*GetInstanceStatsResponse) ProtoMessage() {}
 
 func (x *GetInstanceStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[31]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3411,7 +3533,7 @@ func (x *GetInstanceStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInstanceStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetInstanceStatsResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{31}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetInstanceStatsResponse) GetReadTime() *timestamppb.Timestamp {
@@ -3474,7 +3596,7 @@ type InstanceStats struct {
 
 func (x *InstanceStats) Reset() {
 	*x = InstanceStats{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[32]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3486,7 +3608,7 @@ func (x *InstanceStats) String() string {
 func (*InstanceStats) ProtoMessage() {}
 
 func (x *InstanceStats) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[32]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3499,7 +3621,7 @@ func (x *InstanceStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstanceStats.ProtoReflect.Descriptor instead.
 func (*InstanceStats) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{32}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *InstanceStats) GetName() string {
@@ -3630,7 +3752,7 @@ type ListInstanceProcessesRequest struct {
 
 func (x *ListInstanceProcessesRequest) Reset() {
 	*x = ListInstanceProcessesRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[33]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3642,7 +3764,7 @@ func (x *ListInstanceProcessesRequest) String() string {
 func (*ListInstanceProcessesRequest) ProtoMessage() {}
 
 func (x *ListInstanceProcessesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[33]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3655,7 +3777,7 @@ func (x *ListInstanceProcessesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInstanceProcessesRequest.ProtoReflect.Descriptor instead.
 func (*ListInstanceProcessesRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{33}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListInstanceProcessesRequest) GetName() string {
@@ -3675,7 +3797,7 @@ type ListInstanceProcessesResponse struct {
 
 func (x *ListInstanceProcessesResponse) Reset() {
 	*x = ListInstanceProcessesResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[34]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3687,7 +3809,7 @@ func (x *ListInstanceProcessesResponse) String() string {
 func (*ListInstanceProcessesResponse) ProtoMessage() {}
 
 func (x *ListInstanceProcessesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[34]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3700,7 +3822,7 @@ func (x *ListInstanceProcessesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInstanceProcessesResponse.ProtoReflect.Descriptor instead.
 func (*ListInstanceProcessesResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{34}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListInstanceProcessesResponse) GetProcesses() []*Process {
@@ -3738,7 +3860,7 @@ type Process struct {
 
 func (x *Process) Reset() {
 	*x = Process{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[35]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3750,7 +3872,7 @@ func (x *Process) String() string {
 func (*Process) ProtoMessage() {}
 
 func (x *Process) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[35]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3763,7 +3885,7 @@ func (x *Process) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Process.ProtoReflect.Descriptor instead.
 func (*Process) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{35}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *Process) GetPid() int32 {
@@ -3851,7 +3973,7 @@ type Snapshot struct {
 
 func (x *Snapshot) Reset() {
 	*x = Snapshot{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[36]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3863,7 +3985,7 @@ func (x *Snapshot) String() string {
 func (*Snapshot) ProtoMessage() {}
 
 func (x *Snapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[36]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3876,7 +3998,7 @@ func (x *Snapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Snapshot.ProtoReflect.Descriptor instead.
 func (*Snapshot) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{36}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *Snapshot) GetName() string {
@@ -3940,7 +4062,7 @@ type CreateSnapshotRequest struct {
 
 func (x *CreateSnapshotRequest) Reset() {
 	*x = CreateSnapshotRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[37]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3952,7 +4074,7 @@ func (x *CreateSnapshotRequest) String() string {
 func (*CreateSnapshotRequest) ProtoMessage() {}
 
 func (x *CreateSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[37]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3965,7 +4087,7 @@ func (x *CreateSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*CreateSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{37}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *CreateSnapshotRequest) GetInstance() string {
@@ -3991,7 +4113,7 @@ type ListSnapshotsRequest struct {
 
 func (x *ListSnapshotsRequest) Reset() {
 	*x = ListSnapshotsRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[38]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4003,7 +4125,7 @@ func (x *ListSnapshotsRequest) String() string {
 func (*ListSnapshotsRequest) ProtoMessage() {}
 
 func (x *ListSnapshotsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[38]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4016,7 +4138,7 @@ func (x *ListSnapshotsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSnapshotsRequest.ProtoReflect.Descriptor instead.
 func (*ListSnapshotsRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{38}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ListSnapshotsRequest) GetInstance() string {
@@ -4035,7 +4157,7 @@ type ListSnapshotsResponse struct {
 
 func (x *ListSnapshotsResponse) Reset() {
 	*x = ListSnapshotsResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[39]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4047,7 +4169,7 @@ func (x *ListSnapshotsResponse) String() string {
 func (*ListSnapshotsResponse) ProtoMessage() {}
 
 func (x *ListSnapshotsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[39]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4060,7 +4182,7 @@ func (x *ListSnapshotsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSnapshotsResponse.ProtoReflect.Descriptor instead.
 func (*ListSnapshotsResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{39}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *ListSnapshotsResponse) GetSnapshots() []*Snapshot {
@@ -4080,7 +4202,7 @@ type GetSnapshotRequest struct {
 
 func (x *GetSnapshotRequest) Reset() {
 	*x = GetSnapshotRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[40]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4092,7 +4214,7 @@ func (x *GetSnapshotRequest) String() string {
 func (*GetSnapshotRequest) ProtoMessage() {}
 
 func (x *GetSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[40]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4105,7 +4227,7 @@ func (x *GetSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*GetSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{40}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetSnapshotRequest) GetInstance() string {
@@ -4132,7 +4254,7 @@ type DeleteSnapshotRequest struct {
 
 func (x *DeleteSnapshotRequest) Reset() {
 	*x = DeleteSnapshotRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[41]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4144,7 +4266,7 @@ func (x *DeleteSnapshotRequest) String() string {
 func (*DeleteSnapshotRequest) ProtoMessage() {}
 
 func (x *DeleteSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[41]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4157,7 +4279,7 @@ func (x *DeleteSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*DeleteSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{41}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *DeleteSnapshotRequest) GetInstance() string {
@@ -4184,7 +4306,7 @@ type RestoreSnapshotRequest struct {
 
 func (x *RestoreSnapshotRequest) Reset() {
 	*x = RestoreSnapshotRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[42]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4196,7 +4318,7 @@ func (x *RestoreSnapshotRequest) String() string {
 func (*RestoreSnapshotRequest) ProtoMessage() {}
 
 func (x *RestoreSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[42]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4209,7 +4331,7 @@ func (x *RestoreSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*RestoreSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{42}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *RestoreSnapshotRequest) GetInstance() string {
@@ -4249,7 +4371,7 @@ type Network struct {
 
 func (x *Network) Reset() {
 	*x = Network{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[43]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4261,7 +4383,7 @@ func (x *Network) String() string {
 func (*Network) ProtoMessage() {}
 
 func (x *Network) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[43]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4274,7 +4396,7 @@ func (x *Network) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Network.ProtoReflect.Descriptor instead.
 func (*Network) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{43}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *Network) GetId() string {
@@ -4375,7 +4497,7 @@ type NetworkAllocation struct {
 
 func (x *NetworkAllocation) Reset() {
 	*x = NetworkAllocation{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[44]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4387,7 +4509,7 @@ func (x *NetworkAllocation) String() string {
 func (*NetworkAllocation) ProtoMessage() {}
 
 func (x *NetworkAllocation) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[44]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4400,7 +4522,7 @@ func (x *NetworkAllocation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkAllocation.ProtoReflect.Descriptor instead.
 func (*NetworkAllocation) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{44}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *NetworkAllocation) GetInstanceId() string {
@@ -4452,7 +4574,7 @@ type CreateNetworkRequest struct {
 
 func (x *CreateNetworkRequest) Reset() {
 	*x = CreateNetworkRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[45]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4464,7 +4586,7 @@ func (x *CreateNetworkRequest) String() string {
 func (*CreateNetworkRequest) ProtoMessage() {}
 
 func (x *CreateNetworkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[45]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4477,7 +4599,7 @@ func (x *CreateNetworkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateNetworkRequest.ProtoReflect.Descriptor instead.
 func (*CreateNetworkRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{45}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *CreateNetworkRequest) GetName() string {
@@ -4530,7 +4652,7 @@ type ListNetworksRequest struct {
 
 func (x *ListNetworksRequest) Reset() {
 	*x = ListNetworksRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[46]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4542,7 +4664,7 @@ func (x *ListNetworksRequest) String() string {
 func (*ListNetworksRequest) ProtoMessage() {}
 
 func (x *ListNetworksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[46]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4555,7 +4677,7 @@ func (x *ListNetworksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNetworksRequest.ProtoReflect.Descriptor instead.
 func (*ListNetworksRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{46}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{47}
 }
 
 type ListNetworksResponse struct {
@@ -4567,7 +4689,7 @@ type ListNetworksResponse struct {
 
 func (x *ListNetworksResponse) Reset() {
 	*x = ListNetworksResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[47]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4579,7 +4701,7 @@ func (x *ListNetworksResponse) String() string {
 func (*ListNetworksResponse) ProtoMessage() {}
 
 func (x *ListNetworksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[47]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4592,7 +4714,7 @@ func (x *ListNetworksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNetworksResponse.ProtoReflect.Descriptor instead.
 func (*ListNetworksResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{47}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ListNetworksResponse) GetNetworks() []*Network {
@@ -4611,7 +4733,7 @@ type GetNetworkRequest struct {
 
 func (x *GetNetworkRequest) Reset() {
 	*x = GetNetworkRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[48]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4623,7 +4745,7 @@ func (x *GetNetworkRequest) String() string {
 func (*GetNetworkRequest) ProtoMessage() {}
 
 func (x *GetNetworkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[48]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4636,7 +4758,7 @@ func (x *GetNetworkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNetworkRequest.ProtoReflect.Descriptor instead.
 func (*GetNetworkRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{48}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *GetNetworkRequest) GetName() string {
@@ -4655,7 +4777,7 @@ type DeleteNetworkRequest struct {
 
 func (x *DeleteNetworkRequest) Reset() {
 	*x = DeleteNetworkRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[49]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4667,7 +4789,7 @@ func (x *DeleteNetworkRequest) String() string {
 func (*DeleteNetworkRequest) ProtoMessage() {}
 
 func (x *DeleteNetworkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[49]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4680,7 +4802,7 @@ func (x *DeleteNetworkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteNetworkRequest.ProtoReflect.Descriptor instead.
 func (*DeleteNetworkRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{49}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *DeleteNetworkRequest) GetName() string {
@@ -4699,7 +4821,7 @@ type ListNetworkAllocationsRequest struct {
 
 func (x *ListNetworkAllocationsRequest) Reset() {
 	*x = ListNetworkAllocationsRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[50]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4711,7 +4833,7 @@ func (x *ListNetworkAllocationsRequest) String() string {
 func (*ListNetworkAllocationsRequest) ProtoMessage() {}
 
 func (x *ListNetworkAllocationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[50]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4724,7 +4846,7 @@ func (x *ListNetworkAllocationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNetworkAllocationsRequest.ProtoReflect.Descriptor instead.
 func (*ListNetworkAllocationsRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{50}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ListNetworkAllocationsRequest) GetName() string {
@@ -4743,7 +4865,7 @@ type ListNetworkAllocationsResponse struct {
 
 func (x *ListNetworkAllocationsResponse) Reset() {
 	*x = ListNetworkAllocationsResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[51]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4755,7 +4877,7 @@ func (x *ListNetworkAllocationsResponse) String() string {
 func (*ListNetworkAllocationsResponse) ProtoMessage() {}
 
 func (x *ListNetworkAllocationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[51]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4768,7 +4890,7 @@ func (x *ListNetworkAllocationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNetworkAllocationsResponse.ProtoReflect.Descriptor instead.
 func (*ListNetworkAllocationsResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{51}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ListNetworkAllocationsResponse) GetAllocations() []*NetworkAllocation {
@@ -4792,7 +4914,7 @@ type Volume struct {
 
 func (x *Volume) Reset() {
 	*x = Volume{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[52]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4804,7 +4926,7 @@ func (x *Volume) String() string {
 func (*Volume) ProtoMessage() {}
 
 func (x *Volume) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[52]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4817,7 +4939,7 @@ func (x *Volume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Volume.ProtoReflect.Descriptor instead.
 func (*Volume) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{52}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *Volume) GetId() string {
@@ -4865,7 +4987,7 @@ type CreateVolumeRequest struct {
 
 func (x *CreateVolumeRequest) Reset() {
 	*x = CreateVolumeRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[53]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4877,7 +4999,7 @@ func (x *CreateVolumeRequest) String() string {
 func (*CreateVolumeRequest) ProtoMessage() {}
 
 func (x *CreateVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[53]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4890,7 +5012,7 @@ func (x *CreateVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateVolumeRequest.ProtoReflect.Descriptor instead.
 func (*CreateVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{53}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *CreateVolumeRequest) GetName() string {
@@ -4915,7 +5037,7 @@ type ListVolumesRequest struct {
 
 func (x *ListVolumesRequest) Reset() {
 	*x = ListVolumesRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[54]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4927,7 +5049,7 @@ func (x *ListVolumesRequest) String() string {
 func (*ListVolumesRequest) ProtoMessage() {}
 
 func (x *ListVolumesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[54]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4940,7 +5062,7 @@ func (x *ListVolumesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVolumesRequest.ProtoReflect.Descriptor instead.
 func (*ListVolumesRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{54}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{55}
 }
 
 type ListVolumesResponse struct {
@@ -4952,7 +5074,7 @@ type ListVolumesResponse struct {
 
 func (x *ListVolumesResponse) Reset() {
 	*x = ListVolumesResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[55]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4964,7 +5086,7 @@ func (x *ListVolumesResponse) String() string {
 func (*ListVolumesResponse) ProtoMessage() {}
 
 func (x *ListVolumesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[55]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4977,7 +5099,7 @@ func (x *ListVolumesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVolumesResponse.ProtoReflect.Descriptor instead.
 func (*ListVolumesResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{55}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ListVolumesResponse) GetVolumes() []*Volume {
@@ -4996,7 +5118,7 @@ type GetVolumeRequest struct {
 
 func (x *GetVolumeRequest) Reset() {
 	*x = GetVolumeRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[56]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5008,7 +5130,7 @@ func (x *GetVolumeRequest) String() string {
 func (*GetVolumeRequest) ProtoMessage() {}
 
 func (x *GetVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[56]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5021,7 +5143,7 @@ func (x *GetVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetVolumeRequest.ProtoReflect.Descriptor instead.
 func (*GetVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{56}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *GetVolumeRequest) GetName() string {
@@ -5040,7 +5162,7 @@ type DeleteVolumeRequest struct {
 
 func (x *DeleteVolumeRequest) Reset() {
 	*x = DeleteVolumeRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[57]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5052,7 +5174,7 @@ func (x *DeleteVolumeRequest) String() string {
 func (*DeleteVolumeRequest) ProtoMessage() {}
 
 func (x *DeleteVolumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[57]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5065,7 +5187,7 @@ func (x *DeleteVolumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteVolumeRequest.ProtoReflect.Descriptor instead.
 func (*DeleteVolumeRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{57}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *DeleteVolumeRequest) GetName() string {
@@ -5098,7 +5220,7 @@ type Image struct {
 
 func (x *Image) Reset() {
 	*x = Image{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[58]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5110,7 +5232,7 @@ func (x *Image) String() string {
 func (*Image) ProtoMessage() {}
 
 func (x *Image) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[58]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5123,7 +5245,7 @@ func (x *Image) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Image.ProtoReflect.Descriptor instead.
 func (*Image) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{58}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *Image) GetName() string {
@@ -5184,7 +5306,7 @@ type PullImageRequest struct {
 
 func (x *PullImageRequest) Reset() {
 	*x = PullImageRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[59]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5196,7 +5318,7 @@ func (x *PullImageRequest) String() string {
 func (*PullImageRequest) ProtoMessage() {}
 
 func (x *PullImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[59]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5209,7 +5331,7 @@ func (x *PullImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullImageRequest.ProtoReflect.Descriptor instead.
 func (*PullImageRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{59}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *PullImageRequest) GetRef() string {
@@ -5235,7 +5357,7 @@ type PullImageProgress struct {
 
 func (x *PullImageProgress) Reset() {
 	*x = PullImageProgress{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[60]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5247,7 +5369,7 @@ func (x *PullImageProgress) String() string {
 func (*PullImageProgress) ProtoMessage() {}
 
 func (x *PullImageProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[60]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5260,7 +5382,7 @@ func (x *PullImageProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullImageProgress.ProtoReflect.Descriptor instead.
 func (*PullImageProgress) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{60}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *PullImageProgress) GetStage() PullStage {
@@ -5299,7 +5421,7 @@ type ListImagesRequest struct {
 
 func (x *ListImagesRequest) Reset() {
 	*x = ListImagesRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[61]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5311,7 +5433,7 @@ func (x *ListImagesRequest) String() string {
 func (*ListImagesRequest) ProtoMessage() {}
 
 func (x *ListImagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[61]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5324,7 +5446,7 @@ func (x *ListImagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListImagesRequest.ProtoReflect.Descriptor instead.
 func (*ListImagesRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{61}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{62}
 }
 
 type ListImagesResponse struct {
@@ -5336,7 +5458,7 @@ type ListImagesResponse struct {
 
 func (x *ListImagesResponse) Reset() {
 	*x = ListImagesResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[62]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5348,7 +5470,7 @@ func (x *ListImagesResponse) String() string {
 func (*ListImagesResponse) ProtoMessage() {}
 
 func (x *ListImagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[62]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5361,7 +5483,7 @@ func (x *ListImagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListImagesResponse.ProtoReflect.Descriptor instead.
 func (*ListImagesResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{62}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ListImagesResponse) GetImages() []*Image {
@@ -5380,7 +5502,7 @@ type GetImageRequest struct {
 
 func (x *GetImageRequest) Reset() {
 	*x = GetImageRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[63]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5392,7 +5514,7 @@ func (x *GetImageRequest) String() string {
 func (*GetImageRequest) ProtoMessage() {}
 
 func (x *GetImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[63]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5405,7 +5527,7 @@ func (x *GetImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetImageRequest.ProtoReflect.Descriptor instead.
 func (*GetImageRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{63}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *GetImageRequest) GetRef() string {
@@ -5427,7 +5549,7 @@ type DeleteImageRequest struct {
 
 func (x *DeleteImageRequest) Reset() {
 	*x = DeleteImageRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[64]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5439,7 +5561,7 @@ func (x *DeleteImageRequest) String() string {
 func (*DeleteImageRequest) ProtoMessage() {}
 
 func (x *DeleteImageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[64]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5452,7 +5574,7 @@ func (x *DeleteImageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteImageRequest.ProtoReflect.Descriptor instead.
 func (*DeleteImageRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{64}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *DeleteImageRequest) GetRef() string {
@@ -5477,7 +5599,7 @@ type PruneImagesRequest struct {
 
 func (x *PruneImagesRequest) Reset() {
 	*x = PruneImagesRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[65]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5489,7 +5611,7 @@ func (x *PruneImagesRequest) String() string {
 func (*PruneImagesRequest) ProtoMessage() {}
 
 func (x *PruneImagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[65]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5502,7 +5624,7 @@ func (x *PruneImagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PruneImagesRequest.ProtoReflect.Descriptor instead.
 func (*PruneImagesRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{65}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{66}
 }
 
 type PruneImagesResponse struct {
@@ -5517,7 +5639,7 @@ type PruneImagesResponse struct {
 
 func (x *PruneImagesResponse) Reset() {
 	*x = PruneImagesResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[66]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5529,7 +5651,7 @@ func (x *PruneImagesResponse) String() string {
 func (*PruneImagesResponse) ProtoMessage() {}
 
 func (x *PruneImagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[66]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5542,7 +5664,7 @@ func (x *PruneImagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PruneImagesResponse.ProtoReflect.Descriptor instead.
 func (*PruneImagesResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{66}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *PruneImagesResponse) GetImages() []*Image {
@@ -5575,7 +5697,7 @@ type Kernel struct {
 
 func (x *Kernel) Reset() {
 	*x = Kernel{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[67]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5587,7 +5709,7 @@ func (x *Kernel) String() string {
 func (*Kernel) ProtoMessage() {}
 
 func (x *Kernel) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[67]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5600,7 +5722,7 @@ func (x *Kernel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Kernel.ProtoReflect.Descriptor instead.
 func (*Kernel) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{67}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *Kernel) GetId() string {
@@ -5665,7 +5787,7 @@ type ImportKernelRequest struct {
 
 func (x *ImportKernelRequest) Reset() {
 	*x = ImportKernelRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[68]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5677,7 +5799,7 @@ func (x *ImportKernelRequest) String() string {
 func (*ImportKernelRequest) ProtoMessage() {}
 
 func (x *ImportKernelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[68]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5690,7 +5812,7 @@ func (x *ImportKernelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportKernelRequest.ProtoReflect.Descriptor instead.
 func (*ImportKernelRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{68}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *ImportKernelRequest) GetName() string {
@@ -5729,7 +5851,7 @@ type ListKernelsRequest struct {
 
 func (x *ListKernelsRequest) Reset() {
 	*x = ListKernelsRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[69]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5741,7 +5863,7 @@ func (x *ListKernelsRequest) String() string {
 func (*ListKernelsRequest) ProtoMessage() {}
 
 func (x *ListKernelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[69]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5754,7 +5876,7 @@ func (x *ListKernelsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListKernelsRequest.ProtoReflect.Descriptor instead.
 func (*ListKernelsRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{69}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{70}
 }
 
 type ListKernelsResponse struct {
@@ -5766,7 +5888,7 @@ type ListKernelsResponse struct {
 
 func (x *ListKernelsResponse) Reset() {
 	*x = ListKernelsResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[70]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5778,7 +5900,7 @@ func (x *ListKernelsResponse) String() string {
 func (*ListKernelsResponse) ProtoMessage() {}
 
 func (x *ListKernelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[70]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5791,7 +5913,7 @@ func (x *ListKernelsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListKernelsResponse.ProtoReflect.Descriptor instead.
 func (*ListKernelsResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{70}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *ListKernelsResponse) GetKernels() []*Kernel {
@@ -5810,7 +5932,7 @@ type GetKernelRequest struct {
 
 func (x *GetKernelRequest) Reset() {
 	*x = GetKernelRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[71]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5822,7 +5944,7 @@ func (x *GetKernelRequest) String() string {
 func (*GetKernelRequest) ProtoMessage() {}
 
 func (x *GetKernelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[71]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5835,7 +5957,7 @@ func (x *GetKernelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetKernelRequest.ProtoReflect.Descriptor instead.
 func (*GetKernelRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{71}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *GetKernelRequest) GetName() string {
@@ -5854,7 +5976,7 @@ type DeleteKernelRequest struct {
 
 func (x *DeleteKernelRequest) Reset() {
 	*x = DeleteKernelRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[72]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5866,7 +5988,7 @@ func (x *DeleteKernelRequest) String() string {
 func (*DeleteKernelRequest) ProtoMessage() {}
 
 func (x *DeleteKernelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[72]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5879,7 +6001,7 @@ func (x *DeleteKernelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteKernelRequest.ProtoReflect.Descriptor instead.
 func (*DeleteKernelRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{72}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *DeleteKernelRequest) GetName() string {
@@ -5897,7 +6019,7 @@ type GetHostInfoRequest struct {
 
 func (x *GetHostInfoRequest) Reset() {
 	*x = GetHostInfoRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[73]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5909,7 +6031,7 @@ func (x *GetHostInfoRequest) String() string {
 func (*GetHostInfoRequest) ProtoMessage() {}
 
 func (x *GetHostInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[73]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5922,7 +6044,7 @@ func (x *GetHostInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetHostInfoRequest.ProtoReflect.Descriptor instead.
 func (*GetHostInfoRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{73}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{74}
 }
 
 type GetHostInfoResponse struct {
@@ -5947,7 +6069,7 @@ type GetHostInfoResponse struct {
 
 func (x *GetHostInfoResponse) Reset() {
 	*x = GetHostInfoResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[74]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5959,7 +6081,7 @@ func (x *GetHostInfoResponse) String() string {
 func (*GetHostInfoResponse) ProtoMessage() {}
 
 func (x *GetHostInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[74]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5972,7 +6094,7 @@ func (x *GetHostInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetHostInfoResponse.ProtoReflect.Descriptor instead.
 func (*GetHostInfoResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{74}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *GetHostInfoResponse) GetVersion() string {
@@ -6025,7 +6147,7 @@ type GetResourcesRequest struct {
 
 func (x *GetResourcesRequest) Reset() {
 	*x = GetResourcesRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[75]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6037,7 +6159,7 @@ func (x *GetResourcesRequest) String() string {
 func (*GetResourcesRequest) ProtoMessage() {}
 
 func (x *GetResourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[75]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6050,7 +6172,7 @@ func (x *GetResourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResourcesRequest.ProtoReflect.Descriptor instead.
 func (*GetResourcesRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{75}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{76}
 }
 
 type GetResourcesResponse struct {
@@ -6070,7 +6192,7 @@ type GetResourcesResponse struct {
 
 func (x *GetResourcesResponse) Reset() {
 	*x = GetResourcesResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[76]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6082,7 +6204,7 @@ func (x *GetResourcesResponse) String() string {
 func (*GetResourcesResponse) ProtoMessage() {}
 
 func (x *GetResourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[76]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6095,7 +6217,7 @@ func (x *GetResourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResourcesResponse.ProtoReflect.Descriptor instead.
 func (*GetResourcesResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{76}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *GetResourcesResponse) GetCpu() *ResourceCapacity {
@@ -6149,7 +6271,7 @@ type ResourceCapacity struct {
 
 func (x *ResourceCapacity) Reset() {
 	*x = ResourceCapacity{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[77]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6161,7 +6283,7 @@ func (x *ResourceCapacity) String() string {
 func (*ResourceCapacity) ProtoMessage() {}
 
 func (x *ResourceCapacity) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[77]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6174,7 +6296,7 @@ func (x *ResourceCapacity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceCapacity.ProtoReflect.Descriptor instead.
 func (*ResourceCapacity) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{77}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ResourceCapacity) GetHost() int64 {
@@ -6238,7 +6360,7 @@ type DiskUsage struct {
 
 func (x *DiskUsage) Reset() {
 	*x = DiskUsage{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[78]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6250,7 +6372,7 @@ func (x *DiskUsage) String() string {
 func (*DiskUsage) ProtoMessage() {}
 
 func (x *DiskUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[78]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6263,7 +6385,7 @@ func (x *DiskUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiskUsage.ProtoReflect.Descriptor instead.
 func (*DiskUsage) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{78}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *DiskUsage) GetPath() string {
@@ -6307,7 +6429,7 @@ type InstanceResources struct {
 
 func (x *InstanceResources) Reset() {
 	*x = InstanceResources{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[79]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6319,7 +6441,7 @@ func (x *InstanceResources) String() string {
 func (*InstanceResources) ProtoMessage() {}
 
 func (x *InstanceResources) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[79]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6332,7 +6454,7 @@ func (x *InstanceResources) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstanceResources.ProtoReflect.Descriptor instead.
 func (*InstanceResources) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{79}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *InstanceResources) GetName() string {
@@ -6378,7 +6500,7 @@ type HypervisorInfo struct {
 
 func (x *HypervisorInfo) Reset() {
 	*x = HypervisorInfo{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[80]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6390,7 +6512,7 @@ func (x *HypervisorInfo) String() string {
 func (*HypervisorInfo) ProtoMessage() {}
 
 func (x *HypervisorInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[80]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6403,7 +6525,7 @@ func (x *HypervisorInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HypervisorInfo.ProtoReflect.Descriptor instead.
 func (*HypervisorInfo) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{80}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *HypervisorInfo) GetType() HypervisorType {
@@ -6448,7 +6570,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[81]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6460,7 +6582,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[81]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6473,7 +6595,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{81}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *Event) GetTime() *timestamppb.Timestamp {
@@ -6546,7 +6668,7 @@ type GetEventsRequest struct {
 
 func (x *GetEventsRequest) Reset() {
 	*x = GetEventsRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[82]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6558,7 +6680,7 @@ func (x *GetEventsRequest) String() string {
 func (*GetEventsRequest) ProtoMessage() {}
 
 func (x *GetEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[82]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6571,7 +6693,7 @@ func (x *GetEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventsRequest.ProtoReflect.Descriptor instead.
 func (*GetEventsRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{82}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *GetEventsRequest) GetKind() EventKind {
@@ -6630,7 +6752,7 @@ type GetEventsResponse struct {
 
 func (x *GetEventsResponse) Reset() {
 	*x = GetEventsResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[83]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6642,7 +6764,7 @@ func (x *GetEventsResponse) String() string {
 func (*GetEventsResponse) ProtoMessage() {}
 
 func (x *GetEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[83]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6655,7 +6777,7 @@ func (x *GetEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventsResponse.ProtoReflect.Descriptor instead.
 func (*GetEventsResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{83}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *GetEventsResponse) GetEvents() []*Event {
@@ -6676,7 +6798,7 @@ var File_dicerd_v1_dicerd_proto protoreflect.FileDescriptor
 
 const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\n" +
-	"\x16dicerd/v1/dicerd.proto\x12\tdicerd.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xec\f\n" +
+	"\x16dicerd/v1/dicerd.proto\x12\tdicerd.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb3\r\n" +
 	"\bInstance\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
@@ -6690,7 +6812,9 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"kernelArgs\x12\x14\n" +
 	"\x05vcpus\x18\t \x01(\x05R\x05vcpus\x12!\n" +
 	"\fmemory_bytes\x18\n" +
-	" \x01(\x03R\vmemoryBytes\x12\x1d\n" +
+	" \x01(\x03R\vmemoryBytes\x12\x1b\n" +
+	"\tmax_vcpus\x18( \x01(\x05R\bmaxVcpus\x12(\n" +
+	"\x10max_memory_bytes\x18) \x01(\x03R\x0emaxMemoryBytes\x12\x1d\n" +
 	"\n" +
 	"disk_bytes\x18\v \x01(\x03R\tdiskBytes\x12!\n" +
 	"\fnetwork_name\x18\f \x01(\tR\vnetworkName\x12\x1b\n" +
@@ -6769,7 +6893,7 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\thost_port\x18\x02 \x01(\rR\bhostPort\x12\x1d\n" +
 	"\n" +
 	"guest_port\x18\x03 \x01(\rR\tguestPort\x12/\n" +
-	"\bprotocol\x18\x04 \x01(\x0e2\x13.dicerd.v1.ProtocolR\bprotocol\"\xe0\b\n" +
+	"\bprotocol\x18\x04 \x01(\x0e2\x13.dicerd.v1.ProtocolR\bprotocol\"\xa7\t\n" +
 	"\x15CreateInstanceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\timage_ref\x18\x02 \x01(\tR\bimageRef\x12B\n" +
@@ -6780,7 +6904,9 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\vkernel_args\x18\x06 \x01(\tR\n" +
 	"kernelArgs\x12\x14\n" +
 	"\x05vcpus\x18\a \x01(\x05R\x05vcpus\x12!\n" +
-	"\fmemory_bytes\x18\b \x01(\x03R\vmemoryBytes\x12\x1d\n" +
+	"\fmemory_bytes\x18\b \x01(\x03R\vmemoryBytes\x12\x1b\n" +
+	"\tmax_vcpus\x18\x1b \x01(\x05R\bmaxVcpus\x12(\n" +
+	"\x10max_memory_bytes\x18\x1c \x01(\x03R\x0emaxMemoryBytes\x12\x1d\n" +
 	"\n" +
 	"disk_bytes\x18\t \x01(\x03R\tdiskBytes\x12!\n" +
 	"\fnetwork_name\x18\n" +
@@ -6804,7 +6930,8 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x12\x10\x13R\avolumesR\x05filesR\tautostart\"\xf7\t\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x12\x10\x13R\avolumesR\x05filesR\tautostart\"\xeb\n" +
+	"\n" +
 	"\x15UpdateInstanceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\timage_ref\x18\x02 \x01(\tH\x00R\bimageRef\x88\x01\x01\x12B\n" +
@@ -6815,18 +6942,20 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\vkernel_args\x18\x06 \x01(\tH\x03R\n" +
 	"kernelArgs\x88\x01\x01\x12\x19\n" +
 	"\x05vcpus\x18\a \x01(\x05H\x04R\x05vcpus\x88\x01\x01\x12&\n" +
-	"\fmemory_bytes\x18\b \x01(\x03H\x05R\vmemoryBytes\x88\x01\x01\x12\"\n" +
+	"\fmemory_bytes\x18\b \x01(\x03H\x05R\vmemoryBytes\x88\x01\x01\x12 \n" +
+	"\tmax_vcpus\x18\x19 \x01(\x05H\x06R\bmaxVcpus\x88\x01\x01\x12-\n" +
+	"\x10max_memory_bytes\x18\x1a \x01(\x03H\aR\x0emaxMemoryBytes\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"disk_bytes\x18\t \x01(\x03H\x06R\tdiskBytes\x88\x01\x01\x12&\n" +
+	"disk_bytes\x18\t \x01(\x03H\bR\tdiskBytes\x88\x01\x01\x12&\n" +
 	"\fnetwork_name\x18\n" +
-	" \x01(\tH\aR\vnetworkName\x88\x01\x01\x12 \n" +
-	"\tstatic_ip\x18\v \x01(\tH\bR\bstaticIp\x88\x01\x01\x12\x1f\n" +
-	"\bhostname\x18\f \x01(\tH\tR\bhostname\x88\x01\x01\x12?\n" +
+	" \x01(\tH\tR\vnetworkName\x88\x01\x01\x12 \n" +
+	"\tstatic_ip\x18\v \x01(\tH\n" +
+	"R\bstaticIp\x88\x01\x01\x12\x1f\n" +
+	"\bhostname\x18\f \x01(\tH\vR\bhostname\x88\x01\x01\x12?\n" +
 	"\x0erestart_policy\x18\x14 \x01(\v2\x18.dicerd.v1.RestartPolicyR\rrestartPolicy\x129\n" +
 	"\fhealth_check\x18\x15 \x01(\v2\x16.dicerd.v1.HealthCheckR\vhealthCheck\x120\n" +
 	"\tinit_mode\x18\x16 \x01(\x0e2\x13.dicerd.v1.InitModeR\binitMode\x12)\n" +
-	"\x0eremove_on_exit\x18\x17 \x01(\bH\n" +
-	"R\fremoveOnExit\x88\x01\x01\x12(\n" +
+	"\x0eremove_on_exit\x18\x17 \x01(\bH\fR\fremoveOnExit\x88\x01\x01\x12(\n" +
 	"\x06mounts\x18\x18 \x03(\v2\x10.dicerd.v1.MountR\x06mounts\x12;\n" +
 	"\x03env\x18\x10 \x03(\v2).dicerd.v1.UpdateInstanceRequest.EnvEntryR\x03env\x12\x10\n" +
 	"\x03cmd\x18\x11 \x03(\tR\x03cmd\x12D\n" +
@@ -6844,7 +6973,10 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\f_kernel_nameB\x0e\n" +
 	"\f_kernel_argsB\b\n" +
 	"\x06_vcpusB\x0f\n" +
-	"\r_memory_bytesB\r\n" +
+	"\r_memory_bytesB\f\n" +
+	"\n" +
+	"_max_vcpusB\x13\n" +
+	"\x11_max_memory_bytesB\r\n" +
 	"\v_disk_bytesB\x0f\n" +
 	"\r_network_nameB\f\n" +
 	"\n" +
@@ -6852,7 +6984,13 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\t_hostnameB\x11\n" +
 	"\x0f_remove_on_exitJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10R\tautostartR\avolumesR\x05files\"*\n" +
 	"\x14StartInstanceRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\")\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\x89\x01\n" +
+	"\x15ResizeInstanceRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
+	"\x05vcpus\x18\x02 \x01(\x05H\x00R\x05vcpus\x88\x01\x01\x12&\n" +
+	"\fmemory_bytes\x18\x03 \x01(\x03H\x01R\vmemoryBytes\x88\x01\x01B\b\n" +
+	"\x06_vcpusB\x0f\n" +
+	"\r_memory_bytes\")\n" +
 	"\x13StopInstanceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"*\n" +
 	"\x14PauseInstanceRequest\x12\x12\n" +
@@ -7214,7 +7352,7 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\x10EVENT_KIND_IMAGE\x10\x02\x12\x16\n" +
 	"\x12EVENT_KIND_NETWORK\x10\x03\x12\x15\n" +
 	"\x11EVENT_KIND_VOLUME\x10\x04\x12\x15\n" +
-	"\x11EVENT_KIND_KERNEL\x10\x05*\xd1\x04\n" +
+	"\x11EVENT_KIND_KERNEL\x10\x05*\xeb\x04\n" +
 	"\vEventAction\x12\x1c\n" +
 	"\x18EVENT_ACTION_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14EVENT_ACTION_CREATED\x10\x01\x12\x18\n" +
@@ -7237,7 +7375,8 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\x13EVENT_ACTION_PULLED\x10\x11\x12\x1a\n" +
 	"\x16EVENT_ACTION_COLLECTED\x10\x12\x12\x19\n" +
 	"\x15EVENT_ACTION_IMPORTED\x10\x13\x12\x18\n" +
-	"\x14EVENT_ACTION_FETCHED\x10\x14*X\n" +
+	"\x14EVENT_ACTION_FETCHED\x10\x14\x12\x18\n" +
+	"\x14EVENT_ACTION_RESIZED\x10\x15*X\n" +
 	"\tLogSource\x12\x1a\n" +
 	"\x16LOG_SOURCE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10LOG_SOURCE_GUEST\x10\x01\x12\x19\n" +
@@ -7247,7 +7386,7 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\x14PULL_STAGE_RESOLVING\x10\x01\x12\x1a\n" +
 	"\x16PULL_STAGE_DOWNLOADING\x10\x02\x12\x18\n" +
 	"\x14PULL_STAGE_UNPACKING\x10\x03\x12\x19\n" +
-	"\x15PULL_STAGE_CONVERTING\x10\x042\x8a\x19\n" +
+	"\x15PULL_STAGE_CONVERTING\x10\x042\xd3\x19\n" +
 	"\rDaemonService\x12G\n" +
 	"\x0eCreateInstance\x12 .dicerd.v1.CreateInstanceRequest\x1a\x13.dicerd.v1.Instance\x12G\n" +
 	"\x0eUpdateInstance\x12 .dicerd.v1.UpdateInstanceRequest\x1a\x13.dicerd.v1.Instance\x12G\n" +
@@ -7255,7 +7394,8 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\rStartInstance\x12\x1f.dicerd.v1.StartInstanceRequest\x1a\x13.dicerd.v1.Instance\x12C\n" +
 	"\fStopInstance\x12\x1e.dicerd.v1.StopInstanceRequest\x1a\x13.dicerd.v1.Instance\x12E\n" +
 	"\rPauseInstance\x12\x1f.dicerd.v1.PauseInstanceRequest\x1a\x13.dicerd.v1.Instance\x12G\n" +
-	"\x0eResumeInstance\x12 .dicerd.v1.ResumeInstanceRequest\x1a\x13.dicerd.v1.Instance\x12J\n" +
+	"\x0eResumeInstance\x12 .dicerd.v1.ResumeInstanceRequest\x1a\x13.dicerd.v1.Instance\x12G\n" +
+	"\x0eResizeInstance\x12 .dicerd.v1.ResizeInstanceRequest\x1a\x13.dicerd.v1.Instance\x12J\n" +
 	"\x0eDeleteInstance\x12 .dicerd.v1.DeleteInstanceRequest\x1a\x16.google.protobuf.Empty\x12R\n" +
 	"\rListInstances\x12\x1f.dicerd.v1.ListInstancesRequest\x1a .dicerd.v1.ListInstancesResponse\x12A\n" +
 	"\vGetInstance\x12\x1d.dicerd.v1.GetInstanceRequest\x1a\x13.dicerd.v1.Instance\x12S\n" +
@@ -7307,7 +7447,7 @@ func file_dicerd_v1_dicerd_proto_rawDescGZIP() []byte {
 }
 
 var file_dicerd_v1_dicerd_proto_enumTypes = make([]protoimpl.EnumInfo, 13)
-var file_dicerd_v1_dicerd_proto_msgTypes = make([]protoimpl.MessageInfo, 92)
+var file_dicerd_v1_dicerd_proto_msgTypes = make([]protoimpl.MessageInfo, 93)
 var file_dicerd_v1_dicerd_proto_goTypes = []any{
 	(HypervisorType)(0),                    // 0: dicerd.v1.HypervisorType
 	(InstanceState)(0),                     // 1: dicerd.v1.InstanceState
@@ -7334,122 +7474,123 @@ var file_dicerd_v1_dicerd_proto_goTypes = []any{
 	(*CreateInstanceRequest)(nil),          // 22: dicerd.v1.CreateInstanceRequest
 	(*UpdateInstanceRequest)(nil),          // 23: dicerd.v1.UpdateInstanceRequest
 	(*StartInstanceRequest)(nil),           // 24: dicerd.v1.StartInstanceRequest
-	(*StopInstanceRequest)(nil),            // 25: dicerd.v1.StopInstanceRequest
-	(*PauseInstanceRequest)(nil),           // 26: dicerd.v1.PauseInstanceRequest
-	(*ResumeInstanceRequest)(nil),          // 27: dicerd.v1.ResumeInstanceRequest
-	(*RenameInstanceRequest)(nil),          // 28: dicerd.v1.RenameInstanceRequest
-	(*DeleteInstanceRequest)(nil),          // 29: dicerd.v1.DeleteInstanceRequest
-	(*GetInstanceRequest)(nil),             // 30: dicerd.v1.GetInstanceRequest
-	(*ListInstancesRequest)(nil),           // 31: dicerd.v1.ListInstancesRequest
-	(*ListInstancesResponse)(nil),          // 32: dicerd.v1.ListInstancesResponse
-	(*ExecInstanceStart)(nil),              // 33: dicerd.v1.ExecInstanceStart
-	(*ExecInstanceResize)(nil),             // 34: dicerd.v1.ExecInstanceResize
-	(*ExecInstanceRequest)(nil),            // 35: dicerd.v1.ExecInstanceRequest
-	(*ExecInstanceResponse)(nil),           // 36: dicerd.v1.ExecInstanceResponse
-	(*CopyToInstanceStart)(nil),            // 37: dicerd.v1.CopyToInstanceStart
-	(*CopyToInstanceRequest)(nil),          // 38: dicerd.v1.CopyToInstanceRequest
-	(*CopyFromInstanceRequest)(nil),        // 39: dicerd.v1.CopyFromInstanceRequest
-	(*CopyFromInstanceResponse)(nil),       // 40: dicerd.v1.CopyFromInstanceResponse
-	(*GetInstanceLogsRequest)(nil),         // 41: dicerd.v1.GetInstanceLogsRequest
-	(*InstanceLogChunk)(nil),               // 42: dicerd.v1.InstanceLogChunk
-	(*GetInstanceStatsRequest)(nil),        // 43: dicerd.v1.GetInstanceStatsRequest
-	(*GetInstanceStatsResponse)(nil),       // 44: dicerd.v1.GetInstanceStatsResponse
-	(*InstanceStats)(nil),                  // 45: dicerd.v1.InstanceStats
-	(*ListInstanceProcessesRequest)(nil),   // 46: dicerd.v1.ListInstanceProcessesRequest
-	(*ListInstanceProcessesResponse)(nil),  // 47: dicerd.v1.ListInstanceProcessesResponse
-	(*Process)(nil),                        // 48: dicerd.v1.Process
-	(*Snapshot)(nil),                       // 49: dicerd.v1.Snapshot
-	(*CreateSnapshotRequest)(nil),          // 50: dicerd.v1.CreateSnapshotRequest
-	(*ListSnapshotsRequest)(nil),           // 51: dicerd.v1.ListSnapshotsRequest
-	(*ListSnapshotsResponse)(nil),          // 52: dicerd.v1.ListSnapshotsResponse
-	(*GetSnapshotRequest)(nil),             // 53: dicerd.v1.GetSnapshotRequest
-	(*DeleteSnapshotRequest)(nil),          // 54: dicerd.v1.DeleteSnapshotRequest
-	(*RestoreSnapshotRequest)(nil),         // 55: dicerd.v1.RestoreSnapshotRequest
-	(*Network)(nil),                        // 56: dicerd.v1.Network
-	(*NetworkAllocation)(nil),              // 57: dicerd.v1.NetworkAllocation
-	(*CreateNetworkRequest)(nil),           // 58: dicerd.v1.CreateNetworkRequest
-	(*ListNetworksRequest)(nil),            // 59: dicerd.v1.ListNetworksRequest
-	(*ListNetworksResponse)(nil),           // 60: dicerd.v1.ListNetworksResponse
-	(*GetNetworkRequest)(nil),              // 61: dicerd.v1.GetNetworkRequest
-	(*DeleteNetworkRequest)(nil),           // 62: dicerd.v1.DeleteNetworkRequest
-	(*ListNetworkAllocationsRequest)(nil),  // 63: dicerd.v1.ListNetworkAllocationsRequest
-	(*ListNetworkAllocationsResponse)(nil), // 64: dicerd.v1.ListNetworkAllocationsResponse
-	(*Volume)(nil),                         // 65: dicerd.v1.Volume
-	(*CreateVolumeRequest)(nil),            // 66: dicerd.v1.CreateVolumeRequest
-	(*ListVolumesRequest)(nil),             // 67: dicerd.v1.ListVolumesRequest
-	(*ListVolumesResponse)(nil),            // 68: dicerd.v1.ListVolumesResponse
-	(*GetVolumeRequest)(nil),               // 69: dicerd.v1.GetVolumeRequest
-	(*DeleteVolumeRequest)(nil),            // 70: dicerd.v1.DeleteVolumeRequest
-	(*Image)(nil),                          // 71: dicerd.v1.Image
-	(*PullImageRequest)(nil),               // 72: dicerd.v1.PullImageRequest
-	(*PullImageProgress)(nil),              // 73: dicerd.v1.PullImageProgress
-	(*ListImagesRequest)(nil),              // 74: dicerd.v1.ListImagesRequest
-	(*ListImagesResponse)(nil),             // 75: dicerd.v1.ListImagesResponse
-	(*GetImageRequest)(nil),                // 76: dicerd.v1.GetImageRequest
-	(*DeleteImageRequest)(nil),             // 77: dicerd.v1.DeleteImageRequest
-	(*PruneImagesRequest)(nil),             // 78: dicerd.v1.PruneImagesRequest
-	(*PruneImagesResponse)(nil),            // 79: dicerd.v1.PruneImagesResponse
-	(*Kernel)(nil),                         // 80: dicerd.v1.Kernel
-	(*ImportKernelRequest)(nil),            // 81: dicerd.v1.ImportKernelRequest
-	(*ListKernelsRequest)(nil),             // 82: dicerd.v1.ListKernelsRequest
-	(*ListKernelsResponse)(nil),            // 83: dicerd.v1.ListKernelsResponse
-	(*GetKernelRequest)(nil),               // 84: dicerd.v1.GetKernelRequest
-	(*DeleteKernelRequest)(nil),            // 85: dicerd.v1.DeleteKernelRequest
-	(*GetHostInfoRequest)(nil),             // 86: dicerd.v1.GetHostInfoRequest
-	(*GetHostInfoResponse)(nil),            // 87: dicerd.v1.GetHostInfoResponse
-	(*GetResourcesRequest)(nil),            // 88: dicerd.v1.GetResourcesRequest
-	(*GetResourcesResponse)(nil),           // 89: dicerd.v1.GetResourcesResponse
-	(*ResourceCapacity)(nil),               // 90: dicerd.v1.ResourceCapacity
-	(*DiskUsage)(nil),                      // 91: dicerd.v1.DiskUsage
-	(*InstanceResources)(nil),              // 92: dicerd.v1.InstanceResources
-	(*HypervisorInfo)(nil),                 // 93: dicerd.v1.HypervisorInfo
-	(*Event)(nil),                          // 94: dicerd.v1.Event
-	(*GetEventsRequest)(nil),               // 95: dicerd.v1.GetEventsRequest
-	(*GetEventsResponse)(nil),              // 96: dicerd.v1.GetEventsResponse
-	nil,                                    // 97: dicerd.v1.Instance.EnvEntry
-	nil,                                    // 98: dicerd.v1.Instance.LabelsEntry
-	nil,                                    // 99: dicerd.v1.CreateInstanceRequest.EnvEntry
-	nil,                                    // 100: dicerd.v1.CreateInstanceRequest.LabelsEntry
-	nil,                                    // 101: dicerd.v1.UpdateInstanceRequest.EnvEntry
-	nil,                                    // 102: dicerd.v1.UpdateInstanceRequest.LabelsEntry
-	nil,                                    // 103: dicerd.v1.ExecInstanceStart.EnvEntry
-	nil,                                    // 104: dicerd.v1.Event.AttributesEntry
-	(*timestamppb.Timestamp)(nil),          // 105: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),            // 106: google.protobuf.Duration
-	(*emptypb.Empty)(nil),                  // 107: google.protobuf.Empty
+	(*ResizeInstanceRequest)(nil),          // 25: dicerd.v1.ResizeInstanceRequest
+	(*StopInstanceRequest)(nil),            // 26: dicerd.v1.StopInstanceRequest
+	(*PauseInstanceRequest)(nil),           // 27: dicerd.v1.PauseInstanceRequest
+	(*ResumeInstanceRequest)(nil),          // 28: dicerd.v1.ResumeInstanceRequest
+	(*RenameInstanceRequest)(nil),          // 29: dicerd.v1.RenameInstanceRequest
+	(*DeleteInstanceRequest)(nil),          // 30: dicerd.v1.DeleteInstanceRequest
+	(*GetInstanceRequest)(nil),             // 31: dicerd.v1.GetInstanceRequest
+	(*ListInstancesRequest)(nil),           // 32: dicerd.v1.ListInstancesRequest
+	(*ListInstancesResponse)(nil),          // 33: dicerd.v1.ListInstancesResponse
+	(*ExecInstanceStart)(nil),              // 34: dicerd.v1.ExecInstanceStart
+	(*ExecInstanceResize)(nil),             // 35: dicerd.v1.ExecInstanceResize
+	(*ExecInstanceRequest)(nil),            // 36: dicerd.v1.ExecInstanceRequest
+	(*ExecInstanceResponse)(nil),           // 37: dicerd.v1.ExecInstanceResponse
+	(*CopyToInstanceStart)(nil),            // 38: dicerd.v1.CopyToInstanceStart
+	(*CopyToInstanceRequest)(nil),          // 39: dicerd.v1.CopyToInstanceRequest
+	(*CopyFromInstanceRequest)(nil),        // 40: dicerd.v1.CopyFromInstanceRequest
+	(*CopyFromInstanceResponse)(nil),       // 41: dicerd.v1.CopyFromInstanceResponse
+	(*GetInstanceLogsRequest)(nil),         // 42: dicerd.v1.GetInstanceLogsRequest
+	(*InstanceLogChunk)(nil),               // 43: dicerd.v1.InstanceLogChunk
+	(*GetInstanceStatsRequest)(nil),        // 44: dicerd.v1.GetInstanceStatsRequest
+	(*GetInstanceStatsResponse)(nil),       // 45: dicerd.v1.GetInstanceStatsResponse
+	(*InstanceStats)(nil),                  // 46: dicerd.v1.InstanceStats
+	(*ListInstanceProcessesRequest)(nil),   // 47: dicerd.v1.ListInstanceProcessesRequest
+	(*ListInstanceProcessesResponse)(nil),  // 48: dicerd.v1.ListInstanceProcessesResponse
+	(*Process)(nil),                        // 49: dicerd.v1.Process
+	(*Snapshot)(nil),                       // 50: dicerd.v1.Snapshot
+	(*CreateSnapshotRequest)(nil),          // 51: dicerd.v1.CreateSnapshotRequest
+	(*ListSnapshotsRequest)(nil),           // 52: dicerd.v1.ListSnapshotsRequest
+	(*ListSnapshotsResponse)(nil),          // 53: dicerd.v1.ListSnapshotsResponse
+	(*GetSnapshotRequest)(nil),             // 54: dicerd.v1.GetSnapshotRequest
+	(*DeleteSnapshotRequest)(nil),          // 55: dicerd.v1.DeleteSnapshotRequest
+	(*RestoreSnapshotRequest)(nil),         // 56: dicerd.v1.RestoreSnapshotRequest
+	(*Network)(nil),                        // 57: dicerd.v1.Network
+	(*NetworkAllocation)(nil),              // 58: dicerd.v1.NetworkAllocation
+	(*CreateNetworkRequest)(nil),           // 59: dicerd.v1.CreateNetworkRequest
+	(*ListNetworksRequest)(nil),            // 60: dicerd.v1.ListNetworksRequest
+	(*ListNetworksResponse)(nil),           // 61: dicerd.v1.ListNetworksResponse
+	(*GetNetworkRequest)(nil),              // 62: dicerd.v1.GetNetworkRequest
+	(*DeleteNetworkRequest)(nil),           // 63: dicerd.v1.DeleteNetworkRequest
+	(*ListNetworkAllocationsRequest)(nil),  // 64: dicerd.v1.ListNetworkAllocationsRequest
+	(*ListNetworkAllocationsResponse)(nil), // 65: dicerd.v1.ListNetworkAllocationsResponse
+	(*Volume)(nil),                         // 66: dicerd.v1.Volume
+	(*CreateVolumeRequest)(nil),            // 67: dicerd.v1.CreateVolumeRequest
+	(*ListVolumesRequest)(nil),             // 68: dicerd.v1.ListVolumesRequest
+	(*ListVolumesResponse)(nil),            // 69: dicerd.v1.ListVolumesResponse
+	(*GetVolumeRequest)(nil),               // 70: dicerd.v1.GetVolumeRequest
+	(*DeleteVolumeRequest)(nil),            // 71: dicerd.v1.DeleteVolumeRequest
+	(*Image)(nil),                          // 72: dicerd.v1.Image
+	(*PullImageRequest)(nil),               // 73: dicerd.v1.PullImageRequest
+	(*PullImageProgress)(nil),              // 74: dicerd.v1.PullImageProgress
+	(*ListImagesRequest)(nil),              // 75: dicerd.v1.ListImagesRequest
+	(*ListImagesResponse)(nil),             // 76: dicerd.v1.ListImagesResponse
+	(*GetImageRequest)(nil),                // 77: dicerd.v1.GetImageRequest
+	(*DeleteImageRequest)(nil),             // 78: dicerd.v1.DeleteImageRequest
+	(*PruneImagesRequest)(nil),             // 79: dicerd.v1.PruneImagesRequest
+	(*PruneImagesResponse)(nil),            // 80: dicerd.v1.PruneImagesResponse
+	(*Kernel)(nil),                         // 81: dicerd.v1.Kernel
+	(*ImportKernelRequest)(nil),            // 82: dicerd.v1.ImportKernelRequest
+	(*ListKernelsRequest)(nil),             // 83: dicerd.v1.ListKernelsRequest
+	(*ListKernelsResponse)(nil),            // 84: dicerd.v1.ListKernelsResponse
+	(*GetKernelRequest)(nil),               // 85: dicerd.v1.GetKernelRequest
+	(*DeleteKernelRequest)(nil),            // 86: dicerd.v1.DeleteKernelRequest
+	(*GetHostInfoRequest)(nil),             // 87: dicerd.v1.GetHostInfoRequest
+	(*GetHostInfoResponse)(nil),            // 88: dicerd.v1.GetHostInfoResponse
+	(*GetResourcesRequest)(nil),            // 89: dicerd.v1.GetResourcesRequest
+	(*GetResourcesResponse)(nil),           // 90: dicerd.v1.GetResourcesResponse
+	(*ResourceCapacity)(nil),               // 91: dicerd.v1.ResourceCapacity
+	(*DiskUsage)(nil),                      // 92: dicerd.v1.DiskUsage
+	(*InstanceResources)(nil),              // 93: dicerd.v1.InstanceResources
+	(*HypervisorInfo)(nil),                 // 94: dicerd.v1.HypervisorInfo
+	(*Event)(nil),                          // 95: dicerd.v1.Event
+	(*GetEventsRequest)(nil),               // 96: dicerd.v1.GetEventsRequest
+	(*GetEventsResponse)(nil),              // 97: dicerd.v1.GetEventsResponse
+	nil,                                    // 98: dicerd.v1.Instance.EnvEntry
+	nil,                                    // 99: dicerd.v1.Instance.LabelsEntry
+	nil,                                    // 100: dicerd.v1.CreateInstanceRequest.EnvEntry
+	nil,                                    // 101: dicerd.v1.CreateInstanceRequest.LabelsEntry
+	nil,                                    // 102: dicerd.v1.UpdateInstanceRequest.EnvEntry
+	nil,                                    // 103: dicerd.v1.UpdateInstanceRequest.LabelsEntry
+	nil,                                    // 104: dicerd.v1.ExecInstanceStart.EnvEntry
+	nil,                                    // 105: dicerd.v1.Event.AttributesEntry
+	(*timestamppb.Timestamp)(nil),          // 106: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),            // 107: google.protobuf.Duration
+	(*emptypb.Empty)(nil),                  // 108: google.protobuf.Empty
 }
 var file_dicerd_v1_dicerd_proto_depIdxs = []int32{
 	0,   // 0: dicerd.v1.Instance.hypervisor_type:type_name -> dicerd.v1.HypervisorType
 	20,  // 1: dicerd.v1.Instance.mounts:type_name -> dicerd.v1.Mount
-	97,  // 2: dicerd.v1.Instance.env:type_name -> dicerd.v1.Instance.EnvEntry
-	98,  // 3: dicerd.v1.Instance.labels:type_name -> dicerd.v1.Instance.LabelsEntry
+	98,  // 2: dicerd.v1.Instance.env:type_name -> dicerd.v1.Instance.EnvEntry
+	99,  // 3: dicerd.v1.Instance.labels:type_name -> dicerd.v1.Instance.LabelsEntry
 	19,  // 4: dicerd.v1.Instance.restart_policy:type_name -> dicerd.v1.RestartPolicy
-	105, // 5: dicerd.v1.Instance.create_time:type_name -> google.protobuf.Timestamp
-	105, // 6: dicerd.v1.Instance.update_time:type_name -> google.protobuf.Timestamp
+	106, // 5: dicerd.v1.Instance.create_time:type_name -> google.protobuf.Timestamp
+	106, // 6: dicerd.v1.Instance.update_time:type_name -> google.protobuf.Timestamp
 	1,   // 7: dicerd.v1.Instance.state:type_name -> dicerd.v1.InstanceState
-	105, // 8: dicerd.v1.Instance.start_time:type_name -> google.protobuf.Timestamp
+	106, // 8: dicerd.v1.Instance.start_time:type_name -> google.protobuf.Timestamp
 	21,  // 9: dicerd.v1.Instance.ports:type_name -> dicerd.v1.PortMapping
-	105, // 10: dicerd.v1.Instance.finish_time:type_name -> google.protobuf.Timestamp
-	105, // 11: dicerd.v1.Instance.next_restart_time:type_name -> google.protobuf.Timestamp
+	106, // 10: dicerd.v1.Instance.finish_time:type_name -> google.protobuf.Timestamp
+	106, // 11: dicerd.v1.Instance.next_restart_time:type_name -> google.protobuf.Timestamp
 	14,  // 12: dicerd.v1.Instance.health_check:type_name -> dicerd.v1.HealthCheck
 	18,  // 13: dicerd.v1.Instance.health:type_name -> dicerd.v1.Health
 	2,   // 14: dicerd.v1.Instance.init_mode:type_name -> dicerd.v1.InitMode
 	15,  // 15: dicerd.v1.HealthCheck.exec:type_name -> dicerd.v1.HealthCheckExec
 	16,  // 16: dicerd.v1.HealthCheck.http:type_name -> dicerd.v1.HealthCheckHTTP
 	17,  // 17: dicerd.v1.HealthCheck.tcp:type_name -> dicerd.v1.HealthCheckTCP
-	106, // 18: dicerd.v1.HealthCheck.interval:type_name -> google.protobuf.Duration
-	106, // 19: dicerd.v1.HealthCheck.timeout:type_name -> google.protobuf.Duration
-	106, // 20: dicerd.v1.HealthCheck.start_period:type_name -> google.protobuf.Duration
+	107, // 18: dicerd.v1.HealthCheck.interval:type_name -> google.protobuf.Duration
+	107, // 19: dicerd.v1.HealthCheck.timeout:type_name -> google.protobuf.Duration
+	107, // 20: dicerd.v1.HealthCheck.start_period:type_name -> google.protobuf.Duration
 	7,   // 21: dicerd.v1.Health.status:type_name -> dicerd.v1.HealthStatus
-	105, // 22: dicerd.v1.Health.last_check_time:type_name -> google.protobuf.Timestamp
+	106, // 22: dicerd.v1.Health.last_check_time:type_name -> google.protobuf.Timestamp
 	14,  // 23: dicerd.v1.Health.check:type_name -> dicerd.v1.HealthCheck
 	4,   // 24: dicerd.v1.RestartPolicy.mode:type_name -> dicerd.v1.RestartMode
 	5,   // 25: dicerd.v1.Mount.type:type_name -> dicerd.v1.MountType
 	6,   // 26: dicerd.v1.PortMapping.protocol:type_name -> dicerd.v1.Protocol
 	0,   // 27: dicerd.v1.CreateInstanceRequest.hypervisor_type:type_name -> dicerd.v1.HypervisorType
 	20,  // 28: dicerd.v1.CreateInstanceRequest.mounts:type_name -> dicerd.v1.Mount
-	99,  // 29: dicerd.v1.CreateInstanceRequest.env:type_name -> dicerd.v1.CreateInstanceRequest.EnvEntry
-	100, // 30: dicerd.v1.CreateInstanceRequest.labels:type_name -> dicerd.v1.CreateInstanceRequest.LabelsEntry
+	100, // 29: dicerd.v1.CreateInstanceRequest.env:type_name -> dicerd.v1.CreateInstanceRequest.EnvEntry
+	101, // 30: dicerd.v1.CreateInstanceRequest.labels:type_name -> dicerd.v1.CreateInstanceRequest.LabelsEntry
 	19,  // 31: dicerd.v1.CreateInstanceRequest.restart_policy:type_name -> dicerd.v1.RestartPolicy
 	14,  // 32: dicerd.v1.CreateInstanceRequest.health_check:type_name -> dicerd.v1.HealthCheck
 	2,   // 33: dicerd.v1.CreateInstanceRequest.init_mode:type_name -> dicerd.v1.InitMode
@@ -7460,144 +7601,146 @@ var file_dicerd_v1_dicerd_proto_depIdxs = []int32{
 	14,  // 38: dicerd.v1.UpdateInstanceRequest.health_check:type_name -> dicerd.v1.HealthCheck
 	2,   // 39: dicerd.v1.UpdateInstanceRequest.init_mode:type_name -> dicerd.v1.InitMode
 	20,  // 40: dicerd.v1.UpdateInstanceRequest.mounts:type_name -> dicerd.v1.Mount
-	101, // 41: dicerd.v1.UpdateInstanceRequest.env:type_name -> dicerd.v1.UpdateInstanceRequest.EnvEntry
-	102, // 42: dicerd.v1.UpdateInstanceRequest.labels:type_name -> dicerd.v1.UpdateInstanceRequest.LabelsEntry
+	102, // 41: dicerd.v1.UpdateInstanceRequest.env:type_name -> dicerd.v1.UpdateInstanceRequest.EnvEntry
+	103, // 42: dicerd.v1.UpdateInstanceRequest.labels:type_name -> dicerd.v1.UpdateInstanceRequest.LabelsEntry
 	21,  // 43: dicerd.v1.UpdateInstanceRequest.ports:type_name -> dicerd.v1.PortMapping
 	13,  // 44: dicerd.v1.ListInstancesResponse.instances:type_name -> dicerd.v1.Instance
-	103, // 45: dicerd.v1.ExecInstanceStart.env:type_name -> dicerd.v1.ExecInstanceStart.EnvEntry
-	33,  // 46: dicerd.v1.ExecInstanceRequest.start:type_name -> dicerd.v1.ExecInstanceStart
-	34,  // 47: dicerd.v1.ExecInstanceRequest.resize:type_name -> dicerd.v1.ExecInstanceResize
-	37,  // 48: dicerd.v1.CopyToInstanceRequest.start:type_name -> dicerd.v1.CopyToInstanceStart
+	104, // 45: dicerd.v1.ExecInstanceStart.env:type_name -> dicerd.v1.ExecInstanceStart.EnvEntry
+	34,  // 46: dicerd.v1.ExecInstanceRequest.start:type_name -> dicerd.v1.ExecInstanceStart
+	35,  // 47: dicerd.v1.ExecInstanceRequest.resize:type_name -> dicerd.v1.ExecInstanceResize
+	38,  // 48: dicerd.v1.CopyToInstanceRequest.start:type_name -> dicerd.v1.CopyToInstanceStart
 	11,  // 49: dicerd.v1.GetInstanceLogsRequest.source:type_name -> dicerd.v1.LogSource
-	105, // 50: dicerd.v1.GetInstanceStatsResponse.read_time:type_name -> google.protobuf.Timestamp
-	45,  // 51: dicerd.v1.GetInstanceStatsResponse.instances:type_name -> dicerd.v1.InstanceStats
-	106, // 52: dicerd.v1.InstanceStats.cpu_time:type_name -> google.protobuf.Duration
-	48,  // 53: dicerd.v1.ListInstanceProcessesResponse.processes:type_name -> dicerd.v1.Process
-	105, // 54: dicerd.v1.Process.start_time:type_name -> google.protobuf.Timestamp
-	106, // 55: dicerd.v1.Process.cpu_time:type_name -> google.protobuf.Duration
+	106, // 50: dicerd.v1.GetInstanceStatsResponse.read_time:type_name -> google.protobuf.Timestamp
+	46,  // 51: dicerd.v1.GetInstanceStatsResponse.instances:type_name -> dicerd.v1.InstanceStats
+	107, // 52: dicerd.v1.InstanceStats.cpu_time:type_name -> google.protobuf.Duration
+	49,  // 53: dicerd.v1.ListInstanceProcessesResponse.processes:type_name -> dicerd.v1.Process
+	106, // 54: dicerd.v1.Process.start_time:type_name -> google.protobuf.Timestamp
+	107, // 55: dicerd.v1.Process.cpu_time:type_name -> google.protobuf.Duration
 	0,   // 56: dicerd.v1.Snapshot.hypervisor_type:type_name -> dicerd.v1.HypervisorType
-	105, // 57: dicerd.v1.Snapshot.create_time:type_name -> google.protobuf.Timestamp
-	49,  // 58: dicerd.v1.ListSnapshotsResponse.snapshots:type_name -> dicerd.v1.Snapshot
-	105, // 59: dicerd.v1.Network.create_time:type_name -> google.protobuf.Timestamp
-	105, // 60: dicerd.v1.Network.update_time:type_name -> google.protobuf.Timestamp
-	56,  // 61: dicerd.v1.ListNetworksResponse.networks:type_name -> dicerd.v1.Network
-	57,  // 62: dicerd.v1.ListNetworkAllocationsResponse.allocations:type_name -> dicerd.v1.NetworkAllocation
-	105, // 63: dicerd.v1.Volume.create_time:type_name -> google.protobuf.Timestamp
-	105, // 64: dicerd.v1.Volume.update_time:type_name -> google.protobuf.Timestamp
-	65,  // 65: dicerd.v1.ListVolumesResponse.volumes:type_name -> dicerd.v1.Volume
-	105, // 66: dicerd.v1.Image.create_time:type_name -> google.protobuf.Timestamp
-	105, // 67: dicerd.v1.Image.update_time:type_name -> google.protobuf.Timestamp
+	106, // 57: dicerd.v1.Snapshot.create_time:type_name -> google.protobuf.Timestamp
+	50,  // 58: dicerd.v1.ListSnapshotsResponse.snapshots:type_name -> dicerd.v1.Snapshot
+	106, // 59: dicerd.v1.Network.create_time:type_name -> google.protobuf.Timestamp
+	106, // 60: dicerd.v1.Network.update_time:type_name -> google.protobuf.Timestamp
+	57,  // 61: dicerd.v1.ListNetworksResponse.networks:type_name -> dicerd.v1.Network
+	58,  // 62: dicerd.v1.ListNetworkAllocationsResponse.allocations:type_name -> dicerd.v1.NetworkAllocation
+	106, // 63: dicerd.v1.Volume.create_time:type_name -> google.protobuf.Timestamp
+	106, // 64: dicerd.v1.Volume.update_time:type_name -> google.protobuf.Timestamp
+	66,  // 65: dicerd.v1.ListVolumesResponse.volumes:type_name -> dicerd.v1.Volume
+	106, // 66: dicerd.v1.Image.create_time:type_name -> google.protobuf.Timestamp
+	106, // 67: dicerd.v1.Image.update_time:type_name -> google.protobuf.Timestamp
 	14,  // 68: dicerd.v1.Image.health_check:type_name -> dicerd.v1.HealthCheck
-	105, // 69: dicerd.v1.Image.last_used_time:type_name -> google.protobuf.Timestamp
+	106, // 69: dicerd.v1.Image.last_used_time:type_name -> google.protobuf.Timestamp
 	12,  // 70: dicerd.v1.PullImageProgress.stage:type_name -> dicerd.v1.PullStage
-	71,  // 71: dicerd.v1.PullImageProgress.image:type_name -> dicerd.v1.Image
-	71,  // 72: dicerd.v1.ListImagesResponse.images:type_name -> dicerd.v1.Image
-	71,  // 73: dicerd.v1.PruneImagesResponse.images:type_name -> dicerd.v1.Image
+	72,  // 71: dicerd.v1.PullImageProgress.image:type_name -> dicerd.v1.Image
+	72,  // 72: dicerd.v1.ListImagesResponse.images:type_name -> dicerd.v1.Image
+	72,  // 73: dicerd.v1.PruneImagesResponse.images:type_name -> dicerd.v1.Image
 	8,   // 74: dicerd.v1.Kernel.arch:type_name -> dicerd.v1.Architecture
-	105, // 75: dicerd.v1.Kernel.create_time:type_name -> google.protobuf.Timestamp
-	105, // 76: dicerd.v1.Kernel.update_time:type_name -> google.protobuf.Timestamp
+	106, // 75: dicerd.v1.Kernel.create_time:type_name -> google.protobuf.Timestamp
+	106, // 76: dicerd.v1.Kernel.update_time:type_name -> google.protobuf.Timestamp
 	8,   // 77: dicerd.v1.ImportKernelRequest.arch:type_name -> dicerd.v1.Architecture
-	80,  // 78: dicerd.v1.ListKernelsResponse.kernels:type_name -> dicerd.v1.Kernel
-	93,  // 79: dicerd.v1.GetHostInfoResponse.hypervisors:type_name -> dicerd.v1.HypervisorInfo
-	90,  // 80: dicerd.v1.GetResourcesResponse.cpu:type_name -> dicerd.v1.ResourceCapacity
-	90,  // 81: dicerd.v1.GetResourcesResponse.memory:type_name -> dicerd.v1.ResourceCapacity
-	91,  // 82: dicerd.v1.GetResourcesResponse.disk:type_name -> dicerd.v1.DiskUsage
-	92,  // 83: dicerd.v1.GetResourcesResponse.instances:type_name -> dicerd.v1.InstanceResources
+	81,  // 78: dicerd.v1.ListKernelsResponse.kernels:type_name -> dicerd.v1.Kernel
+	94,  // 79: dicerd.v1.GetHostInfoResponse.hypervisors:type_name -> dicerd.v1.HypervisorInfo
+	91,  // 80: dicerd.v1.GetResourcesResponse.cpu:type_name -> dicerd.v1.ResourceCapacity
+	91,  // 81: dicerd.v1.GetResourcesResponse.memory:type_name -> dicerd.v1.ResourceCapacity
+	92,  // 82: dicerd.v1.GetResourcesResponse.disk:type_name -> dicerd.v1.DiskUsage
+	93,  // 83: dicerd.v1.GetResourcesResponse.instances:type_name -> dicerd.v1.InstanceResources
 	1,   // 84: dicerd.v1.InstanceResources.state:type_name -> dicerd.v1.InstanceState
 	0,   // 85: dicerd.v1.HypervisorInfo.type:type_name -> dicerd.v1.HypervisorType
-	105, // 86: dicerd.v1.Event.time:type_name -> google.protobuf.Timestamp
+	106, // 86: dicerd.v1.Event.time:type_name -> google.protobuf.Timestamp
 	9,   // 87: dicerd.v1.Event.kind:type_name -> dicerd.v1.EventKind
 	10,  // 88: dicerd.v1.Event.action:type_name -> dicerd.v1.EventAction
-	104, // 89: dicerd.v1.Event.attributes:type_name -> dicerd.v1.Event.AttributesEntry
+	105, // 89: dicerd.v1.Event.attributes:type_name -> dicerd.v1.Event.AttributesEntry
 	9,   // 90: dicerd.v1.GetEventsRequest.kind:type_name -> dicerd.v1.EventKind
-	105, // 91: dicerd.v1.GetEventsRequest.since:type_name -> google.protobuf.Timestamp
-	94,  // 92: dicerd.v1.GetEventsResponse.events:type_name -> dicerd.v1.Event
+	106, // 91: dicerd.v1.GetEventsRequest.since:type_name -> google.protobuf.Timestamp
+	95,  // 92: dicerd.v1.GetEventsResponse.events:type_name -> dicerd.v1.Event
 	22,  // 93: dicerd.v1.DaemonService.CreateInstance:input_type -> dicerd.v1.CreateInstanceRequest
 	23,  // 94: dicerd.v1.DaemonService.UpdateInstance:input_type -> dicerd.v1.UpdateInstanceRequest
-	28,  // 95: dicerd.v1.DaemonService.RenameInstance:input_type -> dicerd.v1.RenameInstanceRequest
+	29,  // 95: dicerd.v1.DaemonService.RenameInstance:input_type -> dicerd.v1.RenameInstanceRequest
 	24,  // 96: dicerd.v1.DaemonService.StartInstance:input_type -> dicerd.v1.StartInstanceRequest
-	25,  // 97: dicerd.v1.DaemonService.StopInstance:input_type -> dicerd.v1.StopInstanceRequest
-	26,  // 98: dicerd.v1.DaemonService.PauseInstance:input_type -> dicerd.v1.PauseInstanceRequest
-	27,  // 99: dicerd.v1.DaemonService.ResumeInstance:input_type -> dicerd.v1.ResumeInstanceRequest
-	29,  // 100: dicerd.v1.DaemonService.DeleteInstance:input_type -> dicerd.v1.DeleteInstanceRequest
-	31,  // 101: dicerd.v1.DaemonService.ListInstances:input_type -> dicerd.v1.ListInstancesRequest
-	30,  // 102: dicerd.v1.DaemonService.GetInstance:input_type -> dicerd.v1.GetInstanceRequest
-	41,  // 103: dicerd.v1.DaemonService.GetInstanceLogs:input_type -> dicerd.v1.GetInstanceLogsRequest
-	43,  // 104: dicerd.v1.DaemonService.GetInstanceStats:input_type -> dicerd.v1.GetInstanceStatsRequest
-	46,  // 105: dicerd.v1.DaemonService.ListInstanceProcesses:input_type -> dicerd.v1.ListInstanceProcessesRequest
-	50,  // 106: dicerd.v1.DaemonService.CreateSnapshot:input_type -> dicerd.v1.CreateSnapshotRequest
-	51,  // 107: dicerd.v1.DaemonService.ListSnapshots:input_type -> dicerd.v1.ListSnapshotsRequest
-	53,  // 108: dicerd.v1.DaemonService.GetSnapshot:input_type -> dicerd.v1.GetSnapshotRequest
-	54,  // 109: dicerd.v1.DaemonService.DeleteSnapshot:input_type -> dicerd.v1.DeleteSnapshotRequest
-	55,  // 110: dicerd.v1.DaemonService.RestoreSnapshot:input_type -> dicerd.v1.RestoreSnapshotRequest
-	35,  // 111: dicerd.v1.DaemonService.ExecInstance:input_type -> dicerd.v1.ExecInstanceRequest
-	38,  // 112: dicerd.v1.DaemonService.CopyToInstance:input_type -> dicerd.v1.CopyToInstanceRequest
-	39,  // 113: dicerd.v1.DaemonService.CopyFromInstance:input_type -> dicerd.v1.CopyFromInstanceRequest
-	58,  // 114: dicerd.v1.DaemonService.CreateNetwork:input_type -> dicerd.v1.CreateNetworkRequest
-	59,  // 115: dicerd.v1.DaemonService.ListNetworks:input_type -> dicerd.v1.ListNetworksRequest
-	61,  // 116: dicerd.v1.DaemonService.GetNetwork:input_type -> dicerd.v1.GetNetworkRequest
-	62,  // 117: dicerd.v1.DaemonService.DeleteNetwork:input_type -> dicerd.v1.DeleteNetworkRequest
-	63,  // 118: dicerd.v1.DaemonService.ListNetworkAllocations:input_type -> dicerd.v1.ListNetworkAllocationsRequest
-	66,  // 119: dicerd.v1.DaemonService.CreateVolume:input_type -> dicerd.v1.CreateVolumeRequest
-	67,  // 120: dicerd.v1.DaemonService.ListVolumes:input_type -> dicerd.v1.ListVolumesRequest
-	69,  // 121: dicerd.v1.DaemonService.GetVolume:input_type -> dicerd.v1.GetVolumeRequest
-	70,  // 122: dicerd.v1.DaemonService.DeleteVolume:input_type -> dicerd.v1.DeleteVolumeRequest
-	72,  // 123: dicerd.v1.DaemonService.PullImage:input_type -> dicerd.v1.PullImageRequest
-	74,  // 124: dicerd.v1.DaemonService.ListImages:input_type -> dicerd.v1.ListImagesRequest
-	76,  // 125: dicerd.v1.DaemonService.GetImage:input_type -> dicerd.v1.GetImageRequest
-	77,  // 126: dicerd.v1.DaemonService.DeleteImage:input_type -> dicerd.v1.DeleteImageRequest
-	78,  // 127: dicerd.v1.DaemonService.PruneImages:input_type -> dicerd.v1.PruneImagesRequest
-	81,  // 128: dicerd.v1.DaemonService.ImportKernel:input_type -> dicerd.v1.ImportKernelRequest
-	82,  // 129: dicerd.v1.DaemonService.ListKernels:input_type -> dicerd.v1.ListKernelsRequest
-	84,  // 130: dicerd.v1.DaemonService.GetKernel:input_type -> dicerd.v1.GetKernelRequest
-	85,  // 131: dicerd.v1.DaemonService.DeleteKernel:input_type -> dicerd.v1.DeleteKernelRequest
-	86,  // 132: dicerd.v1.DaemonService.GetHostInfo:input_type -> dicerd.v1.GetHostInfoRequest
-	88,  // 133: dicerd.v1.DaemonService.GetResources:input_type -> dicerd.v1.GetResourcesRequest
-	95,  // 134: dicerd.v1.DaemonService.GetEvents:input_type -> dicerd.v1.GetEventsRequest
-	13,  // 135: dicerd.v1.DaemonService.CreateInstance:output_type -> dicerd.v1.Instance
-	13,  // 136: dicerd.v1.DaemonService.UpdateInstance:output_type -> dicerd.v1.Instance
-	13,  // 137: dicerd.v1.DaemonService.RenameInstance:output_type -> dicerd.v1.Instance
-	13,  // 138: dicerd.v1.DaemonService.StartInstance:output_type -> dicerd.v1.Instance
-	13,  // 139: dicerd.v1.DaemonService.StopInstance:output_type -> dicerd.v1.Instance
-	13,  // 140: dicerd.v1.DaemonService.PauseInstance:output_type -> dicerd.v1.Instance
-	13,  // 141: dicerd.v1.DaemonService.ResumeInstance:output_type -> dicerd.v1.Instance
-	107, // 142: dicerd.v1.DaemonService.DeleteInstance:output_type -> google.protobuf.Empty
-	32,  // 143: dicerd.v1.DaemonService.ListInstances:output_type -> dicerd.v1.ListInstancesResponse
-	13,  // 144: dicerd.v1.DaemonService.GetInstance:output_type -> dicerd.v1.Instance
-	42,  // 145: dicerd.v1.DaemonService.GetInstanceLogs:output_type -> dicerd.v1.InstanceLogChunk
-	44,  // 146: dicerd.v1.DaemonService.GetInstanceStats:output_type -> dicerd.v1.GetInstanceStatsResponse
-	47,  // 147: dicerd.v1.DaemonService.ListInstanceProcesses:output_type -> dicerd.v1.ListInstanceProcessesResponse
-	49,  // 148: dicerd.v1.DaemonService.CreateSnapshot:output_type -> dicerd.v1.Snapshot
-	52,  // 149: dicerd.v1.DaemonService.ListSnapshots:output_type -> dicerd.v1.ListSnapshotsResponse
-	49,  // 150: dicerd.v1.DaemonService.GetSnapshot:output_type -> dicerd.v1.Snapshot
-	107, // 151: dicerd.v1.DaemonService.DeleteSnapshot:output_type -> google.protobuf.Empty
-	13,  // 152: dicerd.v1.DaemonService.RestoreSnapshot:output_type -> dicerd.v1.Instance
-	36,  // 153: dicerd.v1.DaemonService.ExecInstance:output_type -> dicerd.v1.ExecInstanceResponse
-	107, // 154: dicerd.v1.DaemonService.CopyToInstance:output_type -> google.protobuf.Empty
-	40,  // 155: dicerd.v1.DaemonService.CopyFromInstance:output_type -> dicerd.v1.CopyFromInstanceResponse
-	56,  // 156: dicerd.v1.DaemonService.CreateNetwork:output_type -> dicerd.v1.Network
-	60,  // 157: dicerd.v1.DaemonService.ListNetworks:output_type -> dicerd.v1.ListNetworksResponse
-	56,  // 158: dicerd.v1.DaemonService.GetNetwork:output_type -> dicerd.v1.Network
-	107, // 159: dicerd.v1.DaemonService.DeleteNetwork:output_type -> google.protobuf.Empty
-	64,  // 160: dicerd.v1.DaemonService.ListNetworkAllocations:output_type -> dicerd.v1.ListNetworkAllocationsResponse
-	65,  // 161: dicerd.v1.DaemonService.CreateVolume:output_type -> dicerd.v1.Volume
-	68,  // 162: dicerd.v1.DaemonService.ListVolumes:output_type -> dicerd.v1.ListVolumesResponse
-	65,  // 163: dicerd.v1.DaemonService.GetVolume:output_type -> dicerd.v1.Volume
-	107, // 164: dicerd.v1.DaemonService.DeleteVolume:output_type -> google.protobuf.Empty
-	73,  // 165: dicerd.v1.DaemonService.PullImage:output_type -> dicerd.v1.PullImageProgress
-	75,  // 166: dicerd.v1.DaemonService.ListImages:output_type -> dicerd.v1.ListImagesResponse
-	71,  // 167: dicerd.v1.DaemonService.GetImage:output_type -> dicerd.v1.Image
-	107, // 168: dicerd.v1.DaemonService.DeleteImage:output_type -> google.protobuf.Empty
-	79,  // 169: dicerd.v1.DaemonService.PruneImages:output_type -> dicerd.v1.PruneImagesResponse
-	80,  // 170: dicerd.v1.DaemonService.ImportKernel:output_type -> dicerd.v1.Kernel
-	83,  // 171: dicerd.v1.DaemonService.ListKernels:output_type -> dicerd.v1.ListKernelsResponse
-	80,  // 172: dicerd.v1.DaemonService.GetKernel:output_type -> dicerd.v1.Kernel
-	107, // 173: dicerd.v1.DaemonService.DeleteKernel:output_type -> google.protobuf.Empty
-	87,  // 174: dicerd.v1.DaemonService.GetHostInfo:output_type -> dicerd.v1.GetHostInfoResponse
-	89,  // 175: dicerd.v1.DaemonService.GetResources:output_type -> dicerd.v1.GetResourcesResponse
-	96,  // 176: dicerd.v1.DaemonService.GetEvents:output_type -> dicerd.v1.GetEventsResponse
-	135, // [135:177] is the sub-list for method output_type
-	93,  // [93:135] is the sub-list for method input_type
+	26,  // 97: dicerd.v1.DaemonService.StopInstance:input_type -> dicerd.v1.StopInstanceRequest
+	27,  // 98: dicerd.v1.DaemonService.PauseInstance:input_type -> dicerd.v1.PauseInstanceRequest
+	28,  // 99: dicerd.v1.DaemonService.ResumeInstance:input_type -> dicerd.v1.ResumeInstanceRequest
+	25,  // 100: dicerd.v1.DaemonService.ResizeInstance:input_type -> dicerd.v1.ResizeInstanceRequest
+	30,  // 101: dicerd.v1.DaemonService.DeleteInstance:input_type -> dicerd.v1.DeleteInstanceRequest
+	32,  // 102: dicerd.v1.DaemonService.ListInstances:input_type -> dicerd.v1.ListInstancesRequest
+	31,  // 103: dicerd.v1.DaemonService.GetInstance:input_type -> dicerd.v1.GetInstanceRequest
+	42,  // 104: dicerd.v1.DaemonService.GetInstanceLogs:input_type -> dicerd.v1.GetInstanceLogsRequest
+	44,  // 105: dicerd.v1.DaemonService.GetInstanceStats:input_type -> dicerd.v1.GetInstanceStatsRequest
+	47,  // 106: dicerd.v1.DaemonService.ListInstanceProcesses:input_type -> dicerd.v1.ListInstanceProcessesRequest
+	51,  // 107: dicerd.v1.DaemonService.CreateSnapshot:input_type -> dicerd.v1.CreateSnapshotRequest
+	52,  // 108: dicerd.v1.DaemonService.ListSnapshots:input_type -> dicerd.v1.ListSnapshotsRequest
+	54,  // 109: dicerd.v1.DaemonService.GetSnapshot:input_type -> dicerd.v1.GetSnapshotRequest
+	55,  // 110: dicerd.v1.DaemonService.DeleteSnapshot:input_type -> dicerd.v1.DeleteSnapshotRequest
+	56,  // 111: dicerd.v1.DaemonService.RestoreSnapshot:input_type -> dicerd.v1.RestoreSnapshotRequest
+	36,  // 112: dicerd.v1.DaemonService.ExecInstance:input_type -> dicerd.v1.ExecInstanceRequest
+	39,  // 113: dicerd.v1.DaemonService.CopyToInstance:input_type -> dicerd.v1.CopyToInstanceRequest
+	40,  // 114: dicerd.v1.DaemonService.CopyFromInstance:input_type -> dicerd.v1.CopyFromInstanceRequest
+	59,  // 115: dicerd.v1.DaemonService.CreateNetwork:input_type -> dicerd.v1.CreateNetworkRequest
+	60,  // 116: dicerd.v1.DaemonService.ListNetworks:input_type -> dicerd.v1.ListNetworksRequest
+	62,  // 117: dicerd.v1.DaemonService.GetNetwork:input_type -> dicerd.v1.GetNetworkRequest
+	63,  // 118: dicerd.v1.DaemonService.DeleteNetwork:input_type -> dicerd.v1.DeleteNetworkRequest
+	64,  // 119: dicerd.v1.DaemonService.ListNetworkAllocations:input_type -> dicerd.v1.ListNetworkAllocationsRequest
+	67,  // 120: dicerd.v1.DaemonService.CreateVolume:input_type -> dicerd.v1.CreateVolumeRequest
+	68,  // 121: dicerd.v1.DaemonService.ListVolumes:input_type -> dicerd.v1.ListVolumesRequest
+	70,  // 122: dicerd.v1.DaemonService.GetVolume:input_type -> dicerd.v1.GetVolumeRequest
+	71,  // 123: dicerd.v1.DaemonService.DeleteVolume:input_type -> dicerd.v1.DeleteVolumeRequest
+	73,  // 124: dicerd.v1.DaemonService.PullImage:input_type -> dicerd.v1.PullImageRequest
+	75,  // 125: dicerd.v1.DaemonService.ListImages:input_type -> dicerd.v1.ListImagesRequest
+	77,  // 126: dicerd.v1.DaemonService.GetImage:input_type -> dicerd.v1.GetImageRequest
+	78,  // 127: dicerd.v1.DaemonService.DeleteImage:input_type -> dicerd.v1.DeleteImageRequest
+	79,  // 128: dicerd.v1.DaemonService.PruneImages:input_type -> dicerd.v1.PruneImagesRequest
+	82,  // 129: dicerd.v1.DaemonService.ImportKernel:input_type -> dicerd.v1.ImportKernelRequest
+	83,  // 130: dicerd.v1.DaemonService.ListKernels:input_type -> dicerd.v1.ListKernelsRequest
+	85,  // 131: dicerd.v1.DaemonService.GetKernel:input_type -> dicerd.v1.GetKernelRequest
+	86,  // 132: dicerd.v1.DaemonService.DeleteKernel:input_type -> dicerd.v1.DeleteKernelRequest
+	87,  // 133: dicerd.v1.DaemonService.GetHostInfo:input_type -> dicerd.v1.GetHostInfoRequest
+	89,  // 134: dicerd.v1.DaemonService.GetResources:input_type -> dicerd.v1.GetResourcesRequest
+	96,  // 135: dicerd.v1.DaemonService.GetEvents:input_type -> dicerd.v1.GetEventsRequest
+	13,  // 136: dicerd.v1.DaemonService.CreateInstance:output_type -> dicerd.v1.Instance
+	13,  // 137: dicerd.v1.DaemonService.UpdateInstance:output_type -> dicerd.v1.Instance
+	13,  // 138: dicerd.v1.DaemonService.RenameInstance:output_type -> dicerd.v1.Instance
+	13,  // 139: dicerd.v1.DaemonService.StartInstance:output_type -> dicerd.v1.Instance
+	13,  // 140: dicerd.v1.DaemonService.StopInstance:output_type -> dicerd.v1.Instance
+	13,  // 141: dicerd.v1.DaemonService.PauseInstance:output_type -> dicerd.v1.Instance
+	13,  // 142: dicerd.v1.DaemonService.ResumeInstance:output_type -> dicerd.v1.Instance
+	13,  // 143: dicerd.v1.DaemonService.ResizeInstance:output_type -> dicerd.v1.Instance
+	108, // 144: dicerd.v1.DaemonService.DeleteInstance:output_type -> google.protobuf.Empty
+	33,  // 145: dicerd.v1.DaemonService.ListInstances:output_type -> dicerd.v1.ListInstancesResponse
+	13,  // 146: dicerd.v1.DaemonService.GetInstance:output_type -> dicerd.v1.Instance
+	43,  // 147: dicerd.v1.DaemonService.GetInstanceLogs:output_type -> dicerd.v1.InstanceLogChunk
+	45,  // 148: dicerd.v1.DaemonService.GetInstanceStats:output_type -> dicerd.v1.GetInstanceStatsResponse
+	48,  // 149: dicerd.v1.DaemonService.ListInstanceProcesses:output_type -> dicerd.v1.ListInstanceProcessesResponse
+	50,  // 150: dicerd.v1.DaemonService.CreateSnapshot:output_type -> dicerd.v1.Snapshot
+	53,  // 151: dicerd.v1.DaemonService.ListSnapshots:output_type -> dicerd.v1.ListSnapshotsResponse
+	50,  // 152: dicerd.v1.DaemonService.GetSnapshot:output_type -> dicerd.v1.Snapshot
+	108, // 153: dicerd.v1.DaemonService.DeleteSnapshot:output_type -> google.protobuf.Empty
+	13,  // 154: dicerd.v1.DaemonService.RestoreSnapshot:output_type -> dicerd.v1.Instance
+	37,  // 155: dicerd.v1.DaemonService.ExecInstance:output_type -> dicerd.v1.ExecInstanceResponse
+	108, // 156: dicerd.v1.DaemonService.CopyToInstance:output_type -> google.protobuf.Empty
+	41,  // 157: dicerd.v1.DaemonService.CopyFromInstance:output_type -> dicerd.v1.CopyFromInstanceResponse
+	57,  // 158: dicerd.v1.DaemonService.CreateNetwork:output_type -> dicerd.v1.Network
+	61,  // 159: dicerd.v1.DaemonService.ListNetworks:output_type -> dicerd.v1.ListNetworksResponse
+	57,  // 160: dicerd.v1.DaemonService.GetNetwork:output_type -> dicerd.v1.Network
+	108, // 161: dicerd.v1.DaemonService.DeleteNetwork:output_type -> google.protobuf.Empty
+	65,  // 162: dicerd.v1.DaemonService.ListNetworkAllocations:output_type -> dicerd.v1.ListNetworkAllocationsResponse
+	66,  // 163: dicerd.v1.DaemonService.CreateVolume:output_type -> dicerd.v1.Volume
+	69,  // 164: dicerd.v1.DaemonService.ListVolumes:output_type -> dicerd.v1.ListVolumesResponse
+	66,  // 165: dicerd.v1.DaemonService.GetVolume:output_type -> dicerd.v1.Volume
+	108, // 166: dicerd.v1.DaemonService.DeleteVolume:output_type -> google.protobuf.Empty
+	74,  // 167: dicerd.v1.DaemonService.PullImage:output_type -> dicerd.v1.PullImageProgress
+	76,  // 168: dicerd.v1.DaemonService.ListImages:output_type -> dicerd.v1.ListImagesResponse
+	72,  // 169: dicerd.v1.DaemonService.GetImage:output_type -> dicerd.v1.Image
+	108, // 170: dicerd.v1.DaemonService.DeleteImage:output_type -> google.protobuf.Empty
+	80,  // 171: dicerd.v1.DaemonService.PruneImages:output_type -> dicerd.v1.PruneImagesResponse
+	81,  // 172: dicerd.v1.DaemonService.ImportKernel:output_type -> dicerd.v1.Kernel
+	84,  // 173: dicerd.v1.DaemonService.ListKernels:output_type -> dicerd.v1.ListKernelsResponse
+	81,  // 174: dicerd.v1.DaemonService.GetKernel:output_type -> dicerd.v1.Kernel
+	108, // 175: dicerd.v1.DaemonService.DeleteKernel:output_type -> google.protobuf.Empty
+	88,  // 176: dicerd.v1.DaemonService.GetHostInfo:output_type -> dicerd.v1.GetHostInfoResponse
+	90,  // 177: dicerd.v1.DaemonService.GetResources:output_type -> dicerd.v1.GetResourcesResponse
+	97,  // 178: dicerd.v1.DaemonService.GetEvents:output_type -> dicerd.v1.GetEventsResponse
+	136, // [136:179] is the sub-list for method output_type
+	93,  // [93:136] is the sub-list for method input_type
 	93,  // [93:93] is the sub-list for extension type_name
 	93,  // [93:93] is the sub-list for extension extendee
 	0,   // [0:93] is the sub-list for field type_name
@@ -7615,17 +7758,18 @@ func file_dicerd_v1_dicerd_proto_init() {
 		(*HealthCheck_Tcp)(nil),
 	}
 	file_dicerd_v1_dicerd_proto_msgTypes[10].OneofWrappers = []any{}
-	file_dicerd_v1_dicerd_proto_msgTypes[22].OneofWrappers = []any{
+	file_dicerd_v1_dicerd_proto_msgTypes[12].OneofWrappers = []any{}
+	file_dicerd_v1_dicerd_proto_msgTypes[23].OneofWrappers = []any{
 		(*ExecInstanceRequest_Start)(nil),
 		(*ExecInstanceRequest_Stdin)(nil),
 		(*ExecInstanceRequest_Resize)(nil),
 	}
-	file_dicerd_v1_dicerd_proto_msgTypes[23].OneofWrappers = []any{
+	file_dicerd_v1_dicerd_proto_msgTypes[24].OneofWrappers = []any{
 		(*ExecInstanceResponse_Stdout)(nil),
 		(*ExecInstanceResponse_Stderr)(nil),
 		(*ExecInstanceResponse_ExitCode)(nil),
 	}
-	file_dicerd_v1_dicerd_proto_msgTypes[25].OneofWrappers = []any{
+	file_dicerd_v1_dicerd_proto_msgTypes[26].OneofWrappers = []any{
 		(*CopyToInstanceRequest_Start)(nil),
 		(*CopyToInstanceRequest_Data)(nil),
 	}
@@ -7635,7 +7779,7 @@ func file_dicerd_v1_dicerd_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_dicerd_v1_dicerd_proto_rawDesc), len(file_dicerd_v1_dicerd_proto_rawDesc)),
 			NumEnums:      13,
-			NumMessages:   92,
+			NumMessages:   93,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

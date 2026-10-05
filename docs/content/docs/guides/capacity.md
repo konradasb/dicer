@@ -87,6 +87,13 @@ So resources are checked when an instance starts, not when it is created:
   [restart policy](../restarts) is restarting: there, it counts as another
   failed end, and the policy tries again after its backoff.
 
+- **Resizing** a running instance with `dicer resize` is refused the same
+  way if growing it would pass what the host allows. An instance holds what
+  it has, not its `--max-vcpus` and `--max-memory`, so the room set aside
+  for it to grow into is not counted until it is used; creating one with
+  maximums the host could never give is refused, as for its sizes. See
+  [Resizing a running instance](../running-workloads#resizing-a-running-instance).
+
 ## Choosing the overcommit
 
 **vCPUs** are threads on the host, and share its CPUs as any threads do.

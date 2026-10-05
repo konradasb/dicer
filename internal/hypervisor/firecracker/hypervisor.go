@@ -158,26 +158,26 @@ func (h *Hypervisor) ResizeVMCPU(context.Context, int) error {
 }
 
 // ResizeVMMemory sets the guest's total memory to bytes by plugging or
-// unplugging virtio-mem memory. The guest must have booted with a
-// hotpluggable region large enough to cover the difference from its boot
-// memory.
+// unplugging virtio-mem memory, and waits until the guest has, or ctx is
+// done.
 func (h *Hypervisor) ResizeVMMemory(ctx context.Context, bytes int64) error {
-	if _, err := h.requestMemory(ctx, bytes); err != nil {
+	var cfg vmConfig
+	if err := h.client.get(ctx, "/vm/config", &cfg); err != nil {
 		return fmt.Errorf("resize memory: %w", err)
 	}
-	return nil
-}
-
-// ResizeVMMemoryAndWait is ResizeVMMemory, then waits until the guest has
-// plugged or unplugged the memory.
-func (h *Hypervisor) ResizeVMMemoryAndWait(ctx context.Context, bytes int64, timeout time.Duration) error {
-	requested, err := h.requestMemory(ctx, bytes)
-	if err != nil {
-		return fmt.Errorf("resize memory: %w", err)
+	bootBytes := int64(cfg.MachineConfig.MemSizeMiB) * mib
+	hotplugBytes := int64(0)
+	if cfg.MemoryHotplug != nil {
+		hotplugBytes = int64(cfg.MemoryHotplug.TotalSizeMiB) * mib
+	}
+	if err := hypervisor.CheckMemoryResize(bytes, bootBytes, hotplugBytes); err != nil {
+		return fmt.Errorf("firecracker: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+	requested := int((bytes - bootBytes) / mib)
+	if err := h.client.patch(ctx, "/hotplug/memory", memoryHotplugUpdate{RequestedSizeMiB: requested}); err != nil {
+		return fmt.Errorf("resize memory: %w", err)
+	}
 
 	const pollInterval = 20 * time.Millisecond
 	ticker := time.NewTicker(pollInterval)
@@ -186,7 +186,7 @@ func (h *Hypervisor) ResizeVMMemoryAndWait(ctx context.Context, bytes int64, tim
 	for {
 		var status memoryHotplugStatus
 		if err := h.client.get(ctx, "/hotplug/memory", &status); err != nil {
-			return fmt.Errorf("poll memory hotplug: %w", err)
+			return fmt.Errorf("wait for the guest to resize its memory: %w", err)
 		}
 		if status.PluggedSizeMiB == requested {
 			return nil
@@ -194,34 +194,9 @@ func (h *Hypervisor) ResizeVMMemoryAndWait(ctx context.Context, bytes int64, tim
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("memory resize timed out after %s: %d MiB of %d MiB plugged",
-				timeout, status.PluggedSizeMiB, requested)
+			return fmt.Errorf("wait for the guest to resize its memory: %d of %d MiB plugged: %w",
+				status.PluggedSizeMiB, requested, ctx.Err())
 		case <-ticker.C:
 		}
 	}
-}
-
-// requestMemory asks for the hotpluggable region to hold whatever brings the
-// guest to bytes in total, returning the size requested in MiB.
-func (h *Hypervisor) requestMemory(ctx context.Context, bytes int64) (int, error) {
-	var cfg vmConfig
-	if err := h.client.get(ctx, "/vm/config", &cfg); err != nil {
-		return 0, err
-	}
-	if cfg.MemoryHotplug == nil {
-		return 0, fmt.Errorf("firecracker: guest booted without hotpluggable memory: %w", errors.ErrUnsupported)
-	}
-
-	bootBytes := int64(cfg.MachineConfig.MemSizeMiB) * mib
-	requested := divideRoundingUp(bytes-bootBytes, mib)
-	if requested < 0 || requested > cfg.MemoryHotplug.TotalSizeMiB {
-		return 0, fmt.Errorf("firecracker: memory can be resized between %d MiB and %d MiB, not to %d MiB",
-			cfg.MachineConfig.MemSizeMiB, cfg.MachineConfig.MemSizeMiB+cfg.MemoryHotplug.TotalSizeMiB,
-			divideRoundingUp(bytes, mib))
-	}
-
-	if err := h.client.patch(ctx, "/hotplug/memory", memoryHotplugUpdate{RequestedSizeMiB: requested}); err != nil {
-		return 0, err
-	}
-	return requested, nil
 }

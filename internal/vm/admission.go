@@ -47,19 +47,9 @@ func (m *Manager) admit(instance types.InstanceSpec, need types.Resources) error
 		return err
 	}
 
-	if !m.capacity.Unlimited() {
-		allocated, err := m.allocated(instance.ID)
-		if err != nil {
-			return err
-		}
-
-		allocatable := m.capacity.Allocatable()
-		if !allocated.Add(need).Fits(allocatable) {
-			return errdefs.ResourceExhausted("instance %q needs %s, but %s of the %s this host allows is committed",
-				instance.Name, need, allocated, allocatable)
-		}
+	if err := m.checkRoom(instance, need); err != nil {
+		return err
 	}
-
 	if err := m.checkPorts(instance); err != nil {
 		return err
 	}
@@ -71,6 +61,43 @@ func (m *Manager) admit(instance types.InstanceSpec, need types.Resources) error
 		status.VCPUs = need.VCPUs
 		status.MemoryBytes = need.MemoryBytes
 	})
+}
+
+// reserve makes a running instance hold need in place of what it holds, if
+// the host has room (ErrResourceExhausted otherwise). The caller must hold
+// the instance lock.
+func (m *Manager) reserve(instance types.InstanceSpec, need types.Resources) error {
+	m.admissionMu.Lock()
+	defer m.admissionMu.Unlock()
+
+	if err := m.checkRoom(instance, need); err != nil {
+		return err
+	}
+	return m.transitionWith(instance, types.InstanceStateRunning, func(status *types.InstanceStatus) {
+		status.VCPUs = need.VCPUs
+		status.MemoryBytes = need.MemoryBytes
+	})
+}
+
+// checkRoom returns ErrResourceExhausted unless the host has room for
+// instance to hold need beside what the others hold. The caller must hold
+// admissionMu.
+func (m *Manager) checkRoom(instance types.InstanceSpec, need types.Resources) error {
+	if m.capacity.Unlimited() {
+		return nil
+	}
+
+	allocated, err := m.allocated(instance.ID)
+	if err != nil {
+		return err
+	}
+
+	allocatable := m.capacity.Allocatable()
+	if !allocated.Add(need).Fits(allocatable) {
+		return errdefs.ResourceExhausted("instance %q needs %s, but %s of the %s this host allows is committed",
+			instance.Name, need, allocated, allocatable)
+	}
+	return nil
 }
 
 // allocated returns what the instances other than excludeID hold.

@@ -29,6 +29,8 @@ func instanceToProto(instance types.Instance) *dicerdv1.Instance {
 		KernelArgs:        spec.KernelArgs,
 		Vcpus:             int32(spec.VCPUs),
 		MemoryBytes:       spec.MemoryBytes,
+		MaxVcpus:          int32(spec.MaxVCPUs),
+		MaxMemoryBytes:    spec.MaxMemoryBytes,
 		DiskBytes:         spec.DiskBytes,
 		NetworkName:       spec.NetworkName,
 		StaticIp:          spec.StaticIP,

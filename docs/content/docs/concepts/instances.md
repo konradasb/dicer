@@ -87,6 +87,9 @@ definition, disk and address.
 - `dicer update` changes the definition of a stopped instance; it takes
   effect at the next start. The restart policy alone can be changed while it
   runs, and applies the next time it ends.
+- `dicer resize` changes a running instance's vCPUs and memory, within the
+  `--max-vcpus` and `--max-memory` it was started with. See
+  [Resizing a running instance](../../guides/running-workloads#resizing-a-running-instance).
 - `dicer rename` gives a stopped or failed instance a new name. It keeps its ID, disks
   and address.
 - `dicer rm` deletes an instance: its disk, console log, snapshots and

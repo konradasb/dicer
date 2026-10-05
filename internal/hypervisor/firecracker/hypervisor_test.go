@@ -4,6 +4,7 @@
 package firecracker
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,8 +12,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -251,16 +254,21 @@ func TestSnapshotVM(t *testing.T) {
 	}
 }
 
-func TestResizeVMMemory(t *testing.T) {
+func TestResizeVMMemoryWaitsForTheGuest(t *testing.T) {
+	var plugged atomic.Int32
 	hv, fake := newFakeFirecracker(t, func(w http.ResponseWriter, r *http.Request, _ string) {
-		if r.URL.Path == "/vm/config" {
+		switch {
+		case r.URL.Path == "/vm/config":
 			_ = json.NewEncoder(w).Encode(vmConfig{
 				MachineConfig: machineConfig{MemSizeMiB: 512},
 				MemoryHotplug: &memoryHotplugConfig{TotalSizeMiB: 512},
 			})
-			return
+		case r.URL.Path == "/hotplug/memory" && r.Method == http.MethodGet:
+			// The guest plugs a little more each time it is asked.
+			_ = json.NewEncoder(w).Encode(memoryHotplugStatus{PluggedSizeMiB: int(plugged.Add(128))})
+		default:
+			w.WriteHeader(http.StatusNoContent)
 		}
-		w.WriteHeader(http.StatusNoContent)
 	})
 
 	if err := hv.ResizeVMMemory(t.Context(), 768*mib); err != nil {
@@ -275,29 +283,64 @@ func TestResizeVMMemory(t *testing.T) {
 	if update.RequestedSizeMiB != 256 {
 		t.Errorf("requested_size_mib = %d, want 256", update.RequestedSizeMiB)
 	}
-
-	// Beyond the hotpluggable region, and below the boot memory, there is
-	// nothing virtio-mem can do.
-	if err := hv.ResizeVMMemory(t.Context(), 4096*mib); err == nil {
-		t.Error("resizing beyond the hotpluggable region succeeded")
-	}
-	if err := hv.ResizeVMMemory(t.Context(), 256*mib); err == nil {
-		t.Error("resizing below the boot memory succeeded")
+	if got := plugged.Load(); got != 256 {
+		t.Errorf("returned once %d MiB was plugged, want 256", got)
 	}
 }
 
-func TestResizeVMMemoryWithoutHotplug(t *testing.T) {
+func TestResizeVMMemoryGivesUpWithItsContext(t *testing.T) {
 	hv, _ := newFakeFirecracker(t, func(w http.ResponseWriter, r *http.Request, _ string) {
-		if r.URL.Path == "/vm/config" {
-			_ = json.NewEncoder(w).Encode(vmConfig{MachineConfig: machineConfig{MemSizeMiB: 512}})
-			return
+		switch {
+		case r.URL.Path == "/vm/config":
+			_ = json.NewEncoder(w).Encode(vmConfig{
+				MachineConfig: machineConfig{MemSizeMiB: 512},
+				MemoryHotplug: &memoryHotplugConfig{TotalSizeMiB: 512},
+			})
+		case r.URL.Path == "/hotplug/memory" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(memoryHotplugStatus{})
+		default:
+			w.WriteHeader(http.StatusNoContent)
 		}
-		w.WriteHeader(http.StatusNoContent)
 	})
 
-	err := hv.ResizeVMMemory(t.Context(), 1024*mib)
-	if !errors.Is(err, errors.ErrUnsupported) {
-		t.Errorf("ResizeVMMemory = %v, want ErrUnsupported", err)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	if err := hv.ResizeVMMemory(ctx, 768*mib); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("ResizeVMMemory = %v, want the deadline exceeded", err)
+	}
+}
+
+func TestResizeVMMemoryRefusesWhatVirtioMemCannotDo(t *testing.T) {
+	tests := []struct {
+		name    string
+		hotplug *memoryHotplugConfig
+		bytes   int64
+	}{
+		{"beyond the hotpluggable region", &memoryHotplugConfig{TotalSizeMiB: 512}, 4096 * mib},
+		{"below the boot memory", &memoryHotplugConfig{TotalSizeMiB: 512}, 256 * mib},
+		{"off a 2 MiB step", &memoryHotplugConfig{TotalSizeMiB: 512}, 513 * mib},
+		{"no hotpluggable region", nil, 1024 * mib},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hv, fake := newFakeFirecracker(t, func(w http.ResponseWriter, r *http.Request, _ string) {
+				if r.URL.Path == "/vm/config" {
+					_ = json.NewEncoder(w).Encode(vmConfig{
+						MachineConfig: machineConfig{MemSizeMiB: 512},
+						MemoryHotplug: tt.hotplug,
+					})
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})
+
+			if err := hv.ResizeVMMemory(t.Context(), tt.bytes); err == nil {
+				t.Fatal("ResizeVMMemory succeeded")
+			}
+			if slices.ContainsFunc(fake.requests(), func(r request) bool { return r.method == http.MethodPatch }) {
+				t.Error("asked Firecracker to resize anyway")
+			}
+		})
 	}
 }
 

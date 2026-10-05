@@ -88,6 +88,12 @@ func runRoot(cmd *cobra.Command, _ []string) error {
 
 	slog.Info("dicer agent listening", "port", port)
 
+	go func() {
+		if err := onlineHotpluggedCPUs(); err != nil {
+			slog.Warn("hot-added vCPUs will stay offline", "error", err)
+		}
+	}()
+
 	grpcServer := grpc.NewServer()
 	diceragentv1.RegisterAgentServiceServer(grpcServer, &server{})
 

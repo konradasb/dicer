@@ -61,6 +61,18 @@ service DaemonService {
   rpc PauseInstance(PauseInstanceRequest) returns (Instance);
   // ResumeInstance continues a paused instance.
   rpc ResumeInstance(ResumeInstanceRequest) returns (Instance);
+  // ResizeInstance changes a running instance's vCPUs and memory without
+  // restarting it, within its max_vcpus and max_memory_bytes, and its
+  // definition with them, so it keeps them when it next starts. Memory can
+  // be resized from what the instance booted with up to its maximum, in
+  // steps of 2 MiB, and waits for the guest where the hypervisor can tell:
+  // Firecracker can, Cloud Hypervisor cannot; Firecracker also needs a host
+  // CPU with at least 40 bits of physical address. vCPUs can be resized on
+  // Cloud Hypervisor only. The guest's kernel must support virtio-mem and
+  // CPU hotplug. Growing needs room on the host (RESOURCE_EXHAUSTED). If the
+  // guest fails the resize, the instance holds the larger of the two sizes
+  // until it next starts.
+  rpc ResizeInstance(ResizeInstanceRequest) returns (Instance);
   // DeleteInstance removes an instance and its overlay disk. It refuses a
   // running instance unless force is set.
   rpc DeleteInstance(DeleteInstanceRequest) returns (google.protobuf.Empty);
@@ -326,6 +338,8 @@ enum EventAction {
   EVENT_ACTION_IMPORTED = 19;
   // The kernel was downloaded, or copied from a local path, and verified.
   EVENT_ACTION_FETCHED = 20;
+  // A running instance was given other vCPUs or memory.
+  EVENT_ACTION_RESIZED = 21;
 }
 
 // Instance combines an instance's definition with its observed runtime state.
@@ -343,6 +357,10 @@ message Instance {
   string kernel_args = 8;
   int32 vcpus = 9;
   int64 memory_bytes = 10;
+  // The most ResizeInstance can give the running instance. Zero leaves it
+  // no room to grow. See CreateInstanceRequest.max_vcpus.
+  int32 max_vcpus = 40;
+  int64 max_memory_bytes = 41;
   int64 disk_bytes = 11;
   string network_name = 12;
   string static_ip = 13;
@@ -498,6 +516,13 @@ message CreateInstanceRequest {
   string kernel_args = 6;
   int32 vcpus = 7;
   int64 memory_bytes = 8;
+  // The most ResizeInstance can give the running instance: it boots with
+  // room for them, which costs the host nothing until it is used. Zero
+  // leaves no room, so its vCPUs or memory cannot change while it runs.
+  // Firecracker cannot add vCPUs to a running guest, so max_vcpus is
+  // Cloud Hypervisor's only.
+  int32 max_vcpus = 27;
+  int64 max_memory_bytes = 28;
   int64 disk_bytes = 9;
   // Empty means the daemon's default network: see
   // GetHostInfoResponse.default_network.
@@ -541,6 +566,9 @@ message UpdateInstanceRequest {
   optional string kernel_args = 6;
   optional int32 vcpus = 7;
   optional int64 memory_bytes = 8;
+  // Zero removes the maximum.
+  optional int32 max_vcpus = 25;
+  optional int64 max_memory_bytes = 26;
   optional int64 disk_bytes = 9;
   optional string network_name = 10;
   optional string static_ip = 11;
@@ -562,6 +590,14 @@ message UpdateInstanceRequest {
 
 message StartInstanceRequest {
   string name = 1;
+}
+
+// ResizeInstanceRequest gives a running instance the vCPUs and memory that
+// are set, leaving the other as it is. At least one must be.
+message ResizeInstanceRequest {
+  string name = 1;
+  optional int32 vcpus = 2;
+  optional int64 memory_bytes = 3;
 }
 
 message StopInstanceRequest {

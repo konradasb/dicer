@@ -201,8 +201,11 @@ func (m *Manager) vmSpec(instance types.InstanceSpec, b bootAssets, nic hypervis
 			KernelArgs: b.kernelArgs,
 			InitrdPath: b.initrdPath,
 		},
-		CPU:    hypervisor.CPUConfig{Count: instance.VCPUs},
-		Memory: hypervisor.MemoryConfig{SizeBytes: instance.MemoryBytes},
+		CPU: hypervisor.CPUConfig{Count: instance.VCPUs, MaxCount: instance.MaxVCPUs},
+		Memory: hypervisor.MemoryConfig{
+			SizeBytes:    instance.MemoryBytes,
+			HotplugBytes: max(instance.MaxMemoryBytes-instance.MemoryBytes, 0),
+		},
 		Disks: append([]hypervisor.DiskConfig{
 			{Path: b.image.DiskPath, ReadOnly: true},
 			{Path: m.overlayDiskPath(instance)},

@@ -7,7 +7,6 @@ package hypervisor
 
 import (
 	"context"
-	"time"
 
 	"github.com/konradasb/dicer/internal/process"
 )
@@ -35,10 +34,15 @@ type Hypervisor interface {
 	// SnapshotVM writes the VM's state to destPath. The VM must be paused.
 	SnapshotVM(ctx context.Context, destPath string) error
 
-	// ResizeVMMemory and ResizeVMCPU hotplug memory and vCPUs.
-	// ResizeVMMemoryAndWait also waits for the guest to accept the memory.
+	// ResizeVMMemory sets the guest's memory, from the memory it booted with
+	// up to that and MemoryConfig.HotplugBytes, in steps of
+	// MemoryResizeStep; another size is refused with
+	// errdefs.ErrInvalidArgument, before anything changes. Where the
+	// hypervisor can tell, it returns once the guest has taken or given up
+	// the memory, or ctx is done.
 	ResizeVMMemory(ctx context.Context, bytes int64) error
-	ResizeVMMemoryAndWait(ctx context.Context, bytes int64, timeout time.Duration) error
+
+	// ResizeVMCPU sets the guest's vCPUs, up to CPUConfig.MaxCount.
 	ResizeVMCPU(ctx context.Context, count int) error
 
 	// Capabilities reports which of the optional operations are supported.
@@ -51,8 +55,7 @@ type Capabilities struct {
 	// SupportsSnapshot reports whether SnapshotVM and Starter.RestoreVM work.
 	SupportsSnapshot bool
 
-	// SupportsHotplugMemory reports whether ResizeVMMemory and
-	// ResizeVMMemoryAndWait work.
+	// SupportsHotplugMemory reports whether ResizeVMMemory works.
 	SupportsHotplugMemory bool
 
 	// SupportsHotplugCPU reports whether ResizeVMCPU works.

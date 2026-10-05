@@ -408,6 +408,143 @@ func TestInstanceHealthCheck(t *testing.T) {
 	env.waitForHealth(t, name, "healthy")
 }
 
+// TestInstanceResize resizes a running guest and checks the guest itself
+// sees the change: virtio-mem plugging and unplugging memory on both
+// hypervisors, and ACPI CPU hotplug on Cloud Hypervisor. It needs a guest
+// kernel built for both, as Dicer's is.
+func TestInstanceResize(t *testing.T) {
+	for _, tt := range []struct {
+		hypervisor string
+		vcpus      bool
+		// minPhysicalBits is the fewest physical address bits the host's
+		// CPU needs for the guest to reach the memory set aside.
+		minPhysicalBits int
+	}{
+		{"cloud-hypervisor", true, 0},
+		// Firecracker sets it aside at 512GiB.
+		{"firecracker", false, 40},
+	} {
+		t.Run(tt.hypervisor, func(t *testing.T) {
+			if bits := env.hostPhysicalBits(t); bits < tt.minPhysicalBits {
+				t.Skipf("%s sets hotpluggable memory aside where this host's %d-bit physical addresses cannot reach",
+					tt.hypervisor, bits)
+			}
+			name := instanceName(t)
+			flags := []string{"--hypervisor-type", tt.hypervisor, "--max-memory", "2GiB"}
+			if tt.vcpus {
+				flags = append(flags, "--max-vcpus", "4")
+			}
+			env.createInstance(t, name, append(flags, "--", "sleep", "3600")...)
+			env.startInstance(t, name)
+			booted := env.guestMemoryBytes(t, name)
+
+			resize := []string{"resize", name, "--memory", "1GiB"}
+			if tt.vcpus {
+				resize = append(resize, "--vcpus", "2")
+			}
+			env.dicer(t, resize...)
+
+			wantVCPUs := 1
+			if tt.vcpus {
+				wantVCPUs = 2
+			}
+			if v := env.instance(t, name); v.MemoryBytes != 1<<30 || v.VCPUs != wantVCPUs {
+				t.Errorf("instance has %d vCPUs, %d bytes; want %d, 1GiB", v.VCPUs, v.MemoryBytes, wantVCPUs)
+			}
+			// Cloud Hypervisor cannot say when the guest has plugged the
+			// memory, so what the guest sees is waited for.
+			grown := env.waitForGuestMemory(t, name, func(n int64) bool { return n-booted >= 500<<20 })
+			if tt.vcpus {
+				env.waitForGuest(t, name, "2 online vCPUs", func() bool {
+					return strings.TrimSpace(env.exec(t, name, "nproc")) == "2"
+				})
+			}
+
+			// Back to what it booted with: the guest gives the memory up.
+			env.dicer(t, "resize", name, "--memory", "512MiB")
+			env.waitForGuestMemory(t, name, func(n int64) bool { return grown-n >= 500<<20 })
+
+			// Memory below what it booted with, or off a 2MiB step, is
+			// refused, and changes nothing.
+			for _, memory := range []string{"256MiB", "513MiB"} {
+				if _, err := env.tryDicer(t, "resize", name, "--memory", memory); err == nil {
+					t.Errorf("resizing to %s succeeded", memory)
+				}
+			}
+			if v := env.instance(t, name); v.MemoryBytes != 512<<20 {
+				t.Errorf("a refused resize left the instance with %d bytes, want 512MiB", v.MemoryBytes)
+			}
+
+			// A resize is kept: the guest boots with it next time.
+			env.dicer(t, "resize", name, "--memory", "1GiB")
+			env.dicer(t, "instance", "stop", name)
+			env.waitForState(t, name, "Stopped")
+			env.startInstance(t, name)
+			if n := env.guestMemoryBytes(t, name); n-booted < 500<<20 {
+				t.Errorf("restarted with %d bytes of memory, want the 1GiB it was resized to", n)
+			}
+		})
+	}
+}
+
+// hostPhysicalBits returns how many bits of physical address the host's CPU
+// has.
+func (e *environment) hostPhysicalBits(t *testing.T) int {
+	t.Helper()
+
+	ctx, cancel := commandContext(t)
+	defer cancel()
+
+	out, err := e.host.runShell(ctx, `awk '/^address sizes/ { print $4; exit }' /proc/cpuinfo`)
+	if err != nil {
+		t.Fatalf("read the host's address sizes: %v", err)
+	}
+	bits, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		t.Fatalf("the host's physical address bits are %q: %v", out, err)
+	}
+	return bits
+}
+
+// guestMemoryBytes returns the memory the guest's kernel has, as MemTotal in
+// /proc/meminfo.
+func (e *environment) guestMemoryBytes(t *testing.T, name string) int64 {
+	t.Helper()
+
+	out := e.exec(t, name, "awk", "/^MemTotal:/ { print $2 }", "/proc/meminfo")
+	kib, err := strconv.ParseInt(strings.TrimSpace(out), 10, 64)
+	if err != nil {
+		t.Fatalf("MemTotal in %s is %q: %v", name, out, err)
+	}
+	return kib << 10
+}
+
+// waitForGuestMemory polls until the guest's memory satisfies done, and
+// returns it.
+func (e *environment) waitForGuestMemory(t *testing.T, name string, done func(int64) bool) int64 {
+	t.Helper()
+
+	var n int64
+	e.waitForGuest(t, name, "its memory to change", func() bool {
+		n = e.guestMemoryBytes(t, name)
+		return done(n)
+	})
+	return n
+}
+
+// waitForGuest polls, for a minute, until done says the guest has become
+// what is wanted.
+func (e *environment) waitForGuest(t *testing.T, name, want string, done func() bool) {
+	t.Helper()
+
+	for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); time.Sleep(time.Second) {
+		if done() {
+			return
+		}
+	}
+	t.Fatalf("%s never had %s", name, want)
+}
+
 // waitForHealth polls until an instance's health check has found want.
 func (e *environment) waitForHealth(t *testing.T, name, want string) instanceView {
 	t.Helper()
@@ -432,6 +569,8 @@ type instanceView struct {
 	ExitCode     *int              `json:"exit_code"`
 	RestartCount int               `json:"restart_count"`
 	Labels       map[string]string `json:"labels"`
+	VCPUs        int               `json:"vcpus"`
+	MemoryBytes  int64             `json:"memory_bytes,string"`
 
 	// Health is a value rather than a pointer so that an instance with no
 	// check reads as the zero health instead of panicking.

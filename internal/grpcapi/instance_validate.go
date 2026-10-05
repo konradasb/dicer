@@ -11,6 +11,7 @@ import (
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/guest"
+	"github.com/konradasb/dicer/internal/humanize"
 	"github.com/konradasb/dicer/internal/naming"
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/types"
@@ -46,6 +47,24 @@ func validateResources(vcpus int32, memoryBytes, diskBytes int64) error {
 	return nil
 }
 
+// validateMaximums checks the most an instance can be resized to while it
+// runs: none is below what it asks for, and Firecracker, which cannot add
+// vCPUs to a running guest, has no vCPU maximum.
+func validateMaximums(instance types.InstanceSpec) error {
+	switch {
+	case instance.MaxVCPUs < 0 || instance.MaxVCPUs > 0 && instance.MaxVCPUs < instance.VCPUs:
+		return errdefs.InvalidArgument("max_vcpus %d is below the instance's %s",
+			instance.MaxVCPUs, humanize.Count(instance.VCPUs, "vCPU"))
+	case instance.MaxMemoryBytes < 0 || instance.MaxMemoryBytes > 0 && instance.MaxMemoryBytes < instance.MemoryBytes:
+		return errdefs.InvalidArgument("max_memory_bytes %s is below the instance's %s memory",
+			humanize.Bytes(instance.MaxMemoryBytes), humanize.Bytes(instance.MemoryBytes))
+	case instance.MaxVCPUs > 0 && instance.EffectiveHypervisorType() == types.HypervisorTypeFirecracker:
+		return errdefs.InvalidArgument("firecracker cannot add vCPUs to a running guest: leave max_vcpus unset, " +
+			"or use cloud-hypervisor")
+	}
+	return nil
+}
+
 // checkRemoveOnExit rejects remove-on-exit combined with a restart policy.
 func checkRemoveOnExit(instance types.InstanceSpec) error {
 	if instance.RemoveOnExit && instance.Restart.Restarts() {
@@ -67,7 +86,8 @@ func (h *instanceHandler) checkCanStart(req *dicerdv1.CreateInstanceRequest) err
 		return err
 	}
 	return h.instances.CheckResources(types.Resources{
-		VCPUs: int(req.GetVcpus()), MemoryBytes: req.GetMemoryBytes(),
+		VCPUs:       int(max(req.GetVcpus(), req.GetMaxVcpus())),
+		MemoryBytes: max(req.GetMemoryBytes(), req.GetMaxMemoryBytes()),
 	})
 }
 

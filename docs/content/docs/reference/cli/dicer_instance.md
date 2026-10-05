@@ -18,6 +18,7 @@ Manage instances.
 | [`dicer instance logs`]({{< relref "/docs/reference/cli/dicer_instance_logs" >}}) | Show an instance's console output. |
 | [`dicer instance pause`]({{< relref "/docs/reference/cli/dicer_instance_pause" >}}) | Pause one or more running instances. |
 | [`dicer instance rename`]({{< relref "/docs/reference/cli/dicer_instance_rename" >}}) | Rename a stopped instance. |
+| [`dicer instance resize`]({{< relref "/docs/reference/cli/dicer_instance_resize" >}}) | Change a running instance's vCPUs and memory. |
 | [`dicer instance restart`]({{< relref "/docs/reference/cli/dicer_instance_restart" >}}) | Stop one or more instances if they are running, then start them. |
 | [`dicer instance resume`]({{< relref "/docs/reference/cli/dicer_instance_resume" >}}) | Resume one or more paused instances. |
 | [`dicer instance run`]({{< relref "/docs/reference/cli/dicer_instance_run" >}}) | Create an instance from an image and start it. |

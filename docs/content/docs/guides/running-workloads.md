@@ -85,6 +85,8 @@ $ dicer run -d --env-file app.env -e LOG_LEVEL=debug ghcr.io/acme/app:2
 | `--vcpus` | 1 | No more than the host has CPUs. |
 | `-m`, `--memory` | 512MiB | |
 | `--disk` | 10GiB | The instance's own writable disk. It is sparse, so it takes only what the guest writes. See [Storage](../../concepts/storage). |
+| `--max-vcpus` | none | The most vCPUs the running instance can be [resized](#resizing-a-running-instance) to. Cloud Hypervisor only. |
+| `--max-memory` | none | The most memory the running instance can be resized to. |
 
 Sizes are written as `512MiB`, `2GiB` and so on. An instance holds its vCPUs
 and memory while it runs, and a start the host has no room for is refused;
@@ -137,6 +139,44 @@ $ dicer start web
 
 The restart policy alone can be changed while the instance runs. See
 [Instances](../../concepts/instances#changing-and-deleting).
+
+## Resizing a running instance
+
+`dicer resize` changes a running instance's vCPUs and memory without
+restarting it, and its definition with them, so it keeps them when it next
+starts. It needs room to grow into, set aside when the instance starts:
+`--max-vcpus` and `--max-memory`, given when it is created or, while it is
+stopped, with `dicer update`.
+
+```console
+$ dicer run -d --name db --memory 1GiB --max-memory 8GiB --vcpus 2 --max-vcpus 8 postgres:17
+$ dicer resize db --memory 4GiB --vcpus 4
+```
+
+The room set aside costs the host nothing until it is used: the instance
+holds what it has, not its maximum, and growing is refused when the host has
+no room, as a start is. See [Capacity](../capacity#when-resources-are-held).
+
+- **Memory** can be resized from what the instance started with up to its
+  maximum, in steps of 2 MiB. Shrinking asks the guest to give memory back,
+  which it can refuse if it is using it. On Firecracker, `dicer resize`
+  waits for the guest; Cloud Hypervisor cannot tell when the guest has taken
+  the change.
+- **vCPUs** can be resized on Cloud Hypervisor only, from 1 up to the
+  maximum. Firecracker cannot add vCPUs to a running guest. The guest agent
+  brings each added vCPU online, as udev would on a distribution.
+
+Firecracker sets the memory aside at 512 GiB in the guest's address space,
+which a host CPU with fewer than 40 bits of physical address cannot reach:
+there, its guests cannot take more memory. `grep 'address sizes'
+/proc/cpuinfo` on the host says how many it has.
+
+The guest's kernel has to support it: memory hotplug through virtio-mem
+(`CONFIG_VIRTIO_MEM`), and CPU hotplug (`CONFIG_HOTPLUG_CPU`), as Dicer's
+kernel does. If the guest
+does not take the change, the instance keeps holding the larger of the two
+sizes, and has the new one from its next start. Each resize is recorded as a
+[Resized event](../../reference/events#instances).
 
 ## What next
 

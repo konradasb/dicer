@@ -21,6 +21,7 @@ const (
 	operationStop            = "stop"
 	operationPause           = "pause"
 	operationResume          = "resume"
+	operationResize          = "resize"
 	operationDelete          = "delete"
 	operationCreateSnapshot  = "create_snapshot"
 	operationRestoreSnapshot = "restore_snapshot"

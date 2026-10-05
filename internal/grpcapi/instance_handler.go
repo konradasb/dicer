@@ -123,6 +123,8 @@ func (h *instanceHandler) newInstance(req *dicerdv1.CreateInstanceRequest) (type
 		KernelArgs:        req.GetKernelArgs(),
 		VCPUs:             int(req.GetVcpus()),
 		MemoryBytes:       req.GetMemoryBytes(),
+		MaxVCPUs:          int(req.GetMaxVcpus()),
+		MaxMemoryBytes:    req.GetMaxMemoryBytes(),
 		DiskBytes:         req.GetDiskBytes(),
 		NetworkName:       req.GetNetworkName(),
 		StaticIP:          req.GetStaticIp(),
@@ -140,6 +142,9 @@ func (h *instanceHandler) newInstance(req *dicerdv1.CreateInstanceRequest) (type
 	}
 
 	if err := checkRemoveOnExit(instance); err != nil {
+		return types.InstanceSpec{}, err
+	}
+	if err := validateMaximums(instance); err != nil {
 		return types.InstanceSpec{}, err
 	}
 
@@ -186,6 +191,9 @@ func (h *instanceHandler) UpdateInstance(
 	if err := validateResources(int32(instance.VCPUs), instance.MemoryBytes, instance.DiskBytes); err != nil {
 		return nil, err
 	}
+	if err := validateMaximums(instance); err != nil {
+		return nil, err
+	}
 	if err := guest.ValidateHostname(instance.Hostname); err != nil {
 		return nil, errdefs.InvalidArgument("%v", err)
 	}
@@ -195,7 +203,7 @@ func (h *instanceHandler) UpdateInstance(
 	if err := h.checkStaticIP(instance.NetworkName, instance.StaticIP); err != nil {
 		return nil, err
 	}
-	if err := h.instances.CheckResources(instance.Resources()); err != nil {
+	if err := h.instances.CheckResources(instance.MaxResources()); err != nil {
 		return nil, err
 	}
 
@@ -240,6 +248,10 @@ func applySettings(instance *types.InstanceSpec, req *dicerdv1.UpdateInstanceReq
 	setIf(&instance.HypervisorVersion, req.HypervisorVersion)
 	setIf(&instance.KernelArgs, req.KernelArgs)
 	setIf(&instance.MemoryBytes, req.MemoryBytes)
+	if v := req.MaxVcpus; v != nil {
+		instance.MaxVCPUs = int(*v)
+	}
+	setIf(&instance.MaxMemoryBytes, req.MaxMemoryBytes)
 	setIf(&instance.DiskBytes, req.DiskBytes)
 	setIf(&instance.StaticIP, req.StaticIp)
 	setIf(&instance.Hostname, req.Hostname)
@@ -326,6 +338,36 @@ func (h *instanceHandler) PauseInstance(
 		return nil, err
 	}
 
+	return h.view(instance)
+}
+
+// ResizeInstance changes a running instance's vCPUs and memory. See
+// vm.Manager.Resize.
+func (h *instanceHandler) ResizeInstance(
+	ctx context.Context, req *dicerdv1.ResizeInstanceRequest,
+) (*dicerdv1.Instance, error) {
+	if req.Vcpus == nil && req.MemoryBytes == nil {
+		return nil, errdefs.InvalidArgument("a resize needs vcpus, memory_bytes or both")
+	}
+	instance, err := h.definitions.Instance(req.GetName())
+	if err != nil {
+		return nil, err
+	}
+
+	want := instance.Resources()
+	if v := req.Vcpus; v != nil {
+		want.VCPUs = int(*v)
+	}
+	setIf(&want.MemoryBytes, req.MemoryBytes)
+	if err := validateResources(int32(want.VCPUs), want.MemoryBytes, instance.DiskBytes); err != nil {
+		return nil, err
+	}
+
+	if err := h.instances.Resize(ctx, instance, want); err != nil {
+		return nil, err
+	}
+
+	instance.VCPUs, instance.MemoryBytes = want.VCPUs, want.MemoryBytes
 	return h.view(instance)
 }
 

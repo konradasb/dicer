@@ -48,6 +48,9 @@ const (
 	// ActionRenamed is an instance given another name.
 	ActionRenamed Action = "renamed"
 
+	// ActionResized is a running instance given other vCPUs or memory.
+	ActionResized Action = "resized"
+
 	// ActionHealthy and ActionUnhealthy are an instance's health check
 	// reaching a verdict.
 	ActionHealthy   Action = "healthy"

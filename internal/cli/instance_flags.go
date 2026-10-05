@@ -61,6 +61,8 @@ func addInstanceSpecFlags(cmd *cobra.Command, withDefaults bool) {
 	flags.String("hypervisor-version", "", "Hypervisor version (default: the newest available)")
 	flags.Int32("vcpus", vcpus, "Number of virtual CPUs")
 	flags.StringP("memory", "m", memory, "Memory, e.g. 512MiB or 2GiB")
+	flags.Int32("max-vcpus", 0, "Most vCPUs 'dicer resize' can give the running instance, on Cloud Hypervisor (0: none)")
+	flags.String("max-memory", "", "Most memory 'dicer resize' can give the running instance, e.g. 4GiB (0: none)")
 	flags.String("disk", disk, "Overlay disk size, e.g. 10GiB")
 	flags.String("network", "", "Network to attach to")
 	flags.String("ip", "", "Static IP address (default: assigned from the subnet)")
@@ -253,6 +255,13 @@ func applySpecFlags(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) err
 	if req.DiskBytes, err = parseDiskBytes(disk); err != nil {
 		return err
 	}
+	req.MaxVcpus, _ = flags.GetInt32("max-vcpus")
+	if flags.Changed("max-memory") {
+		v, _ := flags.GetString("max-memory")
+		if req.MaxMemoryBytes, err = parseMemoryBytes(v); err != nil {
+			return err
+		}
+	}
 
 	lists, err := parseListFlags(cmd)
 	if err != nil {
@@ -321,6 +330,17 @@ func buildUpdateRequest(cmd *cobra.Command, args []string) (*dicerdv1.UpdateInst
 			return nil, usagef(cmd, "%s", err)
 		}
 		req.MemoryBytes = &bytes
+	}
+	if flags.Changed("max-vcpus") {
+		v, _ := flags.GetInt32("max-vcpus")
+		req.MaxVcpus = &v
+	}
+	if v := optionalString("max-memory"); v != nil {
+		bytes, err := parseMemoryBytes(*v)
+		if err != nil {
+			return nil, usagef(cmd, "%s", err)
+		}
+		req.MaxMemoryBytes = &bytes
 	}
 	if v := optionalString("disk"); v != nil {
 		bytes, err := parseDiskBytes(*v)

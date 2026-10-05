@@ -406,6 +406,12 @@ type fakeHypervisor struct {
 	snapshotDirs    []string
 	snapshotErr     error
 
+	// memoryBytes and vCPUs are what the guest was last resized to, and
+	// resizeErr what a resize fails with.
+	memoryBytes int64
+	vCPUs       int
+	resizeErr   error
+
 	// onShutdown, if set, is what the VMM does when asked to exit.
 	onShutdown func()
 }
@@ -453,13 +459,21 @@ func (f *fakeHypervisor) VMInfo(context.Context) (*hypervisor.VMInfo, error) {
 	return &hypervisor.VMInfo{State: hypervisor.VMStateRunning}, nil
 }
 
-func (f *fakeHypervisor) ResizeVMMemory(context.Context, int64) error { return nil }
-
-func (f *fakeHypervisor) ResizeVMMemoryAndWait(context.Context, int64, time.Duration) error {
+func (f *fakeHypervisor) ResizeVMMemory(_ context.Context, bytes int64) error {
+	if f.resizeErr != nil {
+		return f.resizeErr
+	}
+	f.memoryBytes = bytes
 	return nil
 }
 
-func (f *fakeHypervisor) ResizeVMCPU(context.Context, int) error { return nil }
+func (f *fakeHypervisor) ResizeVMCPU(_ context.Context, count int) error {
+	if f.resizeErr != nil {
+		return f.resizeErr
+	}
+	f.vCPUs = count
+	return nil
+}
 
 // fakeStarter hands back a fakeHypervisor, remembers what it was asked to
 // restore, and stands in for the VMM with a real process -- a sleep -- so
@@ -471,6 +485,9 @@ type fakeStarter struct {
 	restoredConsole hypervisor.ConsoleConfig
 	restoreErr      error
 	startErr        error
+
+	// spec is what the last guest was started with.
+	spec hypervisor.VMSpec
 
 	// mu guards vmms: a restart launches from its own goroutine while the
 	// test reads them.
@@ -484,11 +501,12 @@ func (f *fakeStarter) DefaultKernelArgs() string { return "console=ttyS0" }
 func (f *fakeStarter) PowerOffEndsVM() bool      { return true }
 
 func (f *fakeStarter) StartVM(
-	context.Context, string, hypervisor.VMSpec,
+	_ context.Context, _ string, spec hypervisor.VMSpec,
 ) (*process.Process, hypervisor.Hypervisor, error) {
 	if f.startErr != nil {
 		return nil, nil, f.startErr
 	}
+	f.spec = spec
 	vmm, err := f.launch()
 	if err != nil {
 		return nil, nil, err

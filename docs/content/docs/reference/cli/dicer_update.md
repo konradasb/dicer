@@ -50,6 +50,8 @@ $ dicer update web -- /usr/sbin/nginx -g 'daemon off;'
 | `--kernel string` | Kernel to boot with. |
 | `--kernel-args string` | Kernel command line arguments. |
 | `-l`, `--label stringArray` | Label as KEY=VALUE (repeatable). |
+| `--max-memory string` | Most memory '`dicer resize`' can give the running instance, e.g. 4GiB (0: none). |
+| `--max-vcpus int32` | Most vCPUs '`dicer resize`' can give the running instance, on Cloud Hypervisor (0: none). |
 | `-m`, `--memory string` | Memory, e.g. 512MiB or 2GiB. |
 | `--mount stringArray` | Mount a volume, host file or tmpfs, as [type=volume\|file\|tmpfs,][source=...,]target=/path[,readonly] (repeatable). |
 | `--network string` | Network to attach to. |
