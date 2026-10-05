@@ -72,6 +72,9 @@ type runRecord struct {
 	hypervisorVersion string
 	held              types.Resources
 	imageDigest       string
+	// vsockCID is the guest's vsock context ID: its own instance's, or,
+	// for a fork, that of the instance it is a copy of.
+	vsockCID int64
 
 	restarts    int
 	healthCheck *types.HealthCheck
@@ -88,7 +91,7 @@ func (m *Manager) recordRunning(instance types.InstanceSpec, vmm *process.Proces
 		VMMPID:               &pid,
 		HypervisorSocketPath: m.hypervisorSocketPath(instance.ID),
 		HypervisorVersion:    run.hypervisorVersion,
-		VsockCID:             vsockCID(instance.ID),
+		VsockCID:             run.vsockCID,
 		VsockPath:            m.vsockPath(instance.ID),
 		VCPUs:                run.held.VCPUs,
 		MemoryBytes:          run.held.MemoryBytes,

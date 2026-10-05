@@ -389,8 +389,8 @@ func TestRestoredVMMFindsTheInstancesFiles(t *testing.T) {
 
 	runtimeDir := h.manager.runtimeDir(h.instance.ID)
 	for name, want := range map[string]string{
-		h.starter.restoredConsole.Path: h.manager.serialLogPath(renamed),
-		overlayDiskFile:                h.manager.overlayDiskPath(renamed),
+		h.starter.restoredSpec.Console.Path: h.manager.serialLogPath(renamed),
+		overlayDiskFile:                     h.manager.overlayDiskPath(renamed),
 	} {
 		if filepath.IsAbs(name) {
 			t.Errorf("the VMM is given %s, which names a directory", name)

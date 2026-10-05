@@ -28,7 +28,7 @@ The daemon's uptime is `time() - process_start_time_seconds`.
 | `dicer_instances_memory_bytes` | gauge |  | Guest memory committed to instances that are starting, running or paused. |
 | `dicer_instances_vcpus_allocatable` | gauge |  | vCPUs instances may be committed in total; a start beyond it is refused. |
 | `dicer_instances_memory_allocatable_bytes` | gauge |  | Guest memory instances may be committed in total; a start beyond it is refused. |
-| `dicer_instance_operations_total` | counter | `operation`, `outcome` | Instance lifecycle operations by operation (start, stop, pause, resume, resize, delete, create_snapshot, restore_snapshot, delete_snapshot) and outcome. `outcome` is `success` or `error`. |
+| `dicer_instance_operations_total` | counter | `operation`, `outcome` | Instance lifecycle operations by operation (start, stop, pause, resume, resize, delete, create_snapshot, restore_snapshot, delete_snapshot, fork_snapshot) and outcome. `outcome` is `success` or `error`. |
 | `dicer_instance_operation_duration_seconds` | histogram | `operation` | Time an instance lifecycle operation took. |
 | `dicer_instance_restarts_total` | counter |  | Instances started again by their restart policy after they ended. |
 

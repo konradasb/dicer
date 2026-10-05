@@ -85,7 +85,7 @@ func (s *Starter) StartVM(
 // RestoreVM launches Firecracker and restores a guest from a snapshot
 // written by SnapshotVM. The guest is left paused; call ResumeVM.
 func (s *Starter) RestoreVM(
-	ctx context.Context, socketPath string, snapshotPath string, console hypervisor.ConsoleConfig,
+	ctx context.Context, socketPath string, snapshotPath string, spec hypervisor.RestoreSpec,
 ) (*process.Process, hypervisor.Hypervisor, error) {
 	proc, hv, cu, err := s.start(ctx, socketPath)
 	if err != nil {
@@ -96,20 +96,25 @@ func (s *Starter) RestoreVM(
 	// Where the console is written is not part of a Firecracker snapshot,
 	// so it has to be set again -- before the snapshot is loaded, while the
 	// VMM will still accept configuration.
-	if console.Path != "" {
-		if err := hv.client.put(ctx, "/serial", serialDevice{SerialOutPath: console.Path}); err != nil {
+	if spec.Console.Path != "" {
+		if err := hv.client.put(ctx, "/serial", serialDevice{SerialOutPath: spec.Console.Path}); err != nil {
 			return nil, nil, fmt.Errorf("configure serial console: %w", err)
 		}
 	}
 
-	err = hv.client.put(ctx, "/snapshot/load", snapshotLoad{
+	load := snapshotLoad{
 		SnapshotPath: filepath.Join(snapshotPath, snapshotStateFile),
 		MemBackend: memoryBackend{
 			BackendType: "File",
 			BackendPath: filepath.Join(snapshotPath, snapshotMemoryFile),
 		},
 		ResumeVM: false,
-	})
+	}
+	if spec.TAPDevice != "" {
+		// The guest has one interface, which newSetup named eth0.
+		load.NetworkOverrides = []networkOverride{{IfaceID: "eth0", HostDevName: spec.TAPDevice}}
+	}
+	err = hv.client.put(ctx, "/snapshot/load", load)
 	if err != nil {
 		return nil, nil, fmt.Errorf("restore snapshot: %w", err)
 	}

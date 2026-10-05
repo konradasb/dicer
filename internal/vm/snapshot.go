@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,6 +16,8 @@ import (
 	"time"
 
 	"github.com/nrednav/cuid2"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"gvisor.dev/gvisor/pkg/cleanup"
 
 	"github.com/konradasb/dicer/internal/diskfile"
@@ -294,10 +297,10 @@ func (m *Manager) restoreDisk(ctx context.Context, instance types.InstanceSpec, 
 	return nil
 }
 
-// restoreMemory resumes instance from a memory snapshot: its guest where it
-// was, on its disk as it was. It is refused if the instance's mounts or
-// address have changed since, which the guest still has as they were.
-func (m *Manager) restoreMemory(ctx context.Context, instance types.InstanceSpec, snapshot types.Snapshot) (err error) {
+// restoreMemory resumes instance from a memory snapshot of it: its guest
+// where it was, on its disk as it was. It is refused if the instance's mounts
+// or address have changed since, which the guest still has as they were.
+func (m *Manager) restoreMemory(ctx context.Context, instance types.InstanceSpec, snapshot types.Snapshot) error {
 	started := time.Now()
 
 	if !slices.Equal(instance.Mounts, snapshot.Instance.Mounts) {
@@ -310,9 +313,24 @@ func (m *Manager) restoreMemory(ctx context.Context, instance types.InstanceSpec
 	}
 	if allocation.IP != snapshot.IP || allocation.MAC != snapshot.MAC {
 		return errdefs.InvalidState("instance %q no longer has the address %s, which the guest in snapshot %q has; "+
-			"a memory snapshot can be restored only where it was taken", instance.Name, snapshot.IP, snapshot.Name)
+			"a memory snapshot can be restored only where it was taken, or forked", instance.Name, snapshot.IP, snapshot.Name)
 	}
 
+	if err := m.resume(ctx, instance, snapshot); err != nil {
+		return err
+	}
+
+	m.record(instance, events.ActionSnapshotRestored, fmt.Sprintf("Restored instance from snapshot %q taken %s in %s: memory and disk rolled back",
+		snapshot.Name, snapshot.CreatedAt.Local().Format(time.DateTime), humanize.Duration(time.Since(started))),
+		map[string]string{"snapshot": snapshot.Name})
+	return nil
+}
+
+// resume runs instance from a memory snapshot, of the instance or, as a
+// fork, of another, and records it running. On failure the instance is
+// marked failed, and keeps the disk it had. The caller must hold the
+// instance lock.
+func (m *Manager) resume(ctx context.Context, instance types.InstanceSpec, snapshot types.Snapshot) (err error) {
 	starter, err := m.snapshotStarter(snapshot)
 	if err != nil {
 		return err
@@ -334,22 +352,18 @@ func (m *Manager) restoreMemory(ctx context.Context, instance types.InstanceSpec
 		return err
 	}
 
-	vmm, hv, undo, err := m.restore(ctx, instance, snapshot, starter, image)
+	vmm, undo, err := m.restore(ctx, instance, snapshot, starter, image)
 	if err != nil {
 		return err
 	}
 	cu := cleanup.Make(undo)
 	defer cu.Clean()
 
-	// Hypervisors restore a guest paused.
-	if err := hv.ResumeVM(ctx); err != nil {
-		return fmt.Errorf("resume restored instance: %w", err)
-	}
-
 	run := runRecord{
 		hypervisorVersion: snapshot.HypervisorVersion,
 		held:              need,
 		imageDigest:       snapshot.ImageDigest,
+		vsockCID:          vsockCID(snapshot.Instance.ID),
 		healthCheck:       types.EffectiveHealthCheck(instance.HealthCheck, image.HealthCheck),
 	}
 	running, err := m.recordRunning(instance, vmm, run)
@@ -360,69 +374,103 @@ func (m *Manager) restoreMemory(ctx context.Context, instance types.InstanceSpec
 	cu.Release()
 	_ = os.Remove(m.keptOverlayDiskPath(instance))
 	m.supervise(ctx, instance, vmm, running)
-
-	m.record(instance, events.ActionSnapshotRestored, fmt.Sprintf("Restored instance from snapshot %q taken %s in %s: memory and disk rolled back",
-		snapshot.Name, snapshot.CreatedAt.Local().Format(time.DateTime), humanize.Duration(time.Since(started))),
-		map[string]string{"snapshot": snapshot.Name})
-
 	return nil
 }
 
 // restore recreates the disks and TAP device a memory snapshot's devices
-// refer to, then restores the VMM. The returned function undoes all of it,
-// putting back the overlay disk the instance had.
+// refer to, restores the VMM and resumes the guest. It tells the guest the
+// time and, if it is a fork of another instance's, its own identity. The
+// returned function undoes all of it, putting back the overlay disk the
+// instance had.
 func (m *Manager) restore(
 	ctx context.Context, instance types.InstanceSpec, snapshot types.Snapshot, starter hypervisor.Starter, image *types.Image,
-) (*process.Process, hypervisor.Hypervisor, func(), error) {
+) (*process.Process, func(), error) {
 	cu := cleanup.Make(func() {})
 	defer cu.Clean()
 
 	if err := m.prepareRuntimeDir(instance); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	cu.Add(func() { _ = m.removeRuntimeDir(instance.ID) })
 
 	// The disk is kept under a second name until the restore succeeds. One
-	// already there is from a restore a crash interrupted.
+	// already there is from a restore a crash interrupted. A fork has no
+	// disk yet to keep.
 	overlay, kept := m.overlayDiskPath(instance), m.keptOverlayDiskPath(instance)
 	_ = os.Remove(kept)
-	if err := os.Link(overlay, kept); err != nil {
-		return nil, nil, nil, fmt.Errorf("keep overlay disk: %w", err)
+	switch err := os.Link(overlay, kept); {
+	case err == nil:
+		cu.Add(func() { _ = os.Rename(kept, overlay) })
+	case !errors.Is(err, fs.ErrNotExist):
+		return nil, nil, fmt.Errorf("keep overlay disk: %w", err)
 	}
-	cu.Add(func() { _ = os.Rename(kept, overlay) })
 
 	if err := diskfile.Copy(m.snapshotOverlayDiskPath(snapshot), overlay); err != nil {
-		return nil, nil, nil, fmt.Errorf("restore overlay disk: %w", err)
+		return nil, nil, fmt.Errorf("restore overlay disk: %w", err)
 	}
 
 	// The restored VMM keeps the disks it was snapshotted with; only the
 	// config disk is written afresh.
 	mounts, _, err := m.resolveMounts(instance)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	setup, err := m.setupNetwork(ctx, instance)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	cu.Add(setup.cleanup)
 
+	// A fork wakes with the address of the instance it is a copy of, which
+	// may still be using it: nothing it sends may reach the network until it
+	// has its own.
+	forked := instance.ID != snapshot.Instance.ID
+	if forked {
+		if err := m.hostNetwork.DisconnectTAP(ctx, &setup.network, instance.ID); err != nil {
+			return nil, nil, err
+		}
+	}
+
 	// The restored guest has already booted once.
 	if err := m.writeGuestDisks(ctx, instance, starter, image, mounts, setup, guest.Status{Boots: 1}); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	restoreCtx, cancel := context.WithTimeout(ctx, memoryTransferTimeout(snapshot.MemoryBytes))
 	defer cancel()
-	console := hypervisor.ConsoleConfig{Path: serialLogFile}
-	vmm, hv, err := starter.RestoreVM(restoreCtx, m.hypervisorSocketPath(instance.ID), m.snapshotDir(snapshot), console)
+	spec := hypervisor.RestoreSpec{Console: hypervisor.ConsoleConfig{Path: serialLogFile}, TAPDevice: setup.nic.TAPDevice}
+	vmm, hv, err := starter.RestoreVM(restoreCtx, m.hypervisorSocketPath(instance.ID), m.snapshotDir(snapshot), spec)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("restore vm: %w", err)
+		return nil, nil, fmt.Errorf("restore vm: %w", err)
 	}
 	cu.Add(vmm.Terminate)
 
-	return vmm, hv, cu.Release(), nil
+	// Hypervisors restore a guest paused.
+	if err := hv.ResumeVM(ctx); err != nil {
+		return nil, nil, fmt.Errorf("resume restored instance: %w", err)
+	}
+
+	// The guest's clock stood still in the snapshot. One whose agent is too
+	// old to set it is left behind, which is no reason to fail.
+	if err := m.setGuestClock(ctx, m.vsockPath(instance.ID), time.Now()); err != nil {
+		m.logger.WarnContext(ctx, "cannot set the restored guest's clock", "instance", instance.Name, "error", err)
+	}
+
+	if forked {
+		if err := m.setGuestIdentity(ctx, m.vsockPath(instance.ID), guestIdentity(instance, setup)); err != nil {
+			if grpcstatus.Code(err) == codes.Unimplemented {
+				return nil, nil, errdefs.InvalidState("the guest in snapshot %q has an agent too old to take another identity; "+
+					"restart instance %q and take a new snapshot to fork it", snapshot.Name, snapshot.Instance.Name)
+			}
+			return nil, nil, fmt.Errorf("give the guest its own identity: %w", err)
+		}
+		if err := m.hostNetwork.ConnectTAP(ctx, &setup.network, instance.ID); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return vmm, cu.Release(), nil
 }
 
 // snapshotImage returns the image a memory snapshot's guest booted from,

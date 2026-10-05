@@ -1281,6 +1281,317 @@ func (x *Process) GetResidentMemoryBytes() int64 {
 	return 0
 }
 
+type SetClockRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Time          *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetClockRequest) Reset() {
+	*x = SetClockRequest{}
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetClockRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetClockRequest) ProtoMessage() {}
+
+func (x *SetClockRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetClockRequest.ProtoReflect.Descriptor instead.
+func (*SetClockRequest) Descriptor() ([]byte, []int) {
+	return file_diceragent_v1_diceragent_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *SetClockRequest) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+type SetClockResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetClockResponse) Reset() {
+	*x = SetClockResponse{}
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetClockResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetClockResponse) ProtoMessage() {}
+
+func (x *SetClockResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetClockResponse.ProtoReflect.Descriptor instead.
+func (*SetClockResponse) Descriptor() ([]byte, []int) {
+	return file_diceragent_v1_diceragent_proto_rawDescGZIP(), []int{22}
+}
+
+type SetIdentityRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Hostname   string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Interfaces []*NetworkInterface    `protobuf:"bytes,2,rep,name=interfaces,proto3" json:"interfaces,omitempty"`
+	Routes     []*NetworkRoute        `protobuf:"bytes,3,rep,name=routes,proto3" json:"routes,omitempty"`
+	// The nameservers resolv.conf names. None leaves it as it is.
+	Nameservers   []string `protobuf:"bytes,4,rep,name=nameservers,proto3" json:"nameservers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetIdentityRequest) Reset() {
+	*x = SetIdentityRequest{}
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetIdentityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetIdentityRequest) ProtoMessage() {}
+
+func (x *SetIdentityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetIdentityRequest.ProtoReflect.Descriptor instead.
+func (*SetIdentityRequest) Descriptor() ([]byte, []int) {
+	return file_diceragent_v1_diceragent_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *SetIdentityRequest) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *SetIdentityRequest) GetInterfaces() []*NetworkInterface {
+	if x != nil {
+		return x.Interfaces
+	}
+	return nil
+}
+
+func (x *SetIdentityRequest) GetRoutes() []*NetworkRoute {
+	if x != nil {
+		return x.Routes
+	}
+	return nil
+}
+
+func (x *SetIdentityRequest) GetNameservers() []string {
+	if x != nil {
+		return x.Nameservers
+	}
+	return nil
+}
+
+type SetIdentityResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetIdentityResponse) Reset() {
+	*x = SetIdentityResponse{}
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetIdentityResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetIdentityResponse) ProtoMessage() {}
+
+func (x *SetIdentityResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetIdentityResponse.ProtoReflect.Descriptor instead.
+func (*SetIdentityResponse) Descriptor() ([]byte, []int) {
+	return file_diceragent_v1_diceragent_proto_rawDescGZIP(), []int{24}
+}
+
+// NetworkInterface is one of the VM's interfaces as it is to be configured.
+// Its addresses replace every address it has.
+type NetworkInterface struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Mac   string                 `protobuf:"bytes,2,opt,name=mac,proto3" json:"mac,omitempty"`
+	// The addresses in CIDR notation, as in 10.0.0.5/24.
+	Addresses     []string `protobuf:"bytes,3,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	Mtu           int32    `protobuf:"varint,4,opt,name=mtu,proto3" json:"mtu,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NetworkInterface) Reset() {
+	*x = NetworkInterface{}
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NetworkInterface) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NetworkInterface) ProtoMessage() {}
+
+func (x *NetworkInterface) ProtoReflect() protoreflect.Message {
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NetworkInterface.ProtoReflect.Descriptor instead.
+func (*NetworkInterface) Descriptor() ([]byte, []int) {
+	return file_diceragent_v1_diceragent_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *NetworkInterface) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *NetworkInterface) GetMac() string {
+	if x != nil {
+		return x.Mac
+	}
+	return ""
+}
+
+func (x *NetworkInterface) GetAddresses() []string {
+	if x != nil {
+		return x.Addresses
+	}
+	return nil
+}
+
+func (x *NetworkInterface) GetMtu() int32 {
+	if x != nil {
+		return x.Mtu
+	}
+	return 0
+}
+
+// NetworkRoute is a route through a gateway, in the main table. It replaces
+// any route to the same destination.
+type NetworkRoute struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A CIDR, or "default".
+	Destination   string `protobuf:"bytes,1,opt,name=destination,proto3" json:"destination,omitempty"`
+	Gateway       string `protobuf:"bytes,2,opt,name=gateway,proto3" json:"gateway,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NetworkRoute) Reset() {
+	*x = NetworkRoute{}
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NetworkRoute) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NetworkRoute) ProtoMessage() {}
+
+func (x *NetworkRoute) ProtoReflect() protoreflect.Message {
+	mi := &file_diceragent_v1_diceragent_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NetworkRoute.ProtoReflect.Descriptor instead.
+func (*NetworkRoute) Descriptor() ([]byte, []int) {
+	return file_diceragent_v1_diceragent_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *NetworkRoute) GetDestination() string {
+	if x != nil {
+		return x.Destination
+	}
+	return ""
+}
+
+func (x *NetworkRoute) GetGateway() string {
+	if x != nil {
+		return x.Gateway
+	}
+	return ""
+}
+
 var File_diceragent_v1_diceragent_proto protoreflect.FileDescriptor
 
 const file_diceragent_v1_diceragent_proto_rawDesc = "" +
@@ -1355,7 +1666,26 @@ const file_diceragent_v1_diceragent_proto_rawDesc = "" +
 	"\n" +
 	"start_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x124\n" +
 	"\bcpu_time\x18\b \x01(\v2\x19.google.protobuf.DurationR\acpuTime\x122\n" +
-	"\x15resident_memory_bytes\x18\t \x01(\x03R\x13residentMemoryBytes2\x96\x04\n" +
+	"\x15resident_memory_bytes\x18\t \x01(\x03R\x13residentMemoryBytes\"A\n" +
+	"\x0fSetClockRequest\x12.\n" +
+	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"\x12\n" +
+	"\x10SetClockResponse\"\xc8\x01\n" +
+	"\x12SetIdentityRequest\x12\x1a\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\x12?\n" +
+	"\n" +
+	"interfaces\x18\x02 \x03(\v2\x1f.diceragent.v1.NetworkInterfaceR\n" +
+	"interfaces\x123\n" +
+	"\x06routes\x18\x03 \x03(\v2\x1b.diceragent.v1.NetworkRouteR\x06routes\x12 \n" +
+	"\vnameservers\x18\x04 \x03(\tR\vnameservers\"\x15\n" +
+	"\x13SetIdentityResponse\"h\n" +
+	"\x10NetworkInterface\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
+	"\x03mac\x18\x02 \x01(\tR\x03mac\x12\x1c\n" +
+	"\taddresses\x18\x03 \x03(\tR\taddresses\x12\x10\n" +
+	"\x03mtu\x18\x04 \x01(\x05R\x03mtu\"J\n" +
+	"\fNetworkRoute\x12 \n" +
+	"\vdestination\x18\x01 \x01(\tR\vdestination\x12\x18\n" +
+	"\agateway\x18\x02 \x01(\tR\agateway2\xb9\x05\n" +
 	"\fAgentService\x12C\n" +
 	"\x04Exec\x12\x1a.diceragent.v1.ExecRequest\x1a\x1b.diceragent.v1.ExecResponse(\x010\x01\x12G\n" +
 	"\x06CopyIn\x12\x1c.diceragent.v1.CopyInRequest\x1a\x1d.diceragent.v1.CopyInResponse(\x01\x12J\n" +
@@ -1363,7 +1693,9 @@ const file_diceragent_v1_diceragent_proto_rawDesc = "" +
 	"\x04Sync\x12\x1a.diceragent.v1.SyncRequest\x1a\x1b.diceragent.v1.SyncResponse\x12B\n" +
 	"\x05Probe\x12\x1b.diceragent.v1.ProbeRequest\x1a\x1c.diceragent.v1.ProbeResponse\x12K\n" +
 	"\bShutdown\x12\x1e.diceragent.v1.ShutdownRequest\x1a\x1f.diceragent.v1.ShutdownResponse\x12Z\n" +
-	"\rListProcesses\x12#.diceragent.v1.ListProcessesRequest\x1a$.diceragent.v1.ListProcessesResponseB=Z;github.com/konradasb/dicer/proto/diceragent/v1;diceragentv1b\x06proto3"
+	"\rListProcesses\x12#.diceragent.v1.ListProcessesRequest\x1a$.diceragent.v1.ListProcessesResponse\x12K\n" +
+	"\bSetClock\x12\x1e.diceragent.v1.SetClockRequest\x1a\x1f.diceragent.v1.SetClockResponse\x12T\n" +
+	"\vSetIdentity\x12!.diceragent.v1.SetIdentityRequest\x1a\".diceragent.v1.SetIdentityResponseB=Z;github.com/konradasb/dicer/proto/diceragent/v1;diceragentv1b\x06proto3"
 
 var (
 	file_diceragent_v1_diceragent_proto_rawDescOnce sync.Once
@@ -1377,7 +1709,7 @@ func file_diceragent_v1_diceragent_proto_rawDescGZIP() []byte {
 	return file_diceragent_v1_diceragent_proto_rawDescData
 }
 
-var file_diceragent_v1_diceragent_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_diceragent_v1_diceragent_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_diceragent_v1_diceragent_proto_goTypes = []any{
 	(*ExecStart)(nil),             // 0: diceragent.v1.ExecStart
 	(*ExecResize)(nil),            // 1: diceragent.v1.ExecResize
@@ -1400,41 +1732,54 @@ var file_diceragent_v1_diceragent_proto_goTypes = []any{
 	(*ListProcessesRequest)(nil),  // 18: diceragent.v1.ListProcessesRequest
 	(*ListProcessesResponse)(nil), // 19: diceragent.v1.ListProcessesResponse
 	(*Process)(nil),               // 20: diceragent.v1.Process
-	nil,                           // 21: diceragent.v1.ExecStart.EnvEntry
-	(*durationpb.Duration)(nil),   // 22: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil), // 23: google.protobuf.Timestamp
+	(*SetClockRequest)(nil),       // 21: diceragent.v1.SetClockRequest
+	(*SetClockResponse)(nil),      // 22: diceragent.v1.SetClockResponse
+	(*SetIdentityRequest)(nil),    // 23: diceragent.v1.SetIdentityRequest
+	(*SetIdentityResponse)(nil),   // 24: diceragent.v1.SetIdentityResponse
+	(*NetworkInterface)(nil),      // 25: diceragent.v1.NetworkInterface
+	(*NetworkRoute)(nil),          // 26: diceragent.v1.NetworkRoute
+	nil,                           // 27: diceragent.v1.ExecStart.EnvEntry
+	(*durationpb.Duration)(nil),   // 28: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil), // 29: google.protobuf.Timestamp
 }
 var file_diceragent_v1_diceragent_proto_depIdxs = []int32{
-	21, // 0: diceragent.v1.ExecStart.env:type_name -> diceragent.v1.ExecStart.EnvEntry
+	27, // 0: diceragent.v1.ExecStart.env:type_name -> diceragent.v1.ExecStart.EnvEntry
 	0,  // 1: diceragent.v1.ExecRequest.start:type_name -> diceragent.v1.ExecStart
 	1,  // 2: diceragent.v1.ExecRequest.resize:type_name -> diceragent.v1.ExecResize
 	4,  // 3: diceragent.v1.CopyInRequest.start:type_name -> diceragent.v1.CopyInStart
 	12, // 4: diceragent.v1.ProbeRequest.exec:type_name -> diceragent.v1.ExecProbe
 	13, // 5: diceragent.v1.ProbeRequest.http:type_name -> diceragent.v1.HTTPProbe
 	14, // 6: diceragent.v1.ProbeRequest.tcp:type_name -> diceragent.v1.TCPProbe
-	22, // 7: diceragent.v1.ProbeRequest.timeout:type_name -> google.protobuf.Duration
+	28, // 7: diceragent.v1.ProbeRequest.timeout:type_name -> google.protobuf.Duration
 	20, // 8: diceragent.v1.ListProcessesResponse.processes:type_name -> diceragent.v1.Process
-	23, // 9: diceragent.v1.Process.start_time:type_name -> google.protobuf.Timestamp
-	22, // 10: diceragent.v1.Process.cpu_time:type_name -> google.protobuf.Duration
-	2,  // 11: diceragent.v1.AgentService.Exec:input_type -> diceragent.v1.ExecRequest
-	5,  // 12: diceragent.v1.AgentService.CopyIn:input_type -> diceragent.v1.CopyInRequest
-	7,  // 13: diceragent.v1.AgentService.CopyOut:input_type -> diceragent.v1.CopyOutRequest
-	9,  // 14: diceragent.v1.AgentService.Sync:input_type -> diceragent.v1.SyncRequest
-	11, // 15: diceragent.v1.AgentService.Probe:input_type -> diceragent.v1.ProbeRequest
-	16, // 16: diceragent.v1.AgentService.Shutdown:input_type -> diceragent.v1.ShutdownRequest
-	18, // 17: diceragent.v1.AgentService.ListProcesses:input_type -> diceragent.v1.ListProcessesRequest
-	3,  // 18: diceragent.v1.AgentService.Exec:output_type -> diceragent.v1.ExecResponse
-	6,  // 19: diceragent.v1.AgentService.CopyIn:output_type -> diceragent.v1.CopyInResponse
-	8,  // 20: diceragent.v1.AgentService.CopyOut:output_type -> diceragent.v1.CopyOutResponse
-	10, // 21: diceragent.v1.AgentService.Sync:output_type -> diceragent.v1.SyncResponse
-	15, // 22: diceragent.v1.AgentService.Probe:output_type -> diceragent.v1.ProbeResponse
-	17, // 23: diceragent.v1.AgentService.Shutdown:output_type -> diceragent.v1.ShutdownResponse
-	19, // 24: diceragent.v1.AgentService.ListProcesses:output_type -> diceragent.v1.ListProcessesResponse
-	18, // [18:25] is the sub-list for method output_type
-	11, // [11:18] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	29, // 9: diceragent.v1.Process.start_time:type_name -> google.protobuf.Timestamp
+	28, // 10: diceragent.v1.Process.cpu_time:type_name -> google.protobuf.Duration
+	29, // 11: diceragent.v1.SetClockRequest.time:type_name -> google.protobuf.Timestamp
+	25, // 12: diceragent.v1.SetIdentityRequest.interfaces:type_name -> diceragent.v1.NetworkInterface
+	26, // 13: diceragent.v1.SetIdentityRequest.routes:type_name -> diceragent.v1.NetworkRoute
+	2,  // 14: diceragent.v1.AgentService.Exec:input_type -> diceragent.v1.ExecRequest
+	5,  // 15: diceragent.v1.AgentService.CopyIn:input_type -> diceragent.v1.CopyInRequest
+	7,  // 16: diceragent.v1.AgentService.CopyOut:input_type -> diceragent.v1.CopyOutRequest
+	9,  // 17: diceragent.v1.AgentService.Sync:input_type -> diceragent.v1.SyncRequest
+	11, // 18: diceragent.v1.AgentService.Probe:input_type -> diceragent.v1.ProbeRequest
+	16, // 19: diceragent.v1.AgentService.Shutdown:input_type -> diceragent.v1.ShutdownRequest
+	18, // 20: diceragent.v1.AgentService.ListProcesses:input_type -> diceragent.v1.ListProcessesRequest
+	21, // 21: diceragent.v1.AgentService.SetClock:input_type -> diceragent.v1.SetClockRequest
+	23, // 22: diceragent.v1.AgentService.SetIdentity:input_type -> diceragent.v1.SetIdentityRequest
+	3,  // 23: diceragent.v1.AgentService.Exec:output_type -> diceragent.v1.ExecResponse
+	6,  // 24: diceragent.v1.AgentService.CopyIn:output_type -> diceragent.v1.CopyInResponse
+	8,  // 25: diceragent.v1.AgentService.CopyOut:output_type -> diceragent.v1.CopyOutResponse
+	10, // 26: diceragent.v1.AgentService.Sync:output_type -> diceragent.v1.SyncResponse
+	15, // 27: diceragent.v1.AgentService.Probe:output_type -> diceragent.v1.ProbeResponse
+	17, // 28: diceragent.v1.AgentService.Shutdown:output_type -> diceragent.v1.ShutdownResponse
+	19, // 29: diceragent.v1.AgentService.ListProcesses:output_type -> diceragent.v1.ListProcessesResponse
+	22, // 30: diceragent.v1.AgentService.SetClock:output_type -> diceragent.v1.SetClockResponse
+	24, // 31: diceragent.v1.AgentService.SetIdentity:output_type -> diceragent.v1.SetIdentityResponse
+	23, // [23:32] is the sub-list for method output_type
+	14, // [14:23] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_diceragent_v1_diceragent_proto_init() }
@@ -1467,7 +1812,7 @@ func file_diceragent_v1_diceragent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_diceragent_v1_diceragent_proto_rawDesc), len(file_diceragent_v1_diceragent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

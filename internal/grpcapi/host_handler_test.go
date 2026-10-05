@@ -32,7 +32,7 @@ func (f fakeStarter) StartVM(
 }
 
 func (f fakeStarter) RestoreVM(
-	context.Context, string, string, hypervisor.ConsoleConfig,
+	context.Context, string, string, hypervisor.RestoreSpec,
 ) (*process.Process, hypervisor.Hypervisor, error) {
 	return nil, nil, errFakeStarter
 }

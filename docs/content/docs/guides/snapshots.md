@@ -10,7 +10,8 @@ related:
 ---
 
 A snapshot freezes an instance to disk, to put it back as it was later: before
-an upgrade, before an experiment, or as a known-good point to return to.
+an upgrade, before an experiment, or as a known-good point to return to. It
+can also be forked into new instances, copies of the one it was taken of.
 
 | Kind | Taken of | Holds | Restoring it |
 |---|---|---|---|
@@ -58,12 +59,46 @@ had.
 A memory snapshot can be restored only where it was taken: the guest wakes
 with the address and mounts it had, so an instance whose
 [network or static IP](../running-workloads) or mounts have changed since
-refuses it. The snapshot is restored with the vCPUs and memory the guest had,
+refuses it; [fork](#forking) it instead. The guest's clock, which stood still
+in the snapshot, is set to the time as it wakes. The snapshot is restored with the vCPUs and memory the guest had,
 and needs room for them on the host. It needs too the
 [hypervisor version](../../concepts/hypervisors) that took it, which is kept
 across upgrades only as long as the daemon carries that version.
 
 Renaming an instance keeps its snapshots restorable.
+
+## Forking
+
+A fork is a new instance made as a copy of the one a snapshot was taken of:
+to run another copy of a service as it is now, or to stamp out instances from
+one set up once and snapshotted.
+
+```console
+$ dicer snapshot fork before-upgrade web-2
+Instance web-2 forked from snapshot before-upgrade in 0.8s (10.88.0.7)
+```
+
+The fork has the snapshot's instance's definition and disk, and an identity
+of its own: its own ID and name, and its own address and MAC on the same
+network, or on another given with `--network`, at an address given with
+`--ip`. It publishes no host ports unless given them with `-p`, as two
+instances cannot publish the same port. Whether or not the instance it is a
+copy of still runs, or still exists, makes no difference.
+
+A memory snapshot's fork runs at once, resumed where the snapshot's guest was:
+its processes, its open files, what it held in memory. As it wakes it still
+has the address of the instance it is a copy of, so it is kept off the
+network until its agent has given it its own name and address; connections
+the guest had open at the snapshot are left with an address it no longer
+has. A disk snapshot's fork is stopped, and boots from the snapshot's disk
+when it is started.
+
+A fork shares the snapshot's read-only volumes. A disk snapshot's instance
+may have written to a volume, which its fork mounts too, and can only start
+while the other is stopped.
+
+A memory snapshot taken before Dicer could fork cannot be: its guest's agent
+cannot take another identity. Take a new snapshot.
 
 ## Listing and deleting
 
@@ -77,6 +112,6 @@ $ dicer snapshot delete before-upgrade
 ```
 
 A snapshot outlives the instance it was taken of: deleting the instance keeps
-its snapshots until they are deleted themselves, though there is then no
-instance to restore them into. Their size is what they take on disk, which
+its snapshots until they are deleted themselves, to fork, though there is
+then no instance to restore them into. Their size is what they take on disk, which
 with reflinks is only what has changed since.

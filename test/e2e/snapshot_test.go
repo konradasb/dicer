@@ -126,6 +126,84 @@ func TestSnapshotsOutliveTheirInstance(t *testing.T) {
 	}
 }
 
+// TestForkRunsBesideItsSource checks that a memory snapshot's fork resumes
+// what only the guest's memory held, under its own hostname and address,
+// while the instance it is a copy of goes on running: each reaches the other
+// at its own address.
+func TestForkRunsBesideItsSource(t *testing.T) {
+	for _, hypervisor := range snapshotHypervisors {
+		t.Run(hypervisor, func(t *testing.T) {
+			var (
+				name     = instanceName(t)
+				fork     = name + "-fork"
+				snapshot = name + "-snap"
+				marker   = "only-in-memory"
+			)
+
+			env.createInstance(t, name, "--hypervisor-type", hypervisor)
+			t.Cleanup(func() { env.deleteInstance(t, fork) })
+			source := env.startInstance(t, name)
+			env.exec(t, name, "sh", "-c",
+				"mkdir -p /mnt/mem && mount -t tmpfs none /mnt/mem && echo "+marker+" > /mnt/mem/marker")
+
+			env.dicer(t, "snapshot", "create", name, snapshot)
+			t.Cleanup(func() { env.deleteSnapshot(t, snapshot) })
+			env.dicer(t, "snapshot", "fork", snapshot, fork)
+
+			forked := env.waitForState(t, fork, "Running")
+			if forked.IP == "" || forked.IP == source.IP {
+				t.Fatalf("fork's IP = %q, want one of its own, not its source's %s", forked.IP, source.IP)
+			}
+
+			if got := strings.TrimSpace(env.exec(t, fork, "cat", "/mnt/mem/marker")); got != marker {
+				t.Errorf("the fork reads %q from its tmpfs, want %q: memory was not copied", got, marker)
+			}
+			if got := strings.TrimSpace(env.exec(t, fork, "hostname")); got != fork {
+				t.Errorf("the fork's hostname is %q, want %q", got, fork)
+			}
+			if out := env.exec(t, fork, "ip", "-4", "-o", "addr", "show", "eth0"); !strings.Contains(out, forked.IP+"/") ||
+				strings.Contains(out, source.IP+"/") {
+				t.Errorf("the fork's eth0 has\n%s\nwant %s alone", out, forked.IP)
+			}
+
+			for _, ping := range []struct{ from, to string }{{fork, source.IP}, {name, forked.IP}} {
+				if out, err := env.tryExec(t, ping.from, "ping", "-c", "1", "-W", "2", ping.to); err != nil {
+					t.Errorf("%s cannot reach %s: %v\n%s", ping.from, ping.to, err, out)
+				}
+			}
+		})
+	}
+}
+
+// TestForkOfDiskSnapshotBootsFromItsDisk checks that a stopped instance's
+// disk snapshot forks into a stopped instance that boots from that disk.
+func TestForkOfDiskSnapshotBootsFromItsDisk(t *testing.T) {
+	var (
+		name     = instanceName(t)
+		fork     = name + "-fork"
+		snapshot = name + "-snap"
+	)
+
+	env.createInstance(t, name)
+	t.Cleanup(func() { env.deleteInstance(t, fork) })
+	env.startInstance(t, name)
+	env.exec(t, name, "sh", "-c", "echo on-disk > /root/marker && sync")
+	env.dicer(t, "instance", "stop", name)
+	env.waitForState(t, name, "Stopped")
+
+	env.dicer(t, "snapshot", "create", name, snapshot)
+	t.Cleanup(func() { env.deleteSnapshot(t, snapshot) })
+	env.dicer(t, "snapshot", "fork", snapshot, fork)
+	if state := env.instance(t, fork).State; state != "Stopped" {
+		t.Errorf("a disk snapshot's fork is %q, want Stopped", state)
+	}
+
+	env.startInstance(t, fork)
+	if got := strings.TrimSpace(env.exec(t, fork, "cat", "/root/marker")); got != "on-disk" {
+		t.Errorf("the fork reads %q from its disk, want %q", got, "on-disk")
+	}
+}
+
 // snapshotView is a row of `dicer snapshot list --format json`.
 type snapshotView struct {
 	Name     string `json:"Name"`

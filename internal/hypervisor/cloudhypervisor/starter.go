@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gvisor.dev/gvisor/pkg/cleanup"
 
@@ -74,11 +75,23 @@ func (s *Starter) StartVM(
 	return proc, hv, nil
 }
 
+// restoreDir is the directory, beside the API socket, a snapshot with
+// another TAP device is staged in to be restored from.
+const restoreDir = "restore"
+
 // RestoreVM launches Cloud Hypervisor and restores a guest from a snapshot,
 // leaving it paused. The console is unused: the snapshot carries it.
 func (s *Starter) RestoreVM(
-	ctx context.Context, socketPath string, snapshotPath string, _ hypervisor.ConsoleConfig,
+	ctx context.Context, socketPath string, snapshotPath string, spec hypervisor.RestoreSpec,
 ) (*process.Process, hypervisor.Hypervisor, error) {
+	if spec.TAPDevice != "" {
+		dir := filepath.Join(filepath.Dir(socketPath), restoreDir)
+		if err := stageRestore(snapshotPath, dir, spec.TAPDevice); err != nil {
+			return nil, nil, fmt.Errorf("stage snapshot: %w", err)
+		}
+		snapshotPath = dir
+	}
+
 	proc, hv, cu, err := s.start(ctx, socketPath)
 	if err != nil {
 		return nil, nil, err

@@ -84,6 +84,7 @@ type harness struct {
 	instance    types.InstanceSpec
 	starter     *fakeStarter
 	hv          *fakeHypervisor
+	agent       *fakeGuestAgent
 	overlay     string
 }
 
@@ -114,6 +115,9 @@ func newHarness(t *testing.T) *harness {
 	// There is no guest agent to ask for a graceful stop: tests that want
 	// one say how the guest answers.
 	manager.shutdownGuest = func(context.Context, string) error { return errors.New("no guest agent") }
+	agent := &fakeGuestAgent{hostNetwork: hostNetwork}
+	manager.setGuestClock = agent.setClock
+	manager.setGuestIdentity = agent.setIdentity
 	// Building a real config disk needs mke2fs and root.
 	manager.provisionConfigDisk = func(_ context.Context, path string, _ *guest.Config) error {
 		return os.WriteFile(path, []byte("config disk"), 0o600)
@@ -132,7 +136,7 @@ func newHarness(t *testing.T) *harness {
 	recorded := &fakeRecorder{}
 	manager.events = recorded
 
-	return &harness{manager: manager, events: recorded, definitions: definitions, hostNetwork: hostNetwork, instance: instance, starter: starter, hv: hv, overlay: overlay}
+	return &harness{manager: manager, events: recorded, definitions: definitions, hostNetwork: hostNetwork, instance: instance, starter: starter, hv: hv, agent: agent, overlay: overlay}
 }
 
 // running records the instance as running without starting anything, for

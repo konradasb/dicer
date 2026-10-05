@@ -46,7 +46,7 @@ func (m *Metrics) newInstanceMetrics() instanceMetrics {
 			Name:   "dicer_instance_operations_total",
 			Labels: []string{"operation", "outcome"},
 			Help: "Instance lifecycle operations by operation " +
-				"(start, stop, pause, resume, resize, delete, create_snapshot, restore_snapshot, delete_snapshot) and outcome.",
+				"(start, stop, pause, resume, resize, delete, create_snapshot, restore_snapshot, delete_snapshot, fork_snapshot) and outcome.",
 			Doc:   "`outcome` is `success` or `error`.",
 			Group: GroupInstances,
 		}),

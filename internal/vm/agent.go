@@ -11,6 +11,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/guest"
@@ -74,6 +75,42 @@ func (m *Manager) syncGuest(ctx context.Context, instance types.InstanceSpec, st
 		m.logger.WarnContext(ctx, "guest did not flush its disks before stopping",
 			"instance", instance.Name, "error", err)
 	}
+}
+
+// restoredAgentTimeout bounds how long a restored guest's agent is waited
+// for, and given, to answer: a snapshot taken as the guest booted may have
+// caught it before its agent was serving.
+const restoredAgentTimeout = 10 * time.Second
+
+// setGuestClock sets the clock of the guest behind vsockPath to t.
+func setGuestClock(ctx context.Context, vsockPath string, t time.Time) error {
+	agent, closeAgent, err := dialAgent(vsockPath)
+	if err != nil {
+		return err
+	}
+	defer closeAgent()
+
+	ctx, cancel := context.WithTimeout(ctx, restoredAgentTimeout)
+	defer cancel()
+
+	_, err = agent.SetClock(ctx, &diceragentv1.SetClockRequest{Time: timestamppb.New(t)}, grpc.WaitForReady(true))
+	return err
+}
+
+// setGuestIdentity gives the guest behind vsockPath the identity req
+// describes.
+func setGuestIdentity(ctx context.Context, vsockPath string, req *diceragentv1.SetIdentityRequest) error {
+	agent, closeAgent, err := dialAgent(vsockPath)
+	if err != nil {
+		return err
+	}
+	defer closeAgent()
+
+	ctx, cancel := context.WithTimeout(ctx, restoredAgentTimeout)
+	defer cancel()
+
+	_, err = agent.SetIdentity(ctx, req, grpc.WaitForReady(true))
+	return err
 }
 
 // agentCallTimeout bounds a quick request to the guest agent.

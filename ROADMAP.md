@@ -25,7 +25,6 @@ expose them.
 |---------|-------------|
 | Standby | Snapshot and stop in one operation, freeing a VM's memory while keeping it ready to resume; optionally automatic for idle instances |
 | Lazy restore | Restore a snapshot with guest memory paged in on demand (userfaultfd), so resuming takes milliseconds rather than the time to read all of memory |
-| Fork | Copy a stopped, standing-by or running instance into a new one with a fresh address, MAC and TAP device |
 
 ### Devices and hypervisors
 

@@ -53,6 +53,32 @@ func (h *Host) CreateTAP(
 	return nil
 }
 
+// DisconnectTAP detaches an instance's TAP device from its network's bridge,
+// so that nothing the guest sends reaches the network, nor anything reaches
+// it.
+func (h *Host) DisconnectTAP(_ context.Context, _ *types.Network, instanceID string) error {
+	tap := network.TAPName(instanceID)
+	link, err := netlink.LinkByName(tap)
+	if err != nil {
+		return fmt.Errorf("look up TAP %s: %w", tap, err)
+	}
+	if err := netlink.LinkSetNoMaster(link); err != nil {
+		return fmt.Errorf("detach TAP %s: %w", tap, err)
+	}
+	return nil
+}
+
+// ConnectTAP attaches an instance's TAP device to its network's bridge, as
+// CreateTAP does.
+func (h *Host) ConnectTAP(_ context.Context, nw *types.Network, instanceID string) error {
+	tap := network.TAPName(instanceID)
+	link, err := netlink.LinkByName(tap)
+	if err != nil {
+		return fmt.Errorf("look up TAP %s: %w", tap, err)
+	}
+	return connectTAP(link, nw.Bridge, nw.Isolated)
+}
+
 // RemoveTAP removes an instance's TAP device and its bandwidth limits.
 // Best-effort: it logs failures rather than returning them.
 func (h *Host) RemoveTAP(ctx context.Context, nw *types.Network, instanceID string) {
@@ -89,19 +115,25 @@ func addTAP(name, bridge string, isolated bool) error {
 		return fmt.Errorf("set TAP %s up: %w", name, err)
 	}
 
+	return connectTAP(tapLink, bridge, isolated)
+}
+
+// connectTAP attaches a TAP device to the bridge, as a port isolated from
+// the bridge's other ports if isolated.
+func connectTAP(tap netlink.Link, bridge string, isolated bool) error {
 	br, err := netlink.LinkByName(bridge)
 	if err != nil {
 		return fmt.Errorf("look up bridge %s: %w", bridge, err)
 	}
-	if err := netlink.LinkSetMaster(tapLink, br); err != nil {
-		return fmt.Errorf("attach TAP %s to bridge %s: %w", name, bridge, err)
+	if err := netlink.LinkSetMaster(tap, br); err != nil {
+		return fmt.Errorf("attach TAP %s to bridge %s: %w", tap.Attrs().Name, bridge, err)
 	}
 	// An isolated port reaches only the bridge's non-isolated ports -- the
 	// gateway -- and not the other instances. Failing to set it would leave
 	// the instance quietly unisolated, so it is an error.
 	if isolated {
-		if err := netlink.LinkSetIsolated(tapLink, true); err != nil {
-			return fmt.Errorf("isolate TAP %s: %w", name, err)
+		if err := netlink.LinkSetIsolated(tap, true); err != nil {
+			return fmt.Errorf("isolate TAP %s: %w", tap.Attrs().Name, err)
 		}
 	}
 

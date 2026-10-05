@@ -24,6 +24,7 @@ import (
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/process"
 	"github.com/konradasb/dicer/internal/types"
+	diceragentv1 "github.com/konradasb/dicer/proto/diceragent/v1"
 )
 
 // Definitions stores the instance, network, volume and kernel definitions.
@@ -90,6 +91,10 @@ type HostNetwork interface {
 	SetupBridge(ctx context.Context, nw *types.Network) error
 	CreateTAP(ctx context.Context, nw *types.Network, allocation *types.NetworkAllocation, bandwidth network.Bandwidth) error
 	RemoveTAP(ctx context.Context, nw *types.Network, instanceID string)
+	// DisconnectTAP detaches an instance's TAP device from the bridge, and
+	// ConnectTAP attaches it again.
+	DisconnectTAP(ctx context.Context, nw *types.Network, instanceID string) error
+	ConnectTAP(ctx context.Context, nw *types.Network, instanceID string) error
 	TeardownBridge(ctx context.Context, nw *types.Network)
 
 	// PublishPorts forwards host ports to the instance's address, replacing
@@ -165,6 +170,8 @@ type Manager struct {
 	attach              func(pid int, arg string) (*process.Process, error)
 	probe               func(ctx context.Context, vsockPath string, check types.HealthCheck) (probeResult, error)
 	shutdownGuest       func(ctx context.Context, vsockPath string) error
+	setGuestClock       func(ctx context.Context, vsockPath string, t time.Time) error
+	setGuestIdentity    func(ctx context.Context, vsockPath string, req *diceragentv1.SetIdentityRequest) error
 	restartWait         func(at time.Time) time.Duration
 
 	// shutdownTimeout is how long a VMM asked to exit has before it is
@@ -243,10 +250,12 @@ func NewManager(cfg Config) *Manager {
 		attach:              process.Attach,
 		probe:               probeGuest,
 
-		shutdownTimeout: defaultShutdownTimeout,
-		stopGracePeriod: defaultStopGracePeriod,
-		shutdownGuest:   shutdownGuest,
-		restartWait:     time.Until,
+		shutdownTimeout:  defaultShutdownTimeout,
+		stopGracePeriod:  defaultStopGracePeriod,
+		shutdownGuest:    shutdownGuest,
+		setGuestClock:    setGuestClock,
+		setGuestIdentity: setGuestIdentity,
+		restartWait:      time.Until,
 
 		vmms:     make(map[string]*supervised),
 		restarts: make(map[string]*pendingRestart),

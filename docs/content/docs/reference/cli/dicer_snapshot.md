@@ -16,6 +16,7 @@ outlives the instance it was taken from.
 |---|---|
 | [`dicer snapshot create`]({{< relref "/docs/reference/cli/dicer_snapshot_create" >}}) | Snapshot an instance. |
 | [`dicer snapshot delete`]({{< relref "/docs/reference/cli/dicer_snapshot_delete" >}}) | Delete one or more snapshots, or all of them. |
+| [`dicer snapshot fork`]({{< relref "/docs/reference/cli/dicer_snapshot_fork" >}}) | Create an instance as a copy of a snapshot's. |
 | [`dicer snapshot list`]({{< relref "/docs/reference/cli/dicer_snapshot_list" >}}) | List snapshots. |
 | [`dicer snapshot restore`]({{< relref "/docs/reference/cli/dicer_snapshot_restore" >}}) | Put an instance back as a snapshot of it holds it. |
 | [`dicer snapshot show`]({{< relref "/docs/reference/cli/dicer_snapshot_show" >}}) | Show a snapshot. |

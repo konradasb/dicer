@@ -4,7 +4,7 @@
 //go:build linux
 
 // Package agent runs inside the guest and serves the host's exec, copy, probe,
-// process listing and shutdown requests over vsock.
+// process listing, shutdown, clock and identity requests over vsock.
 package agent
 
 // server implements diceragentv1.AgentServiceServer.

@@ -23,6 +23,7 @@ import (
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/process"
 	"github.com/konradasb/dicer/internal/types"
+	diceragentv1 "github.com/konradasb/dicer/proto/diceragent/v1"
 )
 
 // The fakes below are why Definitions and Networks are interfaces declared in
@@ -380,6 +381,10 @@ type fakeHostNetwork struct {
 	removedTAPs     []string
 	tornDownBridges []string
 
+	// disconnected holds the instances whose TAP device is detached from
+	// its bridge.
+	disconnected map[string]bool
+
 	// bandwidth is what the last TAP device was limited to.
 	bandwidth network.Bandwidth
 
@@ -413,6 +418,19 @@ func (f *fakeHostNetwork) CreateTAP(
 
 func (f *fakeHostNetwork) RemoveTAP(_ context.Context, _ *types.Network, instanceID string) {
 	f.removedTAPs = append(f.removedTAPs, instanceID)
+}
+
+func (f *fakeHostNetwork) DisconnectTAP(_ context.Context, _ *types.Network, instanceID string) error {
+	if f.disconnected == nil {
+		f.disconnected = make(map[string]bool)
+	}
+	f.disconnected[instanceID] = true
+	return nil
+}
+
+func (f *fakeHostNetwork) ConnectTAP(_ context.Context, _ *types.Network, instanceID string) error {
+	delete(f.disconnected, instanceID)
+	return nil
 }
 
 func (f *fakeHostNetwork) PublishPorts(
@@ -562,12 +580,12 @@ func (f *fakeHypervisor) ResizeVMCPU(_ context.Context, count int) error {
 // restore, and stands in for the VMM with a real process -- a sleep -- so
 // that supervision sees a real exit when a test kills it.
 type fakeStarter struct {
-	version         string
-	hv              *fakeHypervisor
-	restoredFrom    []string
-	restoredConsole hypervisor.ConsoleConfig
-	restoreErr      error
-	startErr        error
+	version      string
+	hv           *fakeHypervisor
+	restoredFrom []string
+	restoredSpec hypervisor.RestoreSpec
+	restoreErr   error
+	startErr     error
 
 	// spec is what the last guest was started with.
 	spec hypervisor.VMSpec
@@ -598,13 +616,13 @@ func (f *fakeStarter) StartVM(
 }
 
 func (f *fakeStarter) RestoreVM(
-	_ context.Context, _ string, snapshotPath string, console hypervisor.ConsoleConfig,
+	_ context.Context, _ string, snapshotPath string, spec hypervisor.RestoreSpec,
 ) (*process.Process, hypervisor.Hypervisor, error) {
 	if f.restoreErr != nil {
 		return nil, nil, f.restoreErr
 	}
 	f.restoredFrom = append(f.restoredFrom, snapshotPath)
-	f.restoredConsole = console
+	f.restoredSpec = spec
 
 	vmm, err := f.launch()
 	if err != nil {
@@ -774,4 +792,35 @@ func (f *fakeRecorder) last(action events.Action) (events.Event, bool) {
 		}
 	}
 	return events.Event{}, false
+}
+
+// fakeGuestAgent stands in for a restored guest's agent, remembering what it
+// was told.
+type fakeGuestAgent struct {
+	hostNetwork *fakeHostNetwork
+
+	clockSets  int
+	identities []*diceragentv1.SetIdentityRequest
+	// identityErr is what SetIdentity fails with.
+	identityErr error
+	// connectedForIdentity is set if a guest was given its identity while
+	// it could reach the network.
+	connectedForIdentity bool
+}
+
+func (f *fakeGuestAgent) setClock(context.Context, string, time.Time) error {
+	f.clockSets++
+	return nil
+}
+
+func (f *fakeGuestAgent) setIdentity(_ context.Context, vsockPath string, req *diceragentv1.SetIdentityRequest) error {
+	if f.identityErr != nil {
+		return f.identityErr
+	}
+	f.identities = append(f.identities, req)
+	// The vsock path is in the runtime directory, named for the instance.
+	if !f.hostNetwork.disconnected[filepath.Base(filepath.Dir(vsockPath))] {
+		f.connectedForIdentity = true
+	}
+	return nil
 }

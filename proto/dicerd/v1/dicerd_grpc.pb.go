@@ -42,6 +42,7 @@ const (
 	DaemonService_GetSnapshot_FullMethodName            = "/dicerd.v1.DaemonService/GetSnapshot"
 	DaemonService_DeleteSnapshot_FullMethodName         = "/dicerd.v1.DaemonService/DeleteSnapshot"
 	DaemonService_RestoreSnapshot_FullMethodName        = "/dicerd.v1.DaemonService/RestoreSnapshot"
+	DaemonService_ForkSnapshot_FullMethodName           = "/dicerd.v1.DaemonService/ForkSnapshot"
 	DaemonService_ExecInstance_FullMethodName           = "/dicerd.v1.DaemonService/ExecInstance"
 	DaemonService_CopyToInstance_FullMethodName         = "/dicerd.v1.DaemonService/CopyToInstance"
 	DaemonService_CopyFromInstance_FullMethodName       = "/dicerd.v1.DaemonService/CopyFromInstance"
@@ -172,6 +173,13 @@ type DaemonServiceClient interface {
 	// refused if the instance's address or mounts have changed; a disk
 	// snapshot leaves the instance stopped.
 	RestoreSnapshot(ctx context.Context, in *RestoreSnapshotRequest, opts ...grpc.CallOption) (*Instance, error)
+	// ForkSnapshot creates an instance as a copy of the one a snapshot was
+	// taken of, with its definition but an identity of its own: its own name,
+	// address and MAC, and no published ports unless given. A memory
+	// snapshot's fork runs, resumed where the snapshot's guest was and given
+	// that identity before it can reach the network; a disk snapshot's fork
+	// is stopped. A fork that fails leaves no instance behind.
+	ForkSnapshot(ctx context.Context, in *ForkSnapshotRequest, opts ...grpc.CallOption) (*Instance, error)
 	// ExecInstance runs a command inside a running instance. The first client
 	// message must be an ExecInstanceStart; subsequent messages carry stdin data
 	// or terminal resize events.
@@ -450,6 +458,16 @@ func (c *daemonServiceClient) RestoreSnapshot(ctx context.Context, in *RestoreSn
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Instance)
 	err := c.cc.Invoke(ctx, DaemonService_RestoreSnapshot_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ForkSnapshot(ctx context.Context, in *ForkSnapshotRequest, opts ...grpc.CallOption) (*Instance, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Instance)
+	err := c.cc.Invoke(ctx, DaemonService_ForkSnapshot_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -833,6 +851,13 @@ type DaemonServiceServer interface {
 	// refused if the instance's address or mounts have changed; a disk
 	// snapshot leaves the instance stopped.
 	RestoreSnapshot(context.Context, *RestoreSnapshotRequest) (*Instance, error)
+	// ForkSnapshot creates an instance as a copy of the one a snapshot was
+	// taken of, with its definition but an identity of its own: its own name,
+	// address and MAC, and no published ports unless given. A memory
+	// snapshot's fork runs, resumed where the snapshot's guest was and given
+	// that identity before it can reach the network; a disk snapshot's fork
+	// is stopped. A fork that fails leaves no instance behind.
+	ForkSnapshot(context.Context, *ForkSnapshotRequest) (*Instance, error)
 	// ExecInstance runs a command inside a running instance. The first client
 	// message must be an ExecInstanceStart; subsequent messages carry stdin data
 	// or terminal resize events.
@@ -964,6 +989,9 @@ func (UnimplementedDaemonServiceServer) DeleteSnapshot(context.Context, *DeleteS
 }
 func (UnimplementedDaemonServiceServer) RestoreSnapshot(context.Context, *RestoreSnapshotRequest) (*Instance, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RestoreSnapshot not implemented")
+}
+func (UnimplementedDaemonServiceServer) ForkSnapshot(context.Context, *ForkSnapshotRequest) (*Instance, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ForkSnapshot not implemented")
 }
 func (UnimplementedDaemonServiceServer) ExecInstance(grpc.BidiStreamingServer[ExecInstanceRequest, ExecInstanceResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method ExecInstance not implemented")
@@ -1381,6 +1409,24 @@ func _DaemonService_RestoreSnapshot_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServiceServer).RestoreSnapshot(ctx, req.(*RestoreSnapshotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ForkSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForkSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ForkSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ForkSnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ForkSnapshot(ctx, req.(*ForkSnapshotRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1848,6 +1894,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RestoreSnapshot",
 			Handler:    _DaemonService_RestoreSnapshot_Handler,
+		},
+		{
+			MethodName: "ForkSnapshot",
+			Handler:    _DaemonService_ForkSnapshot_Handler,
 		},
 		{
 			MethodName: "CreateNetwork",

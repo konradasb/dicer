@@ -87,6 +87,17 @@ type PCIDeviceConfig struct {
 	Path string
 }
 
+// RestoreSpec is what a VM restored from a snapshot is given afresh, rather
+// than taking it from the snapshot.
+type RestoreSpec struct {
+	// Console is where the guest's serial console is written.
+	Console ConsoleConfig
+
+	// TAPDevice is the host's end of the guest's network interface, in place
+	// of the one it was snapshotted with, which another VM may have.
+	TAPDevice string
+}
+
 // ConsoleConfig describes where the guest's serial console is written.
 type ConsoleConfig struct {
 	// Path is the file the console's output is appended to.

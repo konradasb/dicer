@@ -4,8 +4,11 @@
 package grpcapi
 
 import (
+	"cmp"
 	"context"
+	"time"
 
+	"github.com/nrednav/cuid2"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/konradasb/dicer/internal/errdefs"
@@ -107,6 +110,56 @@ func (h *snapshotHandler) RestoreSnapshot(
 	}
 
 	return viewInstance(h.instances, instance)
+}
+
+// ForkSnapshot creates an instance as a copy of the one a snapshot was taken
+// of.
+func (h *snapshotHandler) ForkSnapshot(
+	ctx context.Context, req *dicerdv1.ForkSnapshotRequest,
+) (*dicerdv1.Instance, error) {
+	snapshot, err := h.snapshot(req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	fork, err := forkDefinition(snapshot, req)
+	if err != nil {
+		return nil, err
+	}
+	// What a created instance is checked for applies to a fork as much.
+	creation := instanceHandler{definitions: h.definitions, instances: h.instances}
+	if err := creation.checkCanStart(fork); err != nil {
+		return nil, err
+	}
+
+	if err := h.instances.Fork(ctx, snapshot, fork); err != nil {
+		return nil, err
+	}
+
+	return viewInstance(h.instances, fork)
+}
+
+// forkDefinition returns the definition of the instance a fork request
+// makes of snapshot: its instance's, less what was that instance's alone,
+// its ID and name, its address, and its host ports.
+func forkDefinition(snapshot types.Snapshot, req *dicerdv1.ForkSnapshotRequest) (types.InstanceSpec, error) {
+	ports, err := portMappingsFromProto(req.GetPorts())
+	if err != nil {
+		return types.InstanceSpec{}, err
+	}
+
+	now := time.Now()
+	fork := snapshot.Instance
+	fork.ID, fork.Name = cuid2.Generate(), req.GetInstance()
+	fork.NetworkName = cmp.Or(req.GetNetworkName(), fork.NetworkName)
+	fork.StaticIP = req.GetStaticIp()
+	fork.Ports = ports
+	fork.StoppedByUser = false
+	fork.CreatedAt, fork.UpdatedAt = now, now
+
+	if err := fork.Validate(); err != nil {
+		return types.InstanceSpec{}, err
+	}
+	return fork, nil
 }
 
 // snapshot resolves the snapshot a request names.

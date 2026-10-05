@@ -44,6 +44,15 @@ service AgentService {
   // ListProcesses returns the processes running in the VM, in PID order.
   // Kernel threads are left out.
   rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
+
+  // SetClock sets the VM's wall clock, which stood still while the VM was
+  // frozen in a snapshot.
+  rpc SetClock(SetClockRequest) returns (SetClockResponse);
+
+  // SetIdentity gives a VM forked from a snapshot of another its own
+  // identity: its hostname, and its network interfaces' MAC addresses,
+  // addresses and routes in place of the ones it was snapshotted with.
+  rpc SetIdentity(SetIdentityRequest) returns (SetIdentityResponse);
 }
 
 // ExecStart is the first message sent by the client to start a command.
@@ -184,4 +193,38 @@ message Process {
   google.protobuf.Duration cpu_time = 8;
   // The memory the process has resident.
   int64 resident_memory_bytes = 9;
+}
+
+message SetClockRequest {
+  google.protobuf.Timestamp time = 1;
+}
+
+message SetClockResponse {}
+
+message SetIdentityRequest {
+  string hostname = 1;
+  repeated NetworkInterface interfaces = 2;
+  repeated NetworkRoute routes = 3;
+  // The nameservers resolv.conf names. None leaves it as it is.
+  repeated string nameservers = 4;
+}
+
+message SetIdentityResponse {}
+
+// NetworkInterface is one of the VM's interfaces as it is to be configured.
+// Its addresses replace every address it has.
+message NetworkInterface {
+  string name = 1;
+  string mac = 2;
+  // The addresses in CIDR notation, as in 10.0.0.5/24.
+  repeated string addresses = 3;
+  int32 mtu = 4;
+}
+
+// NetworkRoute is a route through a gateway, in the main table. It replaces
+// any route to the same destination.
+message NetworkRoute {
+  // A CIDR, or "default".
+  string destination = 1;
+  string gateway = 2;
 }

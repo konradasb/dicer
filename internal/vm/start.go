@@ -100,6 +100,7 @@ func (m *Manager) boot(ctx context.Context, instance types.InstanceSpec, restart
 
 	run := runRecord{
 		hypervisorVersion: starter.Version(),
+		vsockCID:          vsockCID(instance.ID),
 		held:              instance.Resources(),
 		imageDigest:       boot.image.Digest,
 		restarts:          restarts,
@@ -353,8 +354,8 @@ func buildInitConfig(
 	cfg.Network = guest.NetworkConfig{
 		DNS: guest.DNSConfig{Nameservers: setup.nameservers},
 		Interfaces: []guest.NetworkInterface{{
-			Name:      "eth0",
-			Addresses: []string{fmt.Sprintf("%s/%d", setup.nic.IP, setup.prefixLen)},
+			Name:      guestInterface,
+			Addresses: []string{setup.guestAddress()},
 			MTU:       setup.nic.MTU,
 		}},
 		Routes: []guest.NetworkRoute{{Destination: "default", Gateway: setup.gateway}},
@@ -377,7 +378,7 @@ func mergeEnv(base, override map[string]string) map[string]string {
 }
 
 // vsockCID derives a stable context ID from the instance ID, so a restored
-// guest keeps its CID. CIDs 0-2 are reserved.
+// guest keeps its CID, as a fork keeps its source's. CIDs 0-2 are reserved.
 func vsockCID(instanceID string) int64 {
 	prefix := instanceID
 	if len(prefix) > 8 {

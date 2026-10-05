@@ -61,6 +61,7 @@ func newSnapshotCommand() *cobra.Command {
 		newSnapshotListCommand(),
 		newSnapshotShowCommand(),
 		newSnapshotRestoreCommand(),
+		newSnapshotForkCommand(),
 		newSnapshotDeleteCommand(),
 	)
 
@@ -173,6 +174,60 @@ func newSnapshotRestoreCommand() *cobra.Command {
 			})
 		},
 	}
+}
+
+func newSnapshotForkCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "fork SNAPSHOT NAME",
+		Short: "Create an instance as a copy of a snapshot's",
+		Long: "Creates an instance called NAME as a copy of the one a snapshot was taken of,\n" +
+			"with its definition and disk but an address of its own, on the same network\n" +
+			"unless --network is given. It publishes no ports unless -p is given: two\n" +
+			"instances cannot publish the same host port.\n\n" +
+			"A memory snapshot's copy runs, resumed where the snapshot's guest was and\n" +
+			"given its own name and address before it can reach the network. A disk\n" +
+			"snapshot's copy is stopped, to boot from the snapshot's disk.",
+		Example: "  dicer snapshot fork web-golden web-2\n" +
+			"  dicer snapshot fork web-golden web-3 -p 8081:80",
+		Args:              needs([]string{"a snapshot name", "a name for the new instance"}),
+		ValidArgsFunction: complete(1, listSnapshots),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			req := &dicerdv1.ForkSnapshotRequest{Name: args[0], Instance: args[1]}
+			req.NetworkName, _ = cmd.Flags().GetString("network")
+			req.StaticIp, _ = cmd.Flags().GetString("ip")
+			specs, _ := cmd.Flags().GetStringArray("publish")
+			ports, err := parseEach(specs, parsePortMapping)
+			if err != nil {
+				return err
+			}
+			req.Ports = ports
+
+			client, cleanup, err := newClient(cmd)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+
+			return runTask(cmd, "Forking "+args[0], func() (*dicerdv1.Instance, error) {
+				return client.ForkSnapshot(cmd.Context(), req)
+			}, func(instance *dicerdv1.Instance, took string) string {
+				if instance.GetState() != dicerdv1.InstanceState_INSTANCE_STATE_RUNNING {
+					return fmt.Sprintf("Instance %s forked from snapshot %s in %s; start it to boot it", instance.GetName(), args[0], took)
+				}
+				return fmt.Sprintf("Instance %s forked from snapshot %s in %s (%s)",
+					instance.GetName(), args[0], took, orDash(instance.GetIp()))
+			})
+		},
+	}
+
+	flags := cmd.Flags()
+	flags.String("network", "", "Network to attach to (default: the snapshot's instance's)")
+	flags.String("ip", "", "Static IP address (default: assigned from the subnet)")
+	flags.StringArrayP("publish", "p", nil,
+		"Publish a guest port on the host, as [hostIP:]hostPort:guestPort[/tcp|udp] (repeatable)")
+	_ = cmd.RegisterFlagCompletionFunc("network", complete(0, listNetworks))
+
+	return cmd
 }
 
 func newSnapshotDeleteCommand() *cobra.Command {

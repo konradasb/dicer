@@ -29,6 +29,8 @@ const (
 	AgentService_Probe_FullMethodName         = "/diceragent.v1.AgentService/Probe"
 	AgentService_Shutdown_FullMethodName      = "/diceragent.v1.AgentService/Shutdown"
 	AgentService_ListProcesses_FullMethodName = "/diceragent.v1.AgentService/ListProcesses"
+	AgentService_SetClock_FullMethodName      = "/diceragent.v1.AgentService/SetClock"
+	AgentService_SetIdentity_FullMethodName   = "/diceragent.v1.AgentService/SetIdentity"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -63,6 +65,13 @@ type AgentServiceClient interface {
 	// ListProcesses returns the processes running in the VM, in PID order.
 	// Kernel threads are left out.
 	ListProcesses(ctx context.Context, in *ListProcessesRequest, opts ...grpc.CallOption) (*ListProcessesResponse, error)
+	// SetClock sets the VM's wall clock, which stood still while the VM was
+	// frozen in a snapshot.
+	SetClock(ctx context.Context, in *SetClockRequest, opts ...grpc.CallOption) (*SetClockResponse, error)
+	// SetIdentity gives a VM forked from a snapshot of another its own
+	// identity: its hostname, and its network interfaces' MAC addresses,
+	// addresses and routes in place of the ones it was snapshotted with.
+	SetIdentity(ctx context.Context, in *SetIdentityRequest, opts ...grpc.CallOption) (*SetIdentityResponse, error)
 }
 
 type agentServiceClient struct {
@@ -158,6 +167,26 @@ func (c *agentServiceClient) ListProcesses(ctx context.Context, in *ListProcesse
 	return out, nil
 }
 
+func (c *agentServiceClient) SetClock(ctx context.Context, in *SetClockRequest, opts ...grpc.CallOption) (*SetClockResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetClockResponse)
+	err := c.cc.Invoke(ctx, AgentService_SetClock_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) SetIdentity(ctx context.Context, in *SetIdentityRequest, opts ...grpc.CallOption) (*SetIdentityResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetIdentityResponse)
+	err := c.cc.Invoke(ctx, AgentService_SetIdentity_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations should embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -190,6 +219,13 @@ type AgentServiceServer interface {
 	// ListProcesses returns the processes running in the VM, in PID order.
 	// Kernel threads are left out.
 	ListProcesses(context.Context, *ListProcessesRequest) (*ListProcessesResponse, error)
+	// SetClock sets the VM's wall clock, which stood still while the VM was
+	// frozen in a snapshot.
+	SetClock(context.Context, *SetClockRequest) (*SetClockResponse, error)
+	// SetIdentity gives a VM forked from a snapshot of another its own
+	// identity: its hostname, and its network interfaces' MAC addresses,
+	// addresses and routes in place of the ones it was snapshotted with.
+	SetIdentity(context.Context, *SetIdentityRequest) (*SetIdentityResponse, error)
 }
 
 // UnimplementedAgentServiceServer should be embedded to have
@@ -219,6 +255,12 @@ func (UnimplementedAgentServiceServer) Shutdown(context.Context, *ShutdownReques
 }
 func (UnimplementedAgentServiceServer) ListProcesses(context.Context, *ListProcessesRequest) (*ListProcessesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListProcesses not implemented")
+}
+func (UnimplementedAgentServiceServer) SetClock(context.Context, *SetClockRequest) (*SetClockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetClock not implemented")
+}
+func (UnimplementedAgentServiceServer) SetIdentity(context.Context, *SetIdentityRequest) (*SetIdentityResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetIdentity not implemented")
 }
 func (UnimplementedAgentServiceServer) testEmbeddedByValue() {}
 
@@ -337,6 +379,42 @@ func _AgentService_ListProcesses_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_SetClock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetClockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).SetClock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_SetClock_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).SetClock(ctx, req.(*SetClockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_SetIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetIdentityRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).SetIdentity(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_SetIdentity_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).SetIdentity(ctx, req.(*SetIdentityRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -359,6 +437,14 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListProcesses",
 			Handler:    _AgentService_ListProcesses_Handler,
+		},
+		{
+			MethodName: "SetClock",
+			Handler:    _AgentService_SetClock_Handler,
+		},
+		{
+			MethodName: "SetIdentity",
+			Handler:    _AgentService_SetIdentity_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

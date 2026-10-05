@@ -66,6 +66,7 @@ was, and whose message says it for a person:
 | `GetSnapshot` | [`GetSnapshotRequest`](#getsnapshotrequest) | [`Snapshot`](#snapshot) | GetSnapshot returns one snapshot. |
 | `DeleteSnapshot` | [`DeleteSnapshotRequest`](#deletesnapshotrequest) | `google.protobuf.Empty` | DeleteSnapshot removes a snapshot. |
 | `RestoreSnapshot` | [`RestoreSnapshotRequest`](#restoresnapshotrequest) | [`Instance`](#instance) | RestoreSnapshot puts the instance a snapshot was taken from, which must be stopped, back as it was then, discarding whatever it has written to its disk since. A memory snapshot resumes the guest where it was, and is refused if the instance's address or mounts have changed; a disk snapshot leaves the instance stopped. |
+| `ForkSnapshot` | [`ForkSnapshotRequest`](#forksnapshotrequest) | [`Instance`](#instance) | ForkSnapshot creates an instance as a copy of the one a snapshot was taken of, with its definition but an identity of its own: its own name, address and MAC, and no published ports unless given. A memory snapshot's fork runs, resumed where the snapshot's guest was and given that identity before it can reach the network; a disk snapshot's fork is stopped. A fork that fails leaves no instance behind. |
 | `ExecInstance` | stream [`ExecInstanceRequest`](#execinstancerequest) | stream [`ExecInstanceResponse`](#execinstanceresponse) | ExecInstance runs a command inside a running instance. The first client message must be an ExecInstanceStart; subsequent messages carry stdin data or terminal resize events. |
 | `CopyToInstance` | stream [`CopyToInstanceRequest`](#copytoinstancerequest) | `google.protobuf.Empty` | CopyToInstance writes a file or directory into a running instance. The first message must be a CopyToInstanceStart; the rest carry a tar archive of it, in chunks, which lands at the path as cp would put it. |
 | `CopyFromInstance` | [`CopyFromInstanceRequest`](#copyfrominstancerequest) | stream [`CopyFromInstanceResponse`](#copyfrominstanceresponse) | CopyFromInstance reads a file or directory out of a running instance, as a tar archive in chunks. |
@@ -315,6 +316,16 @@ ExecInstanceStart is the first message on an ExecInstance stream.
 |---|---|---|
 | `key` | `string` |  |
 | `value` | `string` |  |
+
+### ForkSnapshotRequest
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `string` | The snapshot's name or ID. |
+| `instance` | `string` | The new instance's name. |
+| `network_name` | `string` | The network the new instance joins, and its address on it. The snapshot's network, and an address it assigns, when empty. |
+| `static_ip` | `string` |  |
+| `ports` | repeated [`PortMapping`](#portmapping) | The host ports the new instance publishes. The snapshot's instance's are not copied: two instances cannot publish the same host port. |
 
 ### GetEventsRequest
 

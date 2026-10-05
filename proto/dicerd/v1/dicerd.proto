@@ -112,6 +112,13 @@ service DaemonService {
   // refused if the instance's address or mounts have changed; a disk
   // snapshot leaves the instance stopped.
   rpc RestoreSnapshot(RestoreSnapshotRequest) returns (Instance);
+  // ForkSnapshot creates an instance as a copy of the one a snapshot was
+  // taken of, with its definition but an identity of its own: its own name,
+  // address and MAC, and no published ports unless given. A memory
+  // snapshot's fork runs, resumed where the snapshot's guest was and given
+  // that identity before it can reach the network; a disk snapshot's fork
+  // is stopped. A fork that fails leaves no instance behind.
+  rpc ForkSnapshot(ForkSnapshotRequest) returns (Instance);
 
   // ExecInstance runs a command inside a running instance. The first client
   // message must be an ExecInstanceStart; subsequent messages carry stdin data
@@ -923,6 +930,20 @@ message RestoreSnapshotRequest {
   reserved "instance";
   // The snapshot's name or ID.
   string name = 2;
+}
+
+message ForkSnapshotRequest {
+  // The snapshot's name or ID.
+  string name = 1;
+  // The new instance's name.
+  string instance = 2;
+  // The network the new instance joins, and its address on it. The
+  // snapshot's network, and an address it assigns, when empty.
+  string network_name = 3;
+  string static_ip = 4;
+  // The host ports the new instance publishes. The snapshot's instance's
+  // are not copied: two instances cannot publish the same host port.
+  repeated PortMapping ports = 5;
 }
 
 // Network is a host-local bridge with NAT to the uplink.

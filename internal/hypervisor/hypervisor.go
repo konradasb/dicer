@@ -109,11 +109,11 @@ type Starter interface {
 	StartVM(ctx context.Context, socketPath string, spec VMSpec) (vmm *process.Process, hypervisor Hypervisor, err error)
 
 	// RestoreVM launches a VMM and restores the VM from the snapshot
-	// SnapshotVM wrote into the directory snapshotPath, leaving it paused.
-	// The console is passed because not every snapshot carries it. As with
+	// SnapshotVM wrote into the directory snapshotPath, leaving it paused,
+	// with what spec gives it in place of what the snapshot holds. As with
 	// SnapshotVM, ctx should have a deadline that suits the guest's memory.
 	RestoreVM(
-		ctx context.Context, socketPath string, snapshotPath string, console ConsoleConfig,
+		ctx context.Context, socketPath string, snapshotPath string, spec RestoreSpec,
 	) (vmm *process.Process, hypervisor Hypervisor, err error)
 
 	// Connect returns a Hypervisor for a VMM already serving its API on

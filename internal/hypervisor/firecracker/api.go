@@ -124,9 +124,17 @@ type snapshotCreate struct {
 }
 
 type snapshotLoad struct {
-	SnapshotPath string        `json:"snapshot_path"`
-	MemBackend   memoryBackend `json:"mem_backend"`
-	ResumeVM     bool          `json:"resume_vm"`
+	SnapshotPath     string            `json:"snapshot_path"`
+	MemBackend       memoryBackend     `json:"mem_backend"`
+	NetworkOverrides []networkOverride `json:"network_overrides,omitempty"`
+	ResumeVM         bool              `json:"resume_vm"`
+}
+
+// networkOverride connects a restored guest's interface to another TAP
+// device than the one it was snapshotted with.
+type networkOverride struct {
+	IfaceID     string `json:"iface_id"`
+	HostDevName string `json:"host_dev_name"`
 }
 
 type memoryBackend struct {

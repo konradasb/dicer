@@ -4,12 +4,14 @@
 package vm
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 
 	"github.com/konradasb/dicer/internal/hypervisor"
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/types"
+	diceragentv1 "github.com/konradasb/dicer/proto/diceragent/v1"
 )
 
 // Allocation returns the allocation an instance holds on its network, or an
@@ -20,6 +22,7 @@ func (m *Manager) Allocation(instance types.InstanceSpec) (types.NetworkAllocati
 
 // networkSetup holds the result of attaching an instance to its network.
 type networkSetup struct {
+	network     types.Network
 	nic         hypervisor.NetworkInterfaceConfig
 	gateway     string
 	nameservers []string
@@ -88,6 +91,7 @@ func (m *Manager) setupNetwork(ctx context.Context, instance types.InstanceSpec)
 	}
 
 	return &networkSetup{
+		network: nw,
 		nic: hypervisor.NetworkInterfaceConfig{
 			TAPDevice: network.TAPName(instance.ID),
 			IP:        allocation.IP,
@@ -100,6 +104,31 @@ func (m *Manager) setupNetwork(ctx context.Context, instance types.InstanceSpec)
 		prefixLen:   prefixLen,
 		cleanup:     undo,
 	}, nil
+}
+
+// guestInterface is the guest's network interface, its only one.
+const guestInterface = "eth0"
+
+// guestAddress returns the guest's address with its prefix length, as in
+// 10.0.0.5/24.
+func (s *networkSetup) guestAddress() string {
+	return fmt.Sprintf("%s/%d", s.nic.IP, s.prefixLen)
+}
+
+// guestIdentity is what a fork's guest is told it is in place of what its
+// snapshot holds: instance's hostname, and the address setup gave it.
+func guestIdentity(instance types.InstanceSpec, setup *networkSetup) *diceragentv1.SetIdentityRequest {
+	return &diceragentv1.SetIdentityRequest{
+		Hostname: cmp.Or(instance.Hostname, instance.Name),
+		Interfaces: []*diceragentv1.NetworkInterface{{
+			Name:      guestInterface,
+			Mac:       setup.nic.MAC,
+			Addresses: []string{setup.guestAddress()},
+			Mtu:       int32(setup.nic.MTU),
+		}},
+		Routes:      []*diceragentv1.NetworkRoute{{Destination: "default", Gateway: setup.gateway}},
+		Nameservers: setup.nameservers,
+	}
 }
 
 // upstreamNameservers are the nameservers a network's names are looked up
