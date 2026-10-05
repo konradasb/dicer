@@ -89,6 +89,15 @@ func definitionChanges(a, b types.InstanceSpec) []string {
 		}
 		return written
 	}
+	// limit is a rate limit as written, of which zero is unlimited.
+	limit := func(n int64, written string) string {
+		if n == 0 {
+			return "unlimited"
+		}
+		return written
+	}
+	byteRate := func(n int64) string { return limit(n, humanize.Bytes(n)+"/s") }
+	iops := func(n int64) string { return limit(n, strconv.FormatInt(n, 10)) }
 
 	from("image", reference.FamiliarString(a.ImageRef), reference.FamiliarString(b.ImageRef))
 	from("vCPUs", strconv.Itoa(a.VCPUs), strconv.Itoa(b.VCPUs))
@@ -96,6 +105,10 @@ func definitionChanges(a, b types.InstanceSpec) []string {
 	from("max vCPUs", maximum(int64(a.MaxVCPUs), strconv.Itoa(a.MaxVCPUs)), maximum(int64(b.MaxVCPUs), strconv.Itoa(b.MaxVCPUs)))
 	from("max memory", maximum(a.MaxMemoryBytes, humanize.Bytes(a.MaxMemoryBytes)), maximum(b.MaxMemoryBytes, humanize.Bytes(b.MaxMemoryBytes)))
 	from("disk", humanize.Bytes(a.DiskBytes), humanize.Bytes(b.DiskBytes))
+	from("disk rate", byteRate(a.DiskBytesPerSecond), byteRate(b.DiskBytesPerSecond))
+	from("disk IOPS", iops(a.DiskIOPS), iops(b.DiskIOPS))
+	from("upload rate", byteRate(a.UploadBytesPerSecond), byteRate(b.UploadBytesPerSecond))
+	from("download rate", byteRate(a.DownloadBytesPerSecond), byteRate(b.DownloadBytesPerSecond))
 	from("restart policy", a.Restart.String(), b.Restart.String())
 	from("network", a.NetworkName, b.NetworkName)
 	from("static IP", a.StaticIP, b.StaticIP)

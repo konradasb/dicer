@@ -4,7 +4,6 @@
 package grpcapi
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -19,7 +18,31 @@ import (
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
-func TestMounts(t *testing.T) {
+func TestMountsFromProtoCleansTargets(t *testing.T) {
+	got, err := mountsFromProto([]*dicerdv1.Mount{
+		{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "v0", Target: "/data/"},
+		{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: "/etc/secret", Target: "/etc//app/secret", ReadOnly: true},
+		{Type: dicerdv1.MountType_MOUNT_TYPE_TMPFS},
+	})
+	if err != nil {
+		t.Fatalf("mountsFromProto: %v", err)
+	}
+	want := []types.Mount{
+		{Type: types.MountTypeVolume, Source: "v0", Target: "/data"},
+		{Type: types.MountTypeFile, Source: "/etc/secret", Target: "/etc/app/secret", ReadOnly: true},
+		{Type: types.MountTypeTmpfs},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("mounts = %+v, want %+v", got, want)
+	}
+
+	_, err = mountsFromProto([]*dicerdv1.Mount{{Type: dicerdv1.MountType(99), Target: "/data"}})
+	wantClass(t, err, errdefs.ErrInvalidArgument)
+}
+
+// TestCheckMounts checks what of an instance's mounts needs the host: that
+// its volumes exist and fit, and its host files can be read.
+func TestCheckMounts(t *testing.T) {
 	definitions, err := filestore.NewManager(filestore.Config{
 		DataDir: filepath.Join(t.TempDir(), "data"),
 		Logger:  slog.New(slog.DiscardHandler),
@@ -41,146 +64,52 @@ func TestMounts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := h.mounts([]*dicerdv1.Mount{
-		{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "v0", Target: "/data/"},
-		{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "v1", Target: "/logs", ReadOnly: true},
-		{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: hostFile, Target: "/etc/app/secret", ReadOnly: true},
-		{Type: dicerdv1.MountType_MOUNT_TYPE_TMPFS, Target: "/scratch"},
-	})
-	if err != nil {
-		t.Fatalf("mounts: %v", err)
-	}
-	want := []types.Mount{
+	if err := h.checkMounts([]types.Mount{
 		{Type: types.MountTypeVolume, Source: "v0", Target: "/data"},
-		{Type: types.MountTypeVolume, Source: "v1", Target: "/logs", ReadOnly: true},
 		{Type: types.MountTypeFile, Source: hostFile, Target: "/etc/app/secret", ReadOnly: true},
 		{Type: types.MountTypeTmpfs, Target: "/scratch"},
-	}
-	if !slices.Equal(got, want) {
-		t.Errorf("mounts = %+v, want %+v", got, want)
+	}); err != nil {
+		t.Errorf("checkMounts = %v, want nil", err)
 	}
 
-	tooMany := make([]*dicerdv1.Mount, vm.MaxVolumeMounts+1)
+	tooMany := make([]types.Mount, vm.MaxVolumeMounts+1)
 	for i := range tooMany {
-		tooMany[i] = &dicerdv1.Mount{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: fmt.Sprintf("v%d", i), Target: fmt.Sprintf("/v%d", i)}
+		tooMany[i] = types.Mount{Type: types.MountTypeVolume, Source: fmt.Sprintf("v%d", i), Target: fmt.Sprintf("/v%d", i)}
 	}
-
 	tests := []struct {
-		name string
-		in   []*dicerdv1.Mount
+		name   string
+		mounts []types.Mount
 	}{
-		{"unknown type", []*dicerdv1.Mount{{Type: dicerdv1.MountType(99), Source: dir, Target: "/data"}}},
-		{"unknown volume", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "nope", Target: "/data"}}},
-		{"relative target", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "v0", Target: "data"}}},
-		{"empty target", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "v0"}}},
-		{"root", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "v0", Target: "/."}}},
-		{"same volume twice", []*dicerdv1.Mount{
-			{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "v0", Target: "/a"}, {Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "v0", Target: "/b"},
-		}},
-		{"same target twice", []*dicerdv1.Mount{
-			{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "v0", Target: "/a"}, {Type: dicerdv1.MountType_MOUNT_TYPE_TMPFS, Target: "/a/"},
-		}},
-		{"relative host file", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: "secret", Target: "/s"}}},
-		{"missing host file", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: filepath.Join(dir, "nope"), Target: "/s"}}},
-		{"host directory", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: dir, Target: "/s"}}},
-		{"tmpfs with a source", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_TMPFS, Source: dir, Target: "/s"}}},
-		{"read-only tmpfs", []*dicerdv1.Mount{{Type: dicerdv1.MountType_MOUNT_TYPE_TMPFS, Target: "/s", ReadOnly: true}}},
+		{"unknown volume", []types.Mount{{Type: types.MountTypeVolume, Source: "nope", Target: "/data"}}},
+		{"missing host file", []types.Mount{{Type: types.MountTypeFile, Source: filepath.Join(dir, "nope"), Target: "/s"}}},
+		{"host directory", []types.Mount{{Type: types.MountTypeFile, Source: dir, Target: "/s"}}},
 		{"too many volumes", tooMany},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := h.mounts(tt.in)
-			wantClass(t, err, errdefs.ErrInvalidArgument)
+			wantClass(t, h.checkMounts(tt.mounts), errdefs.ErrInvalidArgument)
 		})
 	}
 }
 
-func TestValidateCreateChecksHostname(t *testing.T) {
-	req := &dicerdv1.CreateInstanceRequest{
-		Name: "web", ImageRef: "busybox", Vcpus: 1, MemoryBytes: 1 << 30, DiskBytes: 1 << 30,
-	}
-	for _, hostname := range []string{"", "web", "web.example.com"} {
-		req.Hostname = hostname
-		if err := validateCreate(req); err != nil {
-			t.Errorf("validateCreate(hostname %q) = %v", hostname, err)
-		}
-	}
-	for _, hostname := range []string{"web_1", "-web", "has space"} {
-		req.Hostname = hostname
-		wantClass(t, validateCreate(req), errdefs.ErrInvalidArgument)
-	}
-}
-
-func TestPortMappingsCanonicalHostIP(t *testing.T) {
-	got, err := portMappings([]*dicerdv1.PortMapping{
+func TestPortMappingsFromProtoCanonicalHostIP(t *testing.T) {
+	got, err := portMappingsFromProto([]*dicerdv1.PortMapping{
 		{HostIp: "0.0.0.0", HostPort: 8080, GuestPort: 80},
 		{HostIp: "::ffff:10.0.0.1", HostPort: 8081, GuestPort: 80},
 	})
 	if err != nil {
-		t.Fatalf("portMappings: %v", err)
+		t.Fatalf("portMappingsFromProto: %v", err)
 	}
 	if got[0].HostIP != "" || got[1].HostIP != "10.0.0.1" {
 		t.Errorf("host IPs %q and %q, want every address and 10.0.0.1", got[0].HostIP, got[1].HostIP)
 	}
-
-	// 0.0.0.0 is every address, so it overlaps one on a single address.
-	_, err = portMappings([]*dicerdv1.PortMapping{
-		{HostIp: "0.0.0.0", HostPort: 8080, GuestPort: 80},
-		{HostIp: "10.0.0.1", HostPort: 8080, GuestPort: 81},
-	})
-	wantClass(t, err, errdefs.ErrInvalidArgument)
-
-	_, err = portMappings([]*dicerdv1.PortMapping{{HostIp: "::", HostPort: 8080, GuestPort: 80}})
-	wantClass(t, err, errdefs.ErrInvalidArgument)
 }
 
-// An instance cannot both be deleted when it stops and started again when it
-// stops: one of the two would be quietly ignored.
-func TestRemoveOnExitConflictsWithARestartPolicy(t *testing.T) {
-	for _, mode := range []types.RestartMode{
-		types.RestartModeAlways, types.RestartModeUnlessStopped, types.RestartModeOnFailure,
-	} {
-		instance := types.InstanceSpec{
-			Name:         "web",
-			RemoveOnExit: true,
-			Restart:      types.RestartPolicy{Mode: mode},
-		}
-
-		err := checkRemoveOnExit(instance)
-		if !errors.Is(err, errdefs.ErrInvalidArgument) {
-			t.Errorf("--rm with %s = %v, want an invalid argument", mode, err)
-		}
-	}
-}
-
-// The policies that never restart are no contradiction at all.
-func TestRemoveOnExitAllowsAPolicyThatNeverRestarts(t *testing.T) {
-	for _, mode := range []types.RestartMode{"", types.RestartModeNo} {
-		instance := types.InstanceSpec{
-			Name:         "web",
-			RemoveOnExit: true,
-			Restart:      types.RestartPolicy{Mode: mode},
-		}
-
-		if err := checkRemoveOnExit(instance); err != nil {
-			t.Errorf("--rm with %q = %v, want it accepted", mode, err)
-		}
-	}
-}
-
-// A restart policy on its own is fine, whatever it is.
-func TestARestartPolicyWithoutRemoveOnExitIsFine(t *testing.T) {
-	instance := types.InstanceSpec{Name: "web", Restart: types.RestartPolicy{Mode: types.RestartModeAlways}}
-	if err := checkRemoveOnExit(instance); err != nil {
-		t.Errorf("a restart policy alone = %v, want it accepted", err)
-	}
-}
-
-func TestPortMappings(t *testing.T) {
+func TestPortMappingsFromProto(t *testing.T) {
 	t.Run("defaults the protocol to tcp", func(t *testing.T) {
-		got, err := portMappings([]*dicerdv1.PortMapping{{HostPort: 8080, GuestPort: 80}})
+		got, err := portMappingsFromProto([]*dicerdv1.PortMapping{{HostPort: 8080, GuestPort: 80}})
 		if err != nil {
-			t.Fatalf("portMappings: %v", err)
+			t.Fatalf("portMappingsFromProto: %v", err)
 		}
 		want := types.PortMapping{HostPort: 8080, GuestPort: 80, Protocol: types.ProtocolTCP}
 		if len(got) != 1 || got[0] != want {
@@ -188,24 +117,15 @@ func TestPortMappings(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects invalid mappings", func(t *testing.T) {
-		cases := map[string][]*dicerdv1.PortMapping{
-			"port out of range": {{HostPort: 65536 + 80, GuestPort: 80}},
-			"missing port":      {{HostPort: 8080}},
-			"loopback":          {{HostIp: "127.0.0.1", HostPort: 8080, GuestPort: 80}},
-			"overlapping":       {{HostPort: 8080, GuestPort: 80}, {HostPort: 8080, GuestPort: 81}},
-		}
-		for name, in := range cases {
-			if _, err := portMappings(in); !errors.Is(err, errdefs.ErrInvalidArgument) {
-				t.Errorf("%s: err = %v, want InvalidArgument", name, err)
-			}
-		}
+	t.Run("rejects a port out of range", func(t *testing.T) {
+		_, err := portMappingsFromProto([]*dicerdv1.PortMapping{{HostPort: 65536 + 80, GuestPort: 80}})
+		wantClass(t, err, errdefs.ErrInvalidArgument)
 	})
 
 	t.Run("empty input yields no mappings", func(t *testing.T) {
-		got, err := portMappings(nil)
+		got, err := portMappingsFromProto(nil)
 		if err != nil || got != nil {
-			t.Errorf("portMappings(nil) = %v, %v; want nil, nil", got, err)
+			t.Errorf("portMappingsFromProto(nil) = %v, %v; want nil, nil", got, err)
 		}
 	})
 }

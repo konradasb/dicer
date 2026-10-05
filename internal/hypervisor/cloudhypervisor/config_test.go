@@ -90,3 +90,36 @@ func deref(p *int64) any {
 	}
 	return *p
 }
+
+// TestDiskRateLimitIsPerSecondBuckets checks that a disk's rate limits
+// become token buckets refilled every second, with no bucket for a limit
+// left unset and no limiter for an unlimited disk.
+func TestDiskRateLimitIsPerSecondBuckets(t *testing.T) {
+	tests := []struct {
+		name string
+		disk hypervisor.DiskConfig
+		want *RateLimiterConfig
+	}{
+		{"unlimited", hypervisor.DiskConfig{}, nil},
+		{
+			"bytes",
+			hypervisor.DiskConfig{RateLimitBytesPerSecond: 1 << 20},
+			&RateLimiterConfig{Bandwidth: &TokenBucket{Size: 1 << 20, RefillTime: 1000}},
+		},
+		{
+			"bytes and operations",
+			hypervisor.DiskConfig{RateLimitBytesPerSecond: 1 << 20, RateLimitIOPS: 500},
+			&RateLimiterConfig{
+				Bandwidth: &TokenBucket{Size: 1 << 20, RefillTime: 1000},
+				Ops:       &TokenBucket{Size: 500, RefillTime: 1000},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := diskConfig(tt.disk).RateLimiterConfig; !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("rate_limiter_config = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}

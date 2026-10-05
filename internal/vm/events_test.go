@@ -210,4 +210,14 @@ func TestUpdateMessage(t *testing.T) {
 	if got := updateMessage(before, after, types.InstanceStateRunning); got != want {
 		t.Errorf("updateMessage =\n%q\nwant\n%q", got, want)
 	}
+
+	after = before
+	after.DiskBytesPerSecond = 50 << 20
+	after.DiskIOPS = 1000
+	before.DownloadBytesPerSecond = 1 << 20
+	want = "Updated instance: disk rate unlimited → 50 MiB/s, disk IOPS unlimited → 1000, " +
+		"download rate 1 MiB/s → unlimited; takes effect on next start"
+	if got := updateMessage(before, after, types.InstanceStateStopped); got != want {
+		t.Errorf("updateMessage =\n%q\nwant\n%q", got, want)
+	}
 }

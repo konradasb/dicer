@@ -859,26 +859,32 @@ type Instance struct {
 	MemoryBytes       int64  `protobuf:"varint,10,opt,name=memory_bytes,json=memoryBytes,proto3" json:"memory_bytes,omitempty"`
 	// The most ResizeInstance can give the running instance. Zero leaves it
 	// no room to grow. See CreateInstanceRequest.max_vcpus.
-	MaxVcpus       int32                  `protobuf:"varint,40,opt,name=max_vcpus,json=maxVcpus,proto3" json:"max_vcpus,omitempty"`
-	MaxMemoryBytes int64                  `protobuf:"varint,41,opt,name=max_memory_bytes,json=maxMemoryBytes,proto3" json:"max_memory_bytes,omitempty"`
-	DiskBytes      int64                  `protobuf:"varint,11,opt,name=disk_bytes,json=diskBytes,proto3" json:"disk_bytes,omitempty"`
-	NetworkName    string                 `protobuf:"bytes,12,opt,name=network_name,json=networkName,proto3" json:"network_name,omitempty"`
-	StaticIp       string                 `protobuf:"bytes,13,opt,name=static_ip,json=staticIp,proto3" json:"static_ip,omitempty"`
-	Mounts         []*Mount               `protobuf:"bytes,39,rep,name=mounts,proto3" json:"mounts,omitempty"`
-	Env            map[string]string      `protobuf:"bytes,16,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Cmd            []string               `protobuf:"bytes,17,rep,name=cmd,proto3" json:"cmd,omitempty"`
-	Labels         map[string]string      `protobuf:"bytes,18,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	RestartPolicy  *RestartPolicy         `protobuf:"bytes,30,opt,name=restart_policy,json=restartPolicy,proto3" json:"restart_policy,omitempty"`
-	CreateTime     *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	UpdateTime     *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
-	State          InstanceState          `protobuf:"varint,22,opt,name=state,proto3,enum=dicerd.v1.InstanceState" json:"state,omitempty"`
-	StateError     string                 `protobuf:"bytes,23,opt,name=state_error,json=stateError,proto3" json:"state_error,omitempty"`
-	HypervisorPid  int64                  `protobuf:"varint,24,opt,name=hypervisor_pid,json=hypervisorPid,proto3" json:"hypervisor_pid,omitempty"`
-	VsockCid       int64                  `protobuf:"varint,25,opt,name=vsock_cid,json=vsockCid,proto3" json:"vsock_cid,omitempty"`
-	Ip             string                 `protobuf:"bytes,26,opt,name=ip,proto3" json:"ip,omitempty"`
-	Mac            string                 `protobuf:"bytes,27,opt,name=mac,proto3" json:"mac,omitempty"`
-	StartTime      *timestamppb.Timestamp `protobuf:"bytes,28,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	Ports          []*PortMapping         `protobuf:"bytes,29,rep,name=ports,proto3" json:"ports,omitempty"`
+	MaxVcpus       int32 `protobuf:"varint,40,opt,name=max_vcpus,json=maxVcpus,proto3" json:"max_vcpus,omitempty"`
+	MaxMemoryBytes int64 `protobuf:"varint,41,opt,name=max_memory_bytes,json=maxMemoryBytes,proto3" json:"max_memory_bytes,omitempty"`
+	DiskBytes      int64 `protobuf:"varint,11,opt,name=disk_bytes,json=diskBytes,proto3" json:"disk_bytes,omitempty"`
+	// Rate limits, of which zero is unlimited. See
+	// CreateInstanceRequest.disk_bytes_per_second.
+	DiskBytesPerSecond     int64                  `protobuf:"varint,42,opt,name=disk_bytes_per_second,json=diskBytesPerSecond,proto3" json:"disk_bytes_per_second,omitempty"`
+	DiskIops               int64                  `protobuf:"varint,43,opt,name=disk_iops,json=diskIops,proto3" json:"disk_iops,omitempty"`
+	UploadBytesPerSecond   int64                  `protobuf:"varint,44,opt,name=upload_bytes_per_second,json=uploadBytesPerSecond,proto3" json:"upload_bytes_per_second,omitempty"`
+	DownloadBytesPerSecond int64                  `protobuf:"varint,45,opt,name=download_bytes_per_second,json=downloadBytesPerSecond,proto3" json:"download_bytes_per_second,omitempty"`
+	NetworkName            string                 `protobuf:"bytes,12,opt,name=network_name,json=networkName,proto3" json:"network_name,omitempty"`
+	StaticIp               string                 `protobuf:"bytes,13,opt,name=static_ip,json=staticIp,proto3" json:"static_ip,omitempty"`
+	Mounts                 []*Mount               `protobuf:"bytes,39,rep,name=mounts,proto3" json:"mounts,omitempty"`
+	Env                    map[string]string      `protobuf:"bytes,16,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Cmd                    []string               `protobuf:"bytes,17,rep,name=cmd,proto3" json:"cmd,omitempty"`
+	Labels                 map[string]string      `protobuf:"bytes,18,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	RestartPolicy          *RestartPolicy         `protobuf:"bytes,30,opt,name=restart_policy,json=restartPolicy,proto3" json:"restart_policy,omitempty"`
+	CreateTime             *timestamppb.Timestamp `protobuf:"bytes,20,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	UpdateTime             *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	State                  InstanceState          `protobuf:"varint,22,opt,name=state,proto3,enum=dicerd.v1.InstanceState" json:"state,omitempty"`
+	StateError             string                 `protobuf:"bytes,23,opt,name=state_error,json=stateError,proto3" json:"state_error,omitempty"`
+	HypervisorPid          int64                  `protobuf:"varint,24,opt,name=hypervisor_pid,json=hypervisorPid,proto3" json:"hypervisor_pid,omitempty"`
+	VsockCid               int64                  `protobuf:"varint,25,opt,name=vsock_cid,json=vsockCid,proto3" json:"vsock_cid,omitempty"`
+	Ip                     string                 `protobuf:"bytes,26,opt,name=ip,proto3" json:"ip,omitempty"`
+	Mac                    string                 `protobuf:"bytes,27,opt,name=mac,proto3" json:"mac,omitempty"`
+	StartTime              *timestamppb.Timestamp `protobuf:"bytes,28,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	Ports                  []*PortMapping         `protobuf:"bytes,29,rep,name=ports,proto3" json:"ports,omitempty"`
 	// The exit code the guest reported when it last ended on its own: its
 	// workload's, or 0 for a guest that powered itself off. Unset if it has
 	// not ended since it was last started, or ended without saying how.
@@ -1022,6 +1028,34 @@ func (x *Instance) GetMaxMemoryBytes() int64 {
 func (x *Instance) GetDiskBytes() int64 {
 	if x != nil {
 		return x.DiskBytes
+	}
+	return 0
+}
+
+func (x *Instance) GetDiskBytesPerSecond() int64 {
+	if x != nil {
+		return x.DiskBytesPerSecond
+	}
+	return 0
+}
+
+func (x *Instance) GetDiskIops() int64 {
+	if x != nil {
+		return x.DiskIops
+	}
+	return 0
+}
+
+func (x *Instance) GetUploadBytesPerSecond() int64 {
+	if x != nil {
+		return x.UploadBytesPerSecond
+	}
+	return 0
+}
+
+func (x *Instance) GetDownloadBytesPerSecond() int64 {
+	if x != nil {
+		return x.DownloadBytesPerSecond
 	}
 	return 0
 }
@@ -1802,6 +1836,14 @@ type CreateInstanceRequest struct {
 	MaxVcpus       int32 `protobuf:"varint,27,opt,name=max_vcpus,json=maxVcpus,proto3" json:"max_vcpus,omitempty"`
 	MaxMemoryBytes int64 `protobuf:"varint,28,opt,name=max_memory_bytes,json=maxMemoryBytes,proto3" json:"max_memory_bytes,omitempty"`
 	DiskBytes      int64 `protobuf:"varint,9,opt,name=disk_bytes,json=diskBytes,proto3" json:"disk_bytes,omitempty"`
+	// The bytes and operations per second each of the instance's disks is
+	// read and written at, its image, overlay and volumes each limited on its
+	// own. A snapshot restores the disk limits it was taken with.
+	DiskBytesPerSecond int64 `protobuf:"varint,29,opt,name=disk_bytes_per_second,json=diskBytesPerSecond,proto3" json:"disk_bytes_per_second,omitempty"`
+	DiskIops           int64 `protobuf:"varint,30,opt,name=disk_iops,json=diskIops,proto3" json:"disk_iops,omitempty"`
+	// The bytes per second the guest sends and receives on its network.
+	UploadBytesPerSecond   int64 `protobuf:"varint,31,opt,name=upload_bytes_per_second,json=uploadBytesPerSecond,proto3" json:"upload_bytes_per_second,omitempty"`
+	DownloadBytesPerSecond int64 `protobuf:"varint,32,opt,name=download_bytes_per_second,json=downloadBytesPerSecond,proto3" json:"download_bytes_per_second,omitempty"`
 	// Empty means the daemon's default network: see
 	// GetHostInfoResponse.default_network.
 	NetworkName   string            `protobuf:"bytes,10,opt,name=network_name,json=networkName,proto3" json:"network_name,omitempty"`
@@ -1936,6 +1978,34 @@ func (x *CreateInstanceRequest) GetDiskBytes() int64 {
 	return 0
 }
 
+func (x *CreateInstanceRequest) GetDiskBytesPerSecond() int64 {
+	if x != nil {
+		return x.DiskBytesPerSecond
+	}
+	return 0
+}
+
+func (x *CreateInstanceRequest) GetDiskIops() int64 {
+	if x != nil {
+		return x.DiskIops
+	}
+	return 0
+}
+
+func (x *CreateInstanceRequest) GetUploadBytesPerSecond() int64 {
+	if x != nil {
+		return x.UploadBytesPerSecond
+	}
+	return 0
+}
+
+func (x *CreateInstanceRequest) GetDownloadBytesPerSecond() int64 {
+	if x != nil {
+		return x.DownloadBytesPerSecond
+	}
+	return 0
+}
+
 func (x *CreateInstanceRequest) GetNetworkName() string {
 	if x != nil {
 		return x.NetworkName
@@ -2049,23 +2119,28 @@ type UpdateInstanceRequest struct {
 	Vcpus             *int32                 `protobuf:"varint,7,opt,name=vcpus,proto3,oneof" json:"vcpus,omitempty"`
 	MemoryBytes       *int64                 `protobuf:"varint,8,opt,name=memory_bytes,json=memoryBytes,proto3,oneof" json:"memory_bytes,omitempty"`
 	// Zero removes the maximum.
-	MaxVcpus       *int32            `protobuf:"varint,25,opt,name=max_vcpus,json=maxVcpus,proto3,oneof" json:"max_vcpus,omitempty"`
-	MaxMemoryBytes *int64            `protobuf:"varint,26,opt,name=max_memory_bytes,json=maxMemoryBytes,proto3,oneof" json:"max_memory_bytes,omitempty"`
-	DiskBytes      *int64            `protobuf:"varint,9,opt,name=disk_bytes,json=diskBytes,proto3,oneof" json:"disk_bytes,omitempty"`
-	NetworkName    *string           `protobuf:"bytes,10,opt,name=network_name,json=networkName,proto3,oneof" json:"network_name,omitempty"`
-	StaticIp       *string           `protobuf:"bytes,11,opt,name=static_ip,json=staticIp,proto3,oneof" json:"static_ip,omitempty"`
-	Hostname       *string           `protobuf:"bytes,12,opt,name=hostname,proto3,oneof" json:"hostname,omitempty"`
-	RestartPolicy  *RestartPolicy    `protobuf:"bytes,20,opt,name=restart_policy,json=restartPolicy,proto3" json:"restart_policy,omitempty"`
-	HealthCheck    *HealthCheck      `protobuf:"bytes,21,opt,name=health_check,json=healthCheck,proto3" json:"health_check,omitempty"`
-	InitMode       InitMode          `protobuf:"varint,22,opt,name=init_mode,json=initMode,proto3,enum=dicerd.v1.InitMode" json:"init_mode,omitempty"`
-	RemoveOnExit   *bool             `protobuf:"varint,23,opt,name=remove_on_exit,json=removeOnExit,proto3,oneof" json:"remove_on_exit,omitempty"`
-	Mounts         []*Mount          `protobuf:"bytes,24,rep,name=mounts,proto3" json:"mounts,omitempty"`
-	Env            map[string]string `protobuf:"bytes,16,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Cmd            []string          `protobuf:"bytes,17,rep,name=cmd,proto3" json:"cmd,omitempty"`
-	Labels         map[string]string `protobuf:"bytes,18,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Ports          []*PortMapping    `protobuf:"bytes,19,rep,name=ports,proto3" json:"ports,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	MaxVcpus       *int32 `protobuf:"varint,25,opt,name=max_vcpus,json=maxVcpus,proto3,oneof" json:"max_vcpus,omitempty"`
+	MaxMemoryBytes *int64 `protobuf:"varint,26,opt,name=max_memory_bytes,json=maxMemoryBytes,proto3,oneof" json:"max_memory_bytes,omitempty"`
+	DiskBytes      *int64 `protobuf:"varint,9,opt,name=disk_bytes,json=diskBytes,proto3,oneof" json:"disk_bytes,omitempty"`
+	// Zero removes the limit.
+	DiskBytesPerSecond     *int64            `protobuf:"varint,27,opt,name=disk_bytes_per_second,json=diskBytesPerSecond,proto3,oneof" json:"disk_bytes_per_second,omitempty"`
+	DiskIops               *int64            `protobuf:"varint,28,opt,name=disk_iops,json=diskIops,proto3,oneof" json:"disk_iops,omitempty"`
+	UploadBytesPerSecond   *int64            `protobuf:"varint,29,opt,name=upload_bytes_per_second,json=uploadBytesPerSecond,proto3,oneof" json:"upload_bytes_per_second,omitempty"`
+	DownloadBytesPerSecond *int64            `protobuf:"varint,30,opt,name=download_bytes_per_second,json=downloadBytesPerSecond,proto3,oneof" json:"download_bytes_per_second,omitempty"`
+	NetworkName            *string           `protobuf:"bytes,10,opt,name=network_name,json=networkName,proto3,oneof" json:"network_name,omitempty"`
+	StaticIp               *string           `protobuf:"bytes,11,opt,name=static_ip,json=staticIp,proto3,oneof" json:"static_ip,omitempty"`
+	Hostname               *string           `protobuf:"bytes,12,opt,name=hostname,proto3,oneof" json:"hostname,omitempty"`
+	RestartPolicy          *RestartPolicy    `protobuf:"bytes,20,opt,name=restart_policy,json=restartPolicy,proto3" json:"restart_policy,omitempty"`
+	HealthCheck            *HealthCheck      `protobuf:"bytes,21,opt,name=health_check,json=healthCheck,proto3" json:"health_check,omitempty"`
+	InitMode               InitMode          `protobuf:"varint,22,opt,name=init_mode,json=initMode,proto3,enum=dicerd.v1.InitMode" json:"init_mode,omitempty"`
+	RemoveOnExit           *bool             `protobuf:"varint,23,opt,name=remove_on_exit,json=removeOnExit,proto3,oneof" json:"remove_on_exit,omitempty"`
+	Mounts                 []*Mount          `protobuf:"bytes,24,rep,name=mounts,proto3" json:"mounts,omitempty"`
+	Env                    map[string]string `protobuf:"bytes,16,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Cmd                    []string          `protobuf:"bytes,17,rep,name=cmd,proto3" json:"cmd,omitempty"`
+	Labels                 map[string]string `protobuf:"bytes,18,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Ports                  []*PortMapping    `protobuf:"bytes,19,rep,name=ports,proto3" json:"ports,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *UpdateInstanceRequest) Reset() {
@@ -2171,6 +2246,34 @@ func (x *UpdateInstanceRequest) GetMaxMemoryBytes() int64 {
 func (x *UpdateInstanceRequest) GetDiskBytes() int64 {
 	if x != nil && x.DiskBytes != nil {
 		return *x.DiskBytes
+	}
+	return 0
+}
+
+func (x *UpdateInstanceRequest) GetDiskBytesPerSecond() int64 {
+	if x != nil && x.DiskBytesPerSecond != nil {
+		return *x.DiskBytesPerSecond
+	}
+	return 0
+}
+
+func (x *UpdateInstanceRequest) GetDiskIops() int64 {
+	if x != nil && x.DiskIops != nil {
+		return *x.DiskIops
+	}
+	return 0
+}
+
+func (x *UpdateInstanceRequest) GetUploadBytesPerSecond() int64 {
+	if x != nil && x.UploadBytesPerSecond != nil {
+		return *x.UploadBytesPerSecond
+	}
+	return 0
+}
+
+func (x *UpdateInstanceRequest) GetDownloadBytesPerSecond() int64 {
+	if x != nil && x.DownloadBytesPerSecond != nil {
+		return *x.DownloadBytesPerSecond
 	}
 	return 0
 }
@@ -6798,7 +6901,7 @@ var File_dicerd_v1_dicerd_proto protoreflect.FileDescriptor
 
 const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\n" +
-	"\x16dicerd/v1/dicerd.proto\x12\tdicerd.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb3\r\n" +
+	"\x16dicerd/v1/dicerd.proto\x12\tdicerd.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf5\x0e\n" +
 	"\bInstance\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
@@ -6816,7 +6919,11 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\tmax_vcpus\x18( \x01(\x05R\bmaxVcpus\x12(\n" +
 	"\x10max_memory_bytes\x18) \x01(\x03R\x0emaxMemoryBytes\x12\x1d\n" +
 	"\n" +
-	"disk_bytes\x18\v \x01(\x03R\tdiskBytes\x12!\n" +
+	"disk_bytes\x18\v \x01(\x03R\tdiskBytes\x121\n" +
+	"\x15disk_bytes_per_second\x18* \x01(\x03R\x12diskBytesPerSecond\x12\x1b\n" +
+	"\tdisk_iops\x18+ \x01(\x03R\bdiskIops\x125\n" +
+	"\x17upload_bytes_per_second\x18, \x01(\x03R\x14uploadBytesPerSecond\x129\n" +
+	"\x19download_bytes_per_second\x18- \x01(\x03R\x16downloadBytesPerSecond\x12!\n" +
 	"\fnetwork_name\x18\f \x01(\tR\vnetworkName\x12\x1b\n" +
 	"\tstatic_ip\x18\r \x01(\tR\bstaticIp\x12(\n" +
 	"\x06mounts\x18' \x03(\v2\x10.dicerd.v1.MountR\x06mounts\x12.\n" +
@@ -6893,7 +7000,8 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\thost_port\x18\x02 \x01(\rR\bhostPort\x12\x1d\n" +
 	"\n" +
 	"guest_port\x18\x03 \x01(\rR\tguestPort\x12/\n" +
-	"\bprotocol\x18\x04 \x01(\x0e2\x13.dicerd.v1.ProtocolR\bprotocol\"\xa7\t\n" +
+	"\bprotocol\x18\x04 \x01(\x0e2\x13.dicerd.v1.ProtocolR\bprotocol\"\xe9\n" +
+	"\n" +
 	"\x15CreateInstanceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\timage_ref\x18\x02 \x01(\tR\bimageRef\x12B\n" +
@@ -6908,7 +7016,11 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\tmax_vcpus\x18\x1b \x01(\x05R\bmaxVcpus\x12(\n" +
 	"\x10max_memory_bytes\x18\x1c \x01(\x03R\x0emaxMemoryBytes\x12\x1d\n" +
 	"\n" +
-	"disk_bytes\x18\t \x01(\x03R\tdiskBytes\x12!\n" +
+	"disk_bytes\x18\t \x01(\x03R\tdiskBytes\x121\n" +
+	"\x15disk_bytes_per_second\x18\x1d \x01(\x03R\x12diskBytesPerSecond\x12\x1b\n" +
+	"\tdisk_iops\x18\x1e \x01(\x03R\bdiskIops\x125\n" +
+	"\x17upload_bytes_per_second\x18\x1f \x01(\x03R\x14uploadBytesPerSecond\x129\n" +
+	"\x19download_bytes_per_second\x18  \x01(\x03R\x16downloadBytesPerSecond\x12!\n" +
 	"\fnetwork_name\x18\n" +
 	" \x01(\tR\vnetworkName\x12\x1b\n" +
 	"\tstatic_ip\x18\v \x01(\tR\bstaticIp\x12(\n" +
@@ -6930,8 +7042,7 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x12\x10\x13R\avolumesR\x05filesR\tautostart\"\xeb\n" +
-	"\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x12\x10\x13R\avolumesR\x05filesR\tautostart\"\xa3\r\n" +
 	"\x15UpdateInstanceRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\timage_ref\x18\x02 \x01(\tH\x00R\bimageRef\x88\x01\x01\x12B\n" +
@@ -6946,16 +7057,20 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\tmax_vcpus\x18\x19 \x01(\x05H\x06R\bmaxVcpus\x88\x01\x01\x12-\n" +
 	"\x10max_memory_bytes\x18\x1a \x01(\x03H\aR\x0emaxMemoryBytes\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"disk_bytes\x18\t \x01(\x03H\bR\tdiskBytes\x88\x01\x01\x12&\n" +
+	"disk_bytes\x18\t \x01(\x03H\bR\tdiskBytes\x88\x01\x01\x126\n" +
+	"\x15disk_bytes_per_second\x18\x1b \x01(\x03H\tR\x12diskBytesPerSecond\x88\x01\x01\x12 \n" +
+	"\tdisk_iops\x18\x1c \x01(\x03H\n" +
+	"R\bdiskIops\x88\x01\x01\x12:\n" +
+	"\x17upload_bytes_per_second\x18\x1d \x01(\x03H\vR\x14uploadBytesPerSecond\x88\x01\x01\x12>\n" +
+	"\x19download_bytes_per_second\x18\x1e \x01(\x03H\fR\x16downloadBytesPerSecond\x88\x01\x01\x12&\n" +
 	"\fnetwork_name\x18\n" +
-	" \x01(\tH\tR\vnetworkName\x88\x01\x01\x12 \n" +
-	"\tstatic_ip\x18\v \x01(\tH\n" +
-	"R\bstaticIp\x88\x01\x01\x12\x1f\n" +
-	"\bhostname\x18\f \x01(\tH\vR\bhostname\x88\x01\x01\x12?\n" +
+	" \x01(\tH\rR\vnetworkName\x88\x01\x01\x12 \n" +
+	"\tstatic_ip\x18\v \x01(\tH\x0eR\bstaticIp\x88\x01\x01\x12\x1f\n" +
+	"\bhostname\x18\f \x01(\tH\x0fR\bhostname\x88\x01\x01\x12?\n" +
 	"\x0erestart_policy\x18\x14 \x01(\v2\x18.dicerd.v1.RestartPolicyR\rrestartPolicy\x129\n" +
 	"\fhealth_check\x18\x15 \x01(\v2\x16.dicerd.v1.HealthCheckR\vhealthCheck\x120\n" +
 	"\tinit_mode\x18\x16 \x01(\x0e2\x13.dicerd.v1.InitModeR\binitMode\x12)\n" +
-	"\x0eremove_on_exit\x18\x17 \x01(\bH\fR\fremoveOnExit\x88\x01\x01\x12(\n" +
+	"\x0eremove_on_exit\x18\x17 \x01(\bH\x10R\fremoveOnExit\x88\x01\x01\x12(\n" +
 	"\x06mounts\x18\x18 \x03(\v2\x10.dicerd.v1.MountR\x06mounts\x12;\n" +
 	"\x03env\x18\x10 \x03(\v2).dicerd.v1.UpdateInstanceRequest.EnvEntryR\x03env\x12\x10\n" +
 	"\x03cmd\x18\x11 \x03(\tR\x03cmd\x12D\n" +
@@ -6977,7 +7092,12 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\n" +
 	"_max_vcpusB\x13\n" +
 	"\x11_max_memory_bytesB\r\n" +
-	"\v_disk_bytesB\x0f\n" +
+	"\v_disk_bytesB\x18\n" +
+	"\x16_disk_bytes_per_secondB\f\n" +
+	"\n" +
+	"_disk_iopsB\x1a\n" +
+	"\x18_upload_bytes_per_secondB\x1c\n" +
+	"\x1a_download_bytes_per_secondB\x0f\n" +
 	"\r_network_nameB\f\n" +
 	"\n" +
 	"_static_ipB\v\n" +

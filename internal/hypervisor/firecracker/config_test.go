@@ -5,6 +5,7 @@ package firecracker
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/konradasb/dicer/internal/hypervisor"
@@ -107,22 +108,19 @@ func TestNewSetupMemoryRounding(t *testing.T) {
 func TestNewSetupDiskRateLimit(t *testing.T) {
 	spec := testSpec()
 	spec.Disks[1].RateLimitBytesPerSecond = 1 << 20
-	spec.Disks[1].RateLimitBurstBytesPerSecond = 3 << 20
+	spec.Disks[1].RateLimitIOPS = 500
 
 	s, err := newSetup(spec)
 	if err != nil {
 		t.Fatalf("newSetup: %v", err)
 	}
 
-	limiter := s.drives[1].RateLimiter
-	if limiter == nil || limiter.Bandwidth == nil {
-		t.Fatalf("rate limiter = %+v, want a bandwidth bucket", limiter)
+	want := &rateLimiter{
+		Bandwidth: &tokenBucket{Size: 1 << 20, RefillTime: 1000},
+		Ops:       &tokenBucket{Size: 500, RefillTime: 1000},
 	}
-	if limiter.Bandwidth.Size != 1<<20 || limiter.Bandwidth.RefillTime != 1000 {
-		t.Errorf("bucket = %+v, want 1 MiB refilled every second", limiter.Bandwidth)
-	}
-	if limiter.Bandwidth.OneTimeBurst != 2<<20 {
-		t.Errorf("one_time_burst = %d, want the 2 MiB above the rate", limiter.Bandwidth.OneTimeBurst)
+	if got := s.drives[1].RateLimiter; !reflect.DeepEqual(got, want) {
+		t.Errorf("rate limiter = %+v, want 1 MiB and 500 operations refilled every second", got)
 	}
 	if s.drives[0].RateLimiter != nil {
 		t.Error("an unlimited disk got a rate limiter")

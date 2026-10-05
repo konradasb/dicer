@@ -19,12 +19,6 @@ Roughly in the order they are expected to land. Several are already half-built
 underneath: the hypervisor layer supports them, and the API does not yet
 expose them.
 
-### Running workloads
-
-| Feature | Description |
-|---------|-------------|
-| Disk and network rate limits | Per-instance disk I/O and bandwidth limits. Both hypervisors support disk limits and the host network layer supports shaping; neither is exposed |
-
 ### Snapshots and cloning
 
 | Feature | Description |

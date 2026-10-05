@@ -242,22 +242,22 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name:    "hostname starts with hyphen",
 			cfg:     Config{Mode: types.InitModeExec, Entrypoint: []string{"/bin/sh"}, Hostname: "-bad"},
-			wantErr: "hostname \"-bad\" is invalid",
+			wantErr: "invalid hostname \"-bad\"",
 		},
 		{
 			name:    "hostname ends with hyphen",
 			cfg:     Config{Mode: types.InitModeExec, Entrypoint: []string{"/bin/sh"}, Hostname: "bad-"},
-			wantErr: "hostname \"bad-\" is invalid",
+			wantErr: "invalid hostname \"bad-\"",
 		},
 		{
 			name:    "hostname label starts with hyphen",
 			cfg:     Config{Mode: types.InitModeExec, Entrypoint: []string{"/bin/sh"}, Hostname: "good.-bad.com"},
-			wantErr: "hostname \"good.-bad.com\" is invalid",
+			wantErr: "invalid hostname \"good.-bad.com\"",
 		},
 		{
 			name:    "hostname contains invalid character",
 			cfg:     Config{Mode: types.InitModeExec, Entrypoint: []string{"/bin/sh"}, Hostname: "bad_host"},
-			wantErr: "hostname \"bad_host\" is invalid",
+			wantErr: "invalid hostname \"bad_host\"",
 		},
 		{
 			name:    "hostname too long",

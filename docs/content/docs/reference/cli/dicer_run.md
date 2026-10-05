@@ -36,6 +36,9 @@ $ dicer run -d --vcpus 2 alpine:3.21 sleep infinity
 |---|---|
 | `-d`, `--detach` | Run in the background: print nothing of the console and return once started. |
 | `--disk string` | Overlay disk size, e.g. 10GiB. Default: `10GiB`. |
+| `--disk-iops int` | Operations per second each disk can be read and written at (0: unlimited). |
+| `--disk-rate string` | Bytes per second each disk can be read and written at, e.g. 50MiB (0: unlimited). |
+| `--download-rate string` | Bytes per second the guest can receive, e.g. 10MiB (0: unlimited). |
 | `-e`, `--env stringArray` | Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable). |
 | `--env-file stringArray` | Read environment variables from a file of KEY=VALUE lines (repeatable). |
 | `--health-cmd string` | Command to check health with, run by /bin/sh in the guest. |
@@ -64,6 +67,7 @@ $ dicer run -d --vcpus 2 alpine:3.21 sleep infinity
 | `--pull string` | When to pull the image: missing, always or never. Default: `missing`. |
 | `--restart string` | Restart policy when the instance ends on its own: no, on-failure[:max-retries], unless-stopped or always (default no). |
 | `--rm` | Delete the instance once it stops, the daemon doing the deleting. |
+| `--upload-rate string` | Bytes per second the guest can send, e.g. 10MiB (0: unlimited). |
 | `--vcpus int32` | Number of virtual CPUs. Default: `1`. |
 
 ## Global flags

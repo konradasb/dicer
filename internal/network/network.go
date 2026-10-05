@@ -19,11 +19,11 @@ const (
 	DefaultMTU = 1500
 )
 
-// Bandwidth limits an instance's traffic, in bytes per second. Zero means
-// unlimited.
+// Bandwidth limits the bytes per second an instance's guest sends and
+// receives. Zero is unlimited.
 type Bandwidth struct {
-	UploadBps   int64
-	DownloadBps int64
+	UploadBytesPerSecond   int64
+	DownloadBytesPerSecond int64
 }
 
 // maxPrefixLen is the longest prefix a network may have: a /30 is the

@@ -364,7 +364,7 @@ func (b *builder) service(key string, raw *rawService) (*Service, error) {
 	}
 
 	steps := []func(*rawService, *dicerdv1.CreateInstanceRequest) error{
-		b.setSizes, b.setHypervisor, b.setInitMode, b.setEnvironment, b.setLabels, b.setPorts, b.setMounts,
+		b.setSizes, b.setRateLimits, b.setHypervisor, b.setInitMode, b.setEnvironment, b.setLabels, b.setPorts, b.setMounts,
 		b.setNetwork, b.setRestartPolicy, b.setHealthCheck,
 	}
 	for _, step := range steps {
@@ -429,6 +429,23 @@ func (b *builder) setSizes(raw *rawService, req *dicerdv1.CreateInstanceRequest)
 	}
 	if raw.Disk != nil {
 		req.DiskBytes = int64(*raw.Disk)
+	}
+	return nil
+}
+
+// setRateLimits sets the instance's disk and network rate limits.
+func (b *builder) setRateLimits(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
+	if raw.DiskRate != nil {
+		req.DiskBytesPerSecond = int64(*raw.DiskRate)
+	}
+	if raw.DiskIOPS != nil {
+		req.DiskIops = *raw.DiskIOPS
+	}
+	if raw.UploadRate != nil {
+		req.UploadBytesPerSecond = int64(*raw.UploadRate)
+	}
+	if raw.DownloadRate != nil {
+		req.DownloadBytesPerSecond = int64(*raw.DownloadRate)
 	}
 	return nil
 }

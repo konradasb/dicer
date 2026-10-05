@@ -57,37 +57,33 @@ func (m Mount) String() string {
 	return strings.Join(parts, ",")
 }
 
-// ValidateMounts checks what can be checked of mounts without the host: each
-// has a known type, the source it needs, and an absolute target no other
-// mount has. It returns the mounts with their targets cleaned, or an invalid
-// argument error.
-func ValidateMounts(mounts []Mount) ([]Mount, error) {
-	out := make([]Mount, 0, len(mounts))
+// validateMounts returns an invalid argument error unless each mount has a
+// known type, the source it needs, and an absolute target no other mount
+// has, and no volume is mounted twice.
+func validateMounts(mounts []Mount) error {
 	targets := make(map[string]struct{}, len(mounts))
 	volumes := make(map[string]struct{}, len(mounts))
 
 	for _, m := range mounts {
 		if err := m.validate(); err != nil {
-			return nil, err
+			return err
 		}
-		m.Target = path.Clean(m.Target)
 
-		if _, dup := targets[m.Target]; dup {
-			return nil, errdefs.InvalidArgument("two mounts have the target %q", m.Target)
+		target := path.Clean(m.Target)
+		if _, dup := targets[target]; dup {
+			return errdefs.InvalidArgument("two mounts have the target %q", target)
 		}
-		targets[m.Target] = struct{}{}
+		targets[target] = struct{}{}
 
 		if m.Type == MountTypeVolume {
 			if _, dup := volumes[m.Source]; dup {
-				return nil, errdefs.InvalidArgument("volume %q is mounted twice", m.Source)
+				return errdefs.InvalidArgument("volume %q is mounted twice", m.Source)
 			}
 			volumes[m.Source] = struct{}{}
 		}
-
-		out = append(out, m)
 	}
 
-	return out, nil
+	return nil
 }
 
 func (m Mount) validate() error {

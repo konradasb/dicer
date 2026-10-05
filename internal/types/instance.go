@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/humanize"
+	"github.com/konradasb/dicer/internal/naming"
 )
 
 // Instance is a virtual machine. Spec is the desired state, persisted across
@@ -41,6 +43,15 @@ type InstanceSpec struct {
 	// to while it runs: it boots with room for them. Zero leaves no room.
 	MaxVCPUs       int   `yaml:"max_vcpus,omitempty" json:"max_vcpus,omitempty"`
 	MaxMemoryBytes int64 `yaml:"max_memory_bytes,omitempty" json:"max_memory_bytes,omitempty"`
+
+	// DiskBytesPerSecond and DiskIOPS limit the bytes and operations per
+	// second each of the instance's disks is read and written at.
+	// UploadBytesPerSecond and DownloadBytesPerSecond limit the bytes per
+	// second its guest sends and receives. Zero is unlimited.
+	DiskBytesPerSecond     int64 `yaml:"disk_bytes_per_second,omitempty" json:"disk_bytes_per_second,omitempty"`
+	DiskIOPS               int64 `yaml:"disk_iops,omitempty" json:"disk_iops,omitempty"`
+	UploadBytesPerSecond   int64 `yaml:"upload_bytes_per_second,omitempty" json:"upload_bytes_per_second,omitempty"`
+	DownloadBytesPerSecond int64 `yaml:"download_bytes_per_second,omitempty" json:"download_bytes_per_second,omitempty"`
 
 	Ports  []PortMapping     `yaml:"ports,omitempty" json:"ports,omitempty"`
 	Mounts []Mount           `yaml:"mounts,omitempty" json:"mounts,omitempty"`
@@ -81,6 +92,52 @@ func (s InstanceSpec) Resources() Resources {
 // set, otherwise what it asks for.
 func (s InstanceSpec) MaxResources() Resources {
 	return Resources{VCPUs: max(s.VCPUs, s.MaxVCPUs), MemoryBytes: max(s.MemoryBytes, s.MaxMemoryBytes)}
+}
+
+// Validate returns an invalid argument error if the instance cannot be run
+// as defined, as far as the definition alone can tell: an invalid name or
+// hostname, no image, a size it cannot have, a maximum below what it asks
+// for or that its hypervisor cannot honour, a negative rate limit, a request
+// to be deleted when it stops that its restart policy contradicts, or
+// invalid or clashing ports or mounts.
+func (s InstanceSpec) Validate() error {
+	if err := naming.Validate(s.Name); err != nil {
+		return err
+	}
+	if err := naming.ValidateHostname(s.Hostname); err != nil {
+		return err
+	}
+
+	switch {
+	case s.ImageRef == "":
+		return errdefs.InvalidArgument("an instance needs an image")
+	case s.VCPUs <= 0:
+		return errdefs.InvalidArgument("an instance needs at least 1 vCPU")
+	case s.MemoryBytes <= 0:
+		return errdefs.InvalidArgument("an instance needs more than 0 bytes of memory")
+	case s.DiskBytes <= 0:
+		return errdefs.InvalidArgument("an instance needs a disk of more than 0 bytes")
+	case s.MaxVCPUs < 0 || s.MaxVCPUs > 0 && s.MaxVCPUs < s.VCPUs:
+		return errdefs.InvalidArgument("max_vcpus %d is below the instance's %s",
+			s.MaxVCPUs, humanize.Count(s.VCPUs, "vCPU"))
+	case s.MaxMemoryBytes < 0 || s.MaxMemoryBytes > 0 && s.MaxMemoryBytes < s.MemoryBytes:
+		return errdefs.InvalidArgument("max_memory_bytes %s is below the instance's %s memory",
+			humanize.Bytes(s.MaxMemoryBytes), humanize.Bytes(s.MemoryBytes))
+	case s.MaxVCPUs > 0 && s.EffectiveHypervisorType() == HypervisorTypeFirecracker:
+		return errdefs.InvalidArgument("firecracker cannot add vCPUs to a running guest: leave max_vcpus unset, " +
+			"or use cloud-hypervisor")
+	case s.DiskBytesPerSecond < 0 || s.DiskIOPS < 0 || s.UploadBytesPerSecond < 0 || s.DownloadBytesPerSecond < 0:
+		return errdefs.InvalidArgument("a rate limit cannot be negative: give 0 for no limit")
+	case s.RemoveOnExit && s.Restart.Restarts():
+		return errdefs.InvalidArgument(
+			"an instance cannot be deleted when it stops and restarted when it stops: "+
+				"the restart policy is %s, so drop it or drop the request to delete it", s.Restart)
+	}
+
+	if err := validatePorts(s.Ports); err != nil {
+		return err
+	}
+	return validateMounts(s.Mounts)
 }
 
 // VolumeMount returns the mount by which the instance attaches the named

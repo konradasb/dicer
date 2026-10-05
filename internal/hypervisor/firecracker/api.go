@@ -40,6 +40,7 @@ type drive struct {
 
 type rateLimiter struct {
 	Bandwidth *tokenBucket `json:"bandwidth,omitempty"`
+	Ops       *tokenBucket `json:"ops,omitempty"`
 }
 
 // tokenBucket holds Size tokens, refilled over RefillTime milliseconds,

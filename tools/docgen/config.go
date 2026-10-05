@@ -563,6 +563,7 @@ var specials = map[string]string{
 	"time.Duration":                     "duration, such as 30s or 5m",
 	daemonPackage + ".byteSize":         "size, such as 512MiB or 50GiB",
 	composePackage + ".byteSize":        "size, such as 512MiB or 2GiB",
+	composePackage + ".byteRate":        "size per second, such as 50MiB or 50MiB/s",
 	composePackage + ".stringList":      "string, or list of strings",
 	composePackage + ".shellCommand":    "string, or list of strings",
 	composePackage + ".healthCheckTest": "string, or list of strings",

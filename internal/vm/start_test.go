@@ -12,6 +12,7 @@ import (
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/guest"
 	"github.com/konradasb/dicer/internal/hypervisor"
+	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/types"
 )
 
@@ -150,6 +151,30 @@ func TestStartUsesTheImageHeld(t *testing.T) {
 
 	if images.pulls != 0 {
 		t.Errorf("pulls = %d, want none for an image the host holds", images.pulls)
+	}
+}
+
+// TestStartAppliesRateLimits checks that an instance's disk limits reach
+// every one of its disks and its bandwidth limits its TAP device.
+func TestStartAppliesRateLimits(t *testing.T) {
+	h := newHarness(t)
+	h.instance.DiskBytesPerSecond = 50 << 20
+	h.instance.DiskIOPS = 1000
+	h.instance.UploadBytesPerSecond = 1 << 20
+	h.instance.DownloadBytesPerSecond = 2 << 20
+	h.definitions.instances[h.instance.Name] = h.instance
+
+	h.start(t)
+
+	for _, disk := range h.starter.spec.Disks {
+		if disk.RateLimitBytesPerSecond != 50<<20 || disk.RateLimitIOPS != 1000 {
+			t.Errorf("disk %s limited to %d bytes and %d operations a second, want 50 MiB and 1000",
+				disk.Path, disk.RateLimitBytesPerSecond, disk.RateLimitIOPS)
+		}
+	}
+	want := network.Bandwidth{UploadBytesPerSecond: 1 << 20, DownloadBytesPerSecond: 2 << 20}
+	if h.hostNetwork.bandwidth != want {
+		t.Errorf("TAP device limited to %+v, want %+v", h.hostNetwork.bandwidth, want)
 	}
 }
 

@@ -178,6 +178,24 @@ volumes:
 	}
 }
 
+func TestLoadRateLimits(t *testing.T) {
+	p := mustLoad(t, `
+services:
+  db:
+    image: postgres:17
+    disk_rate: 50MiB/s
+    disk_iops: 1000
+    upload_rate: 1MiB
+    download_rate: 2097152
+`, nil)
+
+	got := p.Services["db"].Instance
+	if got.GetDiskBytesPerSecond() != 50<<20 || got.GetDiskIops() != 1000 ||
+		got.GetUploadBytesPerSecond() != 1<<20 || got.GetDownloadBytesPerSecond() != 2<<20 {
+		t.Errorf("instance = %v, want the limits the service gives", got)
+	}
+}
+
 func TestLoadDefaults(t *testing.T) {
 	p := mustLoad(t, `
 services:

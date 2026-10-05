@@ -306,6 +306,9 @@ type fakeHostNetwork struct {
 	removedTAPs     []string
 	tornDownBridges []string
 
+	// bandwidth is what the last TAP device was limited to.
+	bandwidth network.Bandwidth
+
 	// published holds the ports each instance has published, by instance
 	// ID, and at which address; unpublished lists every UnpublishPorts.
 	published   map[string]publishedPorts
@@ -328,8 +331,9 @@ func (f *fakeHostNetwork) SetupBridge(_ context.Context, nw *types.Network) erro
 }
 
 func (f *fakeHostNetwork) CreateTAP(
-	_ context.Context, _ *types.Network, _ *types.NetworkAllocation, _ network.Bandwidth,
+	_ context.Context, _ *types.Network, _ *types.NetworkAllocation, bandwidth network.Bandwidth,
 ) error {
+	f.bandwidth = bandwidth
 	return nil
 }
 

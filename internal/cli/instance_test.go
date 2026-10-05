@@ -29,6 +29,18 @@ func runBuild(t *testing.T, argv ...string) (*dicerdv1.CreateInstanceRequest, er
 	return buildCreateRequest(cmd, cmd.Flags().Args())
 }
 
+func TestBuildCreateRequestRateLimits(t *testing.T) {
+	got, err := runBuild(t, "web", "--disk-rate", "50MiB", "--disk-iops", "1000",
+		"--upload-rate", "1MiB/s", "--download-rate", "2MiB")
+	if err != nil {
+		t.Fatalf("buildCreateRequest: %v", err)
+	}
+	if got.GetDiskBytesPerSecond() != 50<<20 || got.GetDiskIops() != 1000 ||
+		got.GetUploadBytesPerSecond() != 1<<20 || got.GetDownloadBytesPerSecond() != 2<<20 {
+		t.Errorf("request = %v, want the limits given", got)
+	}
+}
+
 func TestBuildCreateRequestFromFlagsOnly(t *testing.T) {
 	got, err := runBuild(t,
 		"web", "--image", "alpine:3.21", "--kernel", "k1",

@@ -36,3 +36,19 @@ func TestValidateAcceptsOnlySubdomainNames(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateHostnameAllowsNoneOrAnRFC1123Name checks that an empty
+// hostname, which leaves the guest its default, is accepted, as is any name
+// the rule allows, and nothing else.
+func TestValidateHostnameAllowsNoneOrAnRFC1123Name(t *testing.T) {
+	for _, hostname := range []string{"", "web", "web.example.com"} {
+		if err := ValidateHostname(hostname); err != nil {
+			t.Errorf("ValidateHostname(%q) = %v, want nil", hostname, err)
+		}
+	}
+	for _, hostname := range []string{"web_1", "-web", "has space", strings.Repeat("a", 254)} {
+		if err := ValidateHostname(hostname); !errors.Is(err, errdefs.ErrInvalidArgument) {
+			t.Errorf("ValidateHostname(%q) = %v, want errdefs.ErrInvalidArgument", hostname, err)
+		}
+	}
+}

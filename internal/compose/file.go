@@ -152,6 +152,22 @@ type rawService struct {
 	// 10GiB.
 	Disk *byteSize `yaml:"disk"`
 
+	// DiskRate is the bytes per second each of the instance's disks can be
+	// read and written at, as `dicer run --disk-rate`. Unset is unlimited.
+	DiskRate *byteRate `yaml:"disk_rate"`
+
+	// DiskIOPS is the operations per second each of the instance's disks can
+	// be read and written at, as `dicer run --disk-iops`. Unset is unlimited.
+	DiskIOPS *int64 `yaml:"disk_iops"`
+
+	// UploadRate is the bytes per second the instance can send, as
+	// `dicer run --upload-rate`. Unset is unlimited.
+	UploadRate *byteRate `yaml:"upload_rate"`
+
+	// DownloadRate is the bytes per second the instance can receive, as
+	// `dicer run --download-rate`. Unset is unlimited.
+	DownloadRate *byteRate `yaml:"download_rate"`
+
 	// Kernel is the kernel to boot, as `dicer run --kernel`. Unset is the
 	// daemon's default.
 	Kernel string `yaml:"kernel"`
@@ -435,6 +451,21 @@ func (b *byteSize) UnmarshalYAML(n *yaml.Node) error {
 		return fmt.Errorf("line %d: invalid size %q: want one such as 512MiB or 2GiB", n.Line, n.Value)
 	}
 	*b = byteSize(v)
+	return nil
+}
+
+// byteRate is bytes per second: a size, as byteSize takes it, with or
+// without a trailing /s.
+type byteRate int64
+
+func (r *byteRate) UnmarshalYAML(n *yaml.Node) error {
+	trimmed := *n
+	trimmed.Value = strings.TrimSuffix(n.Value, "/s")
+	var size byteSize
+	if err := size.UnmarshalYAML(&trimmed); err != nil {
+		return err
+	}
+	*r = byteRate(size)
 	return nil
 }
 

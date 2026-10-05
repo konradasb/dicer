@@ -14,7 +14,6 @@ import (
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/filestore"
-	"github.com/konradasb/dicer/internal/guest"
 	"github.com/konradasb/dicer/internal/image/reference"
 	"github.com/konradasb/dicer/internal/types"
 	"github.com/konradasb/dicer/internal/vm"
@@ -62,10 +61,6 @@ func (h *instanceHandler) CreateInstance(
 // newInstance validates a create request and returns the instance it
 // defines. A kernel or network left out is the daemon's default.
 func (h *instanceHandler) newInstance(req *dicerdv1.CreateInstanceRequest) (types.InstanceSpec, error) {
-	if err := validateCreate(req); err != nil {
-		return types.InstanceSpec{}, err
-	}
-
 	var err error
 	if req.KernelName, err = h.defaults.resolveKernel(req.GetKernelName()); err != nil {
 		return types.InstanceSpec{}, err
@@ -74,19 +69,11 @@ func (h *instanceHandler) newInstance(req *dicerdv1.CreateInstanceRequest) (type
 		return types.InstanceSpec{}, err
 	}
 
-	if _, err := h.definitions.Instance(req.GetName()); err == nil {
-		return types.InstanceSpec{}, errdefs.Exists("instance %q already exists", req.GetName())
-	}
-
-	imageRef, err := reference.Parse(req.GetImageRef())
+	ports, err := portMappingsFromProto(req.GetPorts())
 	if err != nil {
-		return types.InstanceSpec{}, errdefs.InvalidArgument("invalid image %q: %v", req.GetImageRef(), err)
-	}
-	if err := h.checkCanStart(req); err != nil {
 		return types.InstanceSpec{}, err
 	}
-
-	ports, err := portMappings(req.GetPorts())
+	mounts, err := mountsFromProto(req.GetMounts())
 	if err != nil {
 		return types.InstanceSpec{}, err
 	}
@@ -106,45 +93,54 @@ func (h *instanceHandler) newInstance(req *dicerdv1.CreateInstanceRequest) (type
 	if err != nil {
 		return types.InstanceSpec{}, err
 	}
-	mounts, err := h.mounts(req.GetMounts())
-	if err != nil {
-		return types.InstanceSpec{}, err
-	}
 
 	now := time.Now()
 	instance := types.InstanceSpec{
-		ID:                cuid2.Generate(),
-		Name:              req.GetName(),
-		Hostname:          req.GetHostname(),
-		ImageRef:          imageRef.String(),
-		HypervisorType:    hypervisorType,
-		HypervisorVersion: req.GetHypervisorVersion(),
-		KernelName:        req.GetKernelName(),
-		KernelArgs:        req.GetKernelArgs(),
-		VCPUs:             int(req.GetVcpus()),
-		MemoryBytes:       req.GetMemoryBytes(),
-		MaxVCPUs:          int(req.GetMaxVcpus()),
-		MaxMemoryBytes:    req.GetMaxMemoryBytes(),
-		DiskBytes:         req.GetDiskBytes(),
-		NetworkName:       req.GetNetworkName(),
-		StaticIP:          req.GetStaticIp(),
-		Ports:             ports,
-		Mounts:            mounts,
-		Env:               req.GetEnv(),
-		Cmd:               req.GetCmd(),
-		Labels:            req.GetLabels(),
-		Restart:           restart,
-		HealthCheck:       healthCheck,
-		InitMode:          cmp.Or(initMode, types.InitModeAuto),
-		RemoveOnExit:      req.GetRemoveOnExit(),
-		CreatedAt:         now,
-		UpdatedAt:         now,
+		ID:                     cuid2.Generate(),
+		Name:                   req.GetName(),
+		Hostname:               req.GetHostname(),
+		ImageRef:               req.GetImageRef(),
+		HypervisorType:         hypervisorType,
+		HypervisorVersion:      req.GetHypervisorVersion(),
+		KernelName:             req.GetKernelName(),
+		KernelArgs:             req.GetKernelArgs(),
+		VCPUs:                  int(req.GetVcpus()),
+		MemoryBytes:            req.GetMemoryBytes(),
+		MaxVCPUs:               int(req.GetMaxVcpus()),
+		MaxMemoryBytes:         req.GetMaxMemoryBytes(),
+		DiskBytes:              req.GetDiskBytes(),
+		DiskBytesPerSecond:     req.GetDiskBytesPerSecond(),
+		DiskIOPS:               req.GetDiskIops(),
+		UploadBytesPerSecond:   req.GetUploadBytesPerSecond(),
+		DownloadBytesPerSecond: req.GetDownloadBytesPerSecond(),
+		NetworkName:            req.GetNetworkName(),
+		StaticIP:               req.GetStaticIp(),
+		Ports:                  ports,
+		Mounts:                 mounts,
+		Env:                    req.GetEnv(),
+		Cmd:                    req.GetCmd(),
+		Labels:                 req.GetLabels(),
+		Restart:                restart,
+		HealthCheck:            healthCheck,
+		InitMode:               cmp.Or(initMode, types.InitModeAuto),
+		RemoveOnExit:           req.GetRemoveOnExit(),
+		CreatedAt:              now,
+		UpdatedAt:              now,
 	}
 
-	if err := checkRemoveOnExit(instance); err != nil {
+	if err := instance.Validate(); err != nil {
 		return types.InstanceSpec{}, err
 	}
-	if err := validateMaximums(instance); err != nil {
+	imageRef, err := reference.Parse(instance.ImageRef)
+	if err != nil {
+		return types.InstanceSpec{}, errdefs.InvalidArgument("invalid image %q: %v", instance.ImageRef, err)
+	}
+	instance.ImageRef = imageRef.String()
+
+	if _, err := h.definitions.Instance(instance.Name); err == nil {
+		return types.InstanceSpec{}, errdefs.Exists("instance %q already exists", instance.Name)
+	}
+	if err := h.checkCanStart(instance); err != nil {
 		return types.InstanceSpec{}, err
 	}
 
@@ -164,7 +160,7 @@ func (h *instanceHandler) UpdateInstance(
 		return nil, err
 	}
 	applySettings(&instance, req)
-	if err := h.applyLists(&instance, req); err != nil {
+	if err := applyLists(&instance, req); err != nil {
 		return nil, err
 	}
 	if p := req.GetRestartPolicy(); p != nil {
@@ -188,22 +184,10 @@ func (h *instanceHandler) UpdateInstance(
 		}
 	}
 
-	if err := validateResources(int32(instance.VCPUs), instance.MemoryBytes, instance.DiskBytes); err != nil {
+	if err := instance.Validate(); err != nil {
 		return nil, err
 	}
-	if err := validateMaximums(instance); err != nil {
-		return nil, err
-	}
-	if err := guest.ValidateHostname(instance.Hostname); err != nil {
-		return nil, errdefs.InvalidArgument("%v", err)
-	}
-	if err := checkRemoveOnExit(instance); err != nil {
-		return nil, err
-	}
-	if err := h.checkStaticIP(instance.NetworkName, instance.StaticIP); err != nil {
-		return nil, err
-	}
-	if err := h.instances.CheckResources(instance.MaxResources()); err != nil {
+	if err := h.checkCanStart(instance); err != nil {
 		return nil, err
 	}
 
@@ -253,6 +237,10 @@ func applySettings(instance *types.InstanceSpec, req *dicerdv1.UpdateInstanceReq
 	}
 	setIf(&instance.MaxMemoryBytes, req.MaxMemoryBytes)
 	setIf(&instance.DiskBytes, req.DiskBytes)
+	setIf(&instance.DiskBytesPerSecond, req.DiskBytesPerSecond)
+	setIf(&instance.DiskIOPS, req.DiskIops)
+	setIf(&instance.UploadBytesPerSecond, req.UploadBytesPerSecond)
+	setIf(&instance.DownloadBytesPerSecond, req.DownloadBytesPerSecond)
 	setIf(&instance.StaticIP, req.StaticIp)
 	setIf(&instance.Hostname, req.Hostname)
 	setIf(&instance.RemoveOnExit, req.RemoveOnExit)
@@ -266,16 +254,16 @@ func setIf[T any](dst, v *T) {
 }
 
 // applyLists replaces each list or map an update gives a non-empty value.
-func (h *instanceHandler) applyLists(instance *types.InstanceSpec, req *dicerdv1.UpdateInstanceRequest) error {
+func applyLists(instance *types.InstanceSpec, req *dicerdv1.UpdateInstanceRequest) error {
 	if len(req.GetMounts()) > 0 {
-		mounts, err := h.mounts(req.GetMounts())
+		mounts, err := mountsFromProto(req.GetMounts())
 		if err != nil {
 			return err
 		}
 		instance.Mounts = mounts
 	}
 	if len(req.GetPorts()) > 0 {
-		ports, err := portMappings(req.GetPorts())
+		ports, err := portMappingsFromProto(req.GetPorts())
 		if err != nil {
 			return err
 		}
@@ -359,8 +347,11 @@ func (h *instanceHandler) ResizeInstance(
 		want.VCPUs = int(*v)
 	}
 	setIf(&want.MemoryBytes, req.MemoryBytes)
-	if err := validateResources(int32(want.VCPUs), want.MemoryBytes, instance.DiskBytes); err != nil {
-		return nil, err
+	switch {
+	case want.VCPUs <= 0:
+		return nil, errdefs.InvalidArgument("an instance needs at least 1 vCPU")
+	case want.MemoryBytes <= 0:
+		return nil, errdefs.InvalidArgument("an instance needs more than 0 bytes of memory")
 	}
 
 	if err := h.instances.Resize(ctx, instance, want); err != nil {

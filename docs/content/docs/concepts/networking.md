@@ -107,6 +107,14 @@ Traffic from guests leaves through the host's uplink with the host's address,
 by NAT. The uplink is the interface of the host's default route, unless the
 daemon's configuration names another.
 
+## Rate Limits
+
+`--upload-rate` and `--download-rate` limit the bytes per second a guest
+sends and receives. The host shapes its traffic on its TAP device, so the
+limits work the same on either hypervisor and cover everything the guest
+sends: to the outside, to the host and to other guests. See
+[Rate limits](../../guides/running-workloads#rate-limits).
+
 ## Isolation
 
 Guests on different networks cannot reach each other. A network created with

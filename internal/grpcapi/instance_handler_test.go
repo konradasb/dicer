@@ -52,40 +52,6 @@ func seedKernelAndNetwork(t *testing.T, definitions *filestore.Manager) {
 	}
 }
 
-func TestValidateMaximums(t *testing.T) {
-	tests := []struct {
-		name           string
-		hypervisor     types.HypervisorType
-		maxVCPUs       int
-		maxMemoryBytes int64
-		valid          bool
-	}{
-		{name: "none", valid: true},
-		{name: "room to grow", maxVCPUs: 4, maxMemoryBytes: 4 << 30, valid: true},
-		{name: "as much as it asks for", maxVCPUs: 2, maxMemoryBytes: 2 << 30, valid: true},
-		{name: "fewer vCPUs than it asks for", maxVCPUs: 1},
-		{name: "less memory than it asks for", maxMemoryBytes: 1 << 30},
-		{name: "negative", maxVCPUs: -1},
-		{name: "vCPUs on firecracker", hypervisor: types.HypervisorTypeFirecracker, maxVCPUs: 4},
-		{name: "memory on firecracker", hypervisor: types.HypervisorTypeFirecracker, maxMemoryBytes: 4 << 30, valid: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateMaximums(types.InstanceSpec{
-				HypervisorType: tt.hypervisor, VCPUs: 2, MemoryBytes: 2 << 30,
-				MaxVCPUs: tt.maxVCPUs, MaxMemoryBytes: tt.maxMemoryBytes,
-			})
-			if tt.valid {
-				if err != nil {
-					t.Errorf("validateMaximums = %v, want nil", err)
-				}
-				return
-			}
-			wantClass(t, err, errdefs.ErrInvalidArgument)
-		})
-	}
-}
-
 // An instance whose maximum the host could never give it is refused when it
 // is created.
 func TestCreateInstanceWithAMaximumTooBigForTheHost(t *testing.T) {
@@ -126,4 +92,38 @@ func TestResizeInstanceRefusals(t *testing.T) {
 			wantClass(t, err, tt.err)
 		})
 	}
+}
+
+// An instance keeps the rate limits it is created with, an update changes
+// only the limits it sets, zero removing one, and a negative limit is
+// refused.
+func TestInstanceRateLimits(t *testing.T) {
+	s, definitions := newTestServer(t)
+	seedKernelAndNetwork(t, definitions)
+
+	instance, err := s.newInstance(&dicerdv1.CreateInstanceRequest{
+		Name: "web", ImageRef: "alpine", KernelName: "k", NetworkName: "default",
+		Vcpus: 1, MemoryBytes: 1 << 30, DiskBytes: 1 << 30,
+		DiskBytesPerSecond: 50 << 20, DiskIops: 1000, UploadBytesPerSecond: 1 << 20, DownloadBytesPerSecond: 2 << 20,
+	})
+	if err != nil {
+		t.Fatalf("newInstance: %v", err)
+	}
+	got := instanceToProto(types.Instance{Spec: instance})
+	if got.GetDiskBytesPerSecond() != 50<<20 || got.GetDiskIops() != 1000 ||
+		got.GetUploadBytesPerSecond() != 1<<20 || got.GetDownloadBytesPerSecond() != 2<<20 {
+		t.Errorf("instance = %v, want the limits it was created with", got)
+	}
+
+	zero := int64(0)
+	applySettings(&instance, &dicerdv1.UpdateInstanceRequest{DiskIops: &zero})
+	if instance.DiskIOPS != 0 || instance.DiskBytesPerSecond != 50<<20 {
+		t.Errorf("updated instance = %+v, want only the IOPS limit removed", instance)
+	}
+
+	_, err = s.newInstance(&dicerdv1.CreateInstanceRequest{
+		Name: "web2", ImageRef: "alpine", KernelName: "k", NetworkName: "default",
+		Vcpus: 1, MemoryBytes: 1 << 30, DiskBytes: 1 << 30, UploadBytesPerSecond: -1,
+	})
+	wantClass(t, err, errdefs.ErrInvalidArgument)
 }

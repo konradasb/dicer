@@ -362,6 +362,12 @@ message Instance {
   int32 max_vcpus = 40;
   int64 max_memory_bytes = 41;
   int64 disk_bytes = 11;
+  // Rate limits, of which zero is unlimited. See
+  // CreateInstanceRequest.disk_bytes_per_second.
+  int64 disk_bytes_per_second = 42;
+  int64 disk_iops = 43;
+  int64 upload_bytes_per_second = 44;
+  int64 download_bytes_per_second = 45;
   string network_name = 12;
   string static_ip = 13;
   reserved 14, 15;
@@ -524,6 +530,14 @@ message CreateInstanceRequest {
   int32 max_vcpus = 27;
   int64 max_memory_bytes = 28;
   int64 disk_bytes = 9;
+  // The bytes and operations per second each of the instance's disks is
+  // read and written at, its image, overlay and volumes each limited on its
+  // own. A snapshot restores the disk limits it was taken with.
+  int64 disk_bytes_per_second = 29;
+  int64 disk_iops = 30;
+  // The bytes per second the guest sends and receives on its network.
+  int64 upload_bytes_per_second = 31;
+  int64 download_bytes_per_second = 32;
   // Empty means the daemon's default network: see
   // GetHostInfoResponse.default_network.
   string network_name = 10;
@@ -570,6 +584,11 @@ message UpdateInstanceRequest {
   optional int32 max_vcpus = 25;
   optional int64 max_memory_bytes = 26;
   optional int64 disk_bytes = 9;
+  // Zero removes the limit.
+  optional int64 disk_bytes_per_second = 27;
+  optional int64 disk_iops = 28;
+  optional int64 upload_bytes_per_second = 29;
+  optional int64 download_bytes_per_second = 30;
   optional string network_name = 10;
   optional string static_ip = 11;
   optional string hostname = 12;

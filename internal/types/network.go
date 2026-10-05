@@ -144,9 +144,9 @@ func (p PortMapping) Overlaps(other PortMapping) bool {
 	return p.HostIP == "" || other.HostIP == "" || p.HostIP == other.HostIP
 }
 
-// ValidatePorts returns an invalid argument error if a mapping is invalid
+// validatePorts returns an invalid argument error if a mapping is invalid
 // or two overlap.
-func ValidatePorts(ports []PortMapping) error {
+func validatePorts(ports []PortMapping) error {
 	for i, p := range ports {
 		switch {
 		case p.HostPort == 0:

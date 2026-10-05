@@ -138,6 +138,10 @@ CopyToInstanceStart is the first message on a CopyToInstance stream.
 | `max_vcpus` | `int32` | The most ResizeInstance can give the running instance: it boots with room for them, which costs the host nothing until it is used. Zero leaves no room, so its vCPUs or memory cannot change while it runs. Firecracker cannot add vCPUs to a running guest, so max_vcpus is Cloud Hypervisor's only. |
 | `max_memory_bytes` | `int64` |  |
 | `disk_bytes` | `int64` |  |
+| `disk_bytes_per_second` | `int64` | The bytes and operations per second each of the instance's disks is read and written at, its image, overlay and volumes each limited on its own. A snapshot restores the disk limits it was taken with. |
+| `disk_iops` | `int64` |  |
+| `upload_bytes_per_second` | `int64` | The bytes per second the guest sends and receives on its network. |
+| `download_bytes_per_second` | `int64` |  |
 | `network_name` | `string` | Empty means the daemon's default network: see GetHostInfoResponse.default_network. |
 | `static_ip` | `string` |  |
 | `mounts` | repeated [`Mount`](#mount) |  |
@@ -526,6 +530,10 @@ is not running.
 | `max_vcpus` | `int32` | The most ResizeInstance can give the running instance. Zero leaves it no room to grow. See CreateInstanceRequest.max_vcpus. |
 | `max_memory_bytes` | `int64` |  |
 | `disk_bytes` | `int64` |  |
+| `disk_bytes_per_second` | `int64` | Rate limits, of which zero is unlimited. See CreateInstanceRequest.disk_bytes_per_second. |
+| `disk_iops` | `int64` |  |
+| `upload_bytes_per_second` | `int64` |  |
+| `download_bytes_per_second` | `int64` |  |
 | `network_name` | `string` |  |
 | `static_ip` | `string` |  |
 | `mounts` | repeated [`Mount`](#mount) |  |
@@ -906,6 +914,10 @@ the existing value whole.
 | `max_vcpus` | optional `int32` | One of `_max_vcpus`. Zero removes the maximum. |
 | `max_memory_bytes` | optional `int64` | One of `_max_memory_bytes`.  |
 | `disk_bytes` | optional `int64` | One of `_disk_bytes`.  |
+| `disk_bytes_per_second` | optional `int64` | One of `_disk_bytes_per_second`. Zero removes the limit. |
+| `disk_iops` | optional `int64` | One of `_disk_iops`.  |
+| `upload_bytes_per_second` | optional `int64` | One of `_upload_bytes_per_second`.  |
+| `download_bytes_per_second` | optional `int64` | One of `_download_bytes_per_second`.  |
 | `network_name` | optional `string` | One of `_network_name`.  |
 | `static_ip` | optional `string` | One of `_static_ip`.  |
 | `hostname` | optional `string` | One of `_hostname`.  |

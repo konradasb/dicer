@@ -53,6 +53,12 @@ A volume is used read-write by one running instance at a time. Mounted
 read-only by all of them, it can be shared. An instance can mount up to 22
 volumes.
 
+## Rate Limits
+
+`--disk-rate` and `--disk-iops` limit the bytes and operations per second
+each of an instance's disks is read and written at; the hypervisor enforces
+them. See [Rate limits](../../guides/running-workloads#rate-limits).
+
 ## Other mounts
 
 Besides volumes, an instance can mount a copy of a file from the host, and an

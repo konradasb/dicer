@@ -10,17 +10,14 @@ import (
 	"github.com/konradasb/dicer/internal/errdefs"
 )
 
-func TestValidateMountsCleansTargets(t *testing.T) {
-	got, err := ValidateMounts([]Mount{
+func TestValidateMountsAcceptsValidMounts(t *testing.T) {
+	err := validateMounts([]Mount{
 		{Type: MountTypeVolume, Source: "data", Target: "/data/"},
 		{Type: MountTypeFile, Source: "/etc/a", Target: "/data/a"},
 		{Type: MountTypeTmpfs, Target: "/tmp//x"},
 	})
 	if err != nil {
-		t.Fatalf("ValidateMounts() = %v", err)
-	}
-	if got[0].Target != "/data" || got[2].Target != "/tmp/x" {
-		t.Errorf("targets = %q, %q; want them cleaned", got[0].Target, got[2].Target)
+		t.Errorf("validateMounts = %v, want nil", err)
 	}
 }
 
@@ -48,8 +45,8 @@ func TestValidateMountsRejectsInvalidMounts(t *testing.T) {
 
 	for name, mounts := range tests {
 		t.Run(name, func(t *testing.T) {
-			if _, err := ValidateMounts(mounts); !errors.Is(err, errdefs.ErrInvalidArgument) {
-				t.Errorf("ValidateMounts(%+v) = %v, want an invalid argument error", mounts, err)
+			if err := validateMounts(mounts); !errors.Is(err, errdefs.ErrInvalidArgument) {
+				t.Errorf("validateMounts(%+v) = %v, want an invalid argument error", mounts, err)
 			}
 		})
 	}

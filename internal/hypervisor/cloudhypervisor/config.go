@@ -70,25 +70,29 @@ func memoryConfig(m hypervisor.MemoryConfig) MemoryConfig {
 	return memory
 }
 
-// diskConfig translates a disk. A rate limit is a token bucket refilled
-// every second, so its size is the rate in bytes per second, with the burst
-// above that rate as a one-time allowance.
+// diskConfig translates a disk. A rate limit is a token bucket holding what
+// the disk may do in a second, refilled every second.
 func diskConfig(d hypervisor.DiskConfig) DiskConfig {
 	disk := DiskConfig{Path: ptr(d.Path)}
 	if d.ReadOnly {
 		disk.Readonly = ptr(true)
 	}
-	if d.RateLimitBytesPerSecond > 0 {
-		burst := max(d.RateLimitBurstBytesPerSecond, d.RateLimitBytesPerSecond)
+	if d.RateLimitBytesPerSecond > 0 || d.RateLimitIOPS > 0 {
 		disk.RateLimiterConfig = &RateLimiterConfig{
-			Bandwidth: &TokenBucket{
-				Size:         d.RateLimitBytesPerSecond,
-				RefillTime:   1000,
-				OneTimeBurst: ptr(burst - d.RateLimitBytesPerSecond),
-			},
+			Bandwidth: perSecondBucket(d.RateLimitBytesPerSecond),
+			Ops:       perSecondBucket(d.RateLimitIOPS),
 		}
 	}
 	return disk
+}
+
+// perSecondBucket returns a token bucket refilled with n tokens every
+// second, or nil for none if n is zero.
+func perSecondBucket(n int64) *TokenBucket {
+	if n <= 0 {
+		return nil
+	}
+	return &TokenBucket{Size: n, RefillTime: 1000}
 }
 
 func netConfig(n hypervisor.NetworkInterfaceConfig) NetConfig {

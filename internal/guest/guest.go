@@ -9,16 +9,13 @@ package guest
 import (
 	"errors"
 	"fmt"
-	"regexp"
 
+	"github.com/konradasb/dicer/internal/naming"
 	"github.com/konradasb/dicer/internal/types"
 )
 
 // AgentPort is the vsock port dicer-agent listens on inside the guest.
 const AgentPort = 2222
-
-// hostnamePattern matches a hostname valid under RFC 1123.
-var hostnamePattern = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`)
 
 // defaultInit is what a guest boots when neither the image nor the instance
 // names a command: the init system, as a machine would.
@@ -151,7 +148,7 @@ func (c *Config) Validate() error {
 	if err := c.validateProcess(); err != nil {
 		return err
 	}
-	if err := ValidateHostname(c.Hostname); err != nil {
+	if err := naming.ValidateHostname(c.Hostname); err != nil {
 		return err
 	}
 	for i, m := range c.Mounts {
@@ -181,19 +178,6 @@ func (c *Config) validateProcess() error {
 
 	if c.Workdir != "" && c.Workdir[0] != '/' {
 		return fmt.Errorf("workdir %q must be absolute", c.Workdir)
-	}
-	return nil
-}
-
-// ValidateHostname checks a hostname, if one is set, against RFC 1123.
-func ValidateHostname(name string) error {
-	switch {
-	case name == "":
-		return nil
-	case len(name) > 253:
-		return fmt.Errorf("hostname %q exceeds 253 characters", name)
-	case !hostnamePattern.MatchString(name):
-		return fmt.Errorf("hostname %q is invalid", name)
 	}
 	return nil
 }

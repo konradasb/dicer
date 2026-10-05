@@ -5,6 +5,8 @@ package grpcapi
 
 import (
 	"cmp"
+	"net"
+	"path"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -19,29 +21,33 @@ func instanceToProto(instance types.Instance) *dicerdv1.Instance {
 	spec, status := instance.Spec, instance.Status
 
 	out := &dicerdv1.Instance{
-		Id:                spec.ID,
-		Name:              spec.Name,
-		Hostname:          spec.Hostname,
-		ImageRef:          spec.ImageRef,
-		HypervisorType:    hypervisorTypes.toProto(spec.HypervisorType),
-		HypervisorVersion: spec.HypervisorVersion,
-		KernelName:        spec.KernelName,
-		KernelArgs:        spec.KernelArgs,
-		Vcpus:             int32(spec.VCPUs),
-		MemoryBytes:       spec.MemoryBytes,
-		MaxVcpus:          int32(spec.MaxVCPUs),
-		MaxMemoryBytes:    spec.MaxMemoryBytes,
-		DiskBytes:         spec.DiskBytes,
-		NetworkName:       spec.NetworkName,
-		StaticIp:          spec.StaticIP,
-		Env:               spec.Env,
-		Cmd:               spec.Cmd,
-		Labels:            spec.Labels,
-		RestartPolicy:     restartPolicyToProto(spec.Restart),
-		HealthCheck:       healthCheckToProto(spec.HealthCheck),
-		InitMode:          initModes.toProto(cmp.Or(spec.InitMode, types.InitModeAuto)),
-		CreateTime:        timestamppb.New(spec.CreatedAt),
-		UpdateTime:        timestamppb.New(spec.UpdatedAt),
+		Id:                     spec.ID,
+		Name:                   spec.Name,
+		Hostname:               spec.Hostname,
+		ImageRef:               spec.ImageRef,
+		HypervisorType:         hypervisorTypes.toProto(spec.HypervisorType),
+		HypervisorVersion:      spec.HypervisorVersion,
+		KernelName:             spec.KernelName,
+		KernelArgs:             spec.KernelArgs,
+		Vcpus:                  int32(spec.VCPUs),
+		MemoryBytes:            spec.MemoryBytes,
+		MaxVcpus:               int32(spec.MaxVCPUs),
+		MaxMemoryBytes:         spec.MaxMemoryBytes,
+		DiskBytes:              spec.DiskBytes,
+		DiskBytesPerSecond:     spec.DiskBytesPerSecond,
+		DiskIops:               spec.DiskIOPS,
+		UploadBytesPerSecond:   spec.UploadBytesPerSecond,
+		DownloadBytesPerSecond: spec.DownloadBytesPerSecond,
+		NetworkName:            spec.NetworkName,
+		StaticIp:               spec.StaticIP,
+		Env:                    spec.Env,
+		Cmd:                    spec.Cmd,
+		Labels:                 spec.Labels,
+		RestartPolicy:          restartPolicyToProto(spec.Restart),
+		HealthCheck:            healthCheckToProto(spec.HealthCheck),
+		InitMode:               initModes.toProto(cmp.Or(spec.InitMode, types.InitModeAuto)),
+		CreateTime:             timestamppb.New(spec.CreatedAt),
+		UpdateTime:             timestamppb.New(spec.UpdatedAt),
 
 		State:        instanceStates.toProto(status.State),
 		StateError:   status.StateError,
@@ -199,4 +205,79 @@ func restartPolicyFromProto(p *dicerdv1.RestartPolicy) (types.RestartPolicy, err
 		return types.RestartPolicy{}, errdefs.InvalidArgument("%v", err)
 	}
 	return policy, nil
+}
+
+// mountsFromProto converts what an instance wants mounted, cleaning the
+// targets. InstanceSpec.Validate checks them, and checkMounts what needs the
+// host.
+func mountsFromProto(in []*dicerdv1.Mount) ([]types.Mount, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+
+	mounts := make([]types.Mount, 0, len(in))
+	for _, m := range in {
+		mountType, err := mountTypes.fromProto(m.GetType())
+		if err != nil {
+			return nil, err
+		}
+		target := m.GetTarget()
+		// Cleaning nothing would make it ".", which Validate would call
+		// relative rather than missing.
+		if target != "" {
+			target = path.Clean(target)
+		}
+		mounts = append(mounts, types.Mount{
+			Type:     mountType,
+			Source:   m.GetSource(),
+			Target:   target,
+			ReadOnly: m.GetReadOnly(),
+		})
+	}
+	return mounts, nil
+}
+
+// portMappingsFromProto converts the ports an instance wants published.
+// InstanceSpec.Validate checks them, and their clashes with other instances
+// are checked at start.
+func portMappingsFromProto(in []*dicerdv1.PortMapping) ([]types.PortMapping, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+
+	out := make([]types.PortMapping, 0, len(in))
+	for _, p := range in {
+		if p.GetHostPort() > 65535 || p.GetGuestPort() > 65535 {
+			return nil, errdefs.InvalidArgument(
+				"port %d:%d: ports must be between 1 and 65535", p.GetHostPort(), p.GetGuestPort())
+		}
+
+		protocol, err := protocols.fromProto(p.GetProtocol())
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, types.PortMapping{
+			HostIP:    canonicalHostIP(p.GetHostIp()),
+			HostPort:  uint16(p.GetHostPort()),
+			GuestPort: uint16(p.GetGuestPort()),
+			Protocol:  cmp.Or(protocol, types.ProtocolTCP),
+		})
+	}
+
+	return out, nil
+}
+
+// canonicalHostIP normalises an IPv4 address, turning 0.0.0.0 into "" (every
+// address). Anything else is left for InstanceSpec.Validate.
+func canonicalHostIP(s string) string {
+	ip := net.ParseIP(s).To4()
+	switch {
+	case ip == nil:
+		return s
+	case ip.IsUnspecified():
+		return ""
+	default:
+		return ip.String()
+	}
 }

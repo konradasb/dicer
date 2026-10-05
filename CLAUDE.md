@@ -60,6 +60,11 @@ Follow [Effective Go](https://go.dev/doc/effective_go),
 - Match errors with `errors.Is` and `errors.As`, never by their message.
 - Early returns over nested `else`; `switch` over long `if`/`else if` chains.
 - Make the zero value useful where it can be.
+- A check that needs nothing but a type's own fields is a `Validate() error`
+  method on that type, beside its definition, not a function in the package
+  that uses it: `InstanceSpec.Validate()`, not `validateMaximums(spec)` in an
+  API handler. Code that builds or changes a value calls it once. Checks
+  that need a lookup, the host or runtime state stay with the caller.
 - Don't add a helper that only wraps a few lines used twice; inline it.
   Extract one when it names an idea.
 - Guard shared state with a mutex named `mu`, placed above the fields it

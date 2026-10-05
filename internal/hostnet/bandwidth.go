@@ -30,7 +30,7 @@ var ingressHandle = netlink.MakeHandle(0xffff, 0)
 // it is redirected to the IFB device ifb and shaped as it leaves that. The
 // IFB device is shaped before anything is redirected to it, so no traffic
 // passes unshaped.
-func limitUpload(tap, ifb string, rateBps int64, burstMultiplier int) error {
+func limitUpload(tap, ifb string, bytesPerSecond int64, burstMultiplier int) error {
 	tapLink, err := netlink.LinkByName(tap)
 	if err != nil {
 		return fmt.Errorf("look up TAP %s: %w", tap, err)
@@ -48,7 +48,7 @@ func limitUpload(tap, ifb string, rateBps int64, burstMultiplier int) error {
 	if err := netlink.LinkSetUp(ifbLink); err != nil {
 		return fmt.Errorf("set IFB %s up: %w", ifb, err)
 	}
-	if err := limitEgressRate(ifb, rateBps, burstMultiplier); err != nil {
+	if err := limitEgressRate(ifb, bytesPerSecond, burstMultiplier); err != nil {
 		return err
 	}
 
@@ -96,16 +96,16 @@ func removeUploadLimit(ifb string) error {
 // qdisc: on a TAP device, the rate its guest downloads at, and on an IFB
 // device the rate it uploads at. Its bucket lets the traffic briefly reach
 // burstMultiplier times the rate.
-func limitEgressRate(device string, rateBps int64, burstMultiplier int) error {
+func limitEgressRate(device string, bytesPerSecond int64, burstMultiplier int) error {
 	link, err := netlink.LinkByName(device)
 	if err != nil {
 		return fmt.Errorf("look up %s: %w", device, err)
 	}
 
-	rate := uint64(rateBps)
-	burstBytes := uint32(max(rateBps*int64(burstMultiplier)/kernelHZ, minBurstBytes))
+	rate := uint64(bytesPerSecond)
+	burstBytes := uint32(max(bytesPerSecond*int64(burstMultiplier)/kernelHZ, minBurstBytes))
 	// Queue what the rate sends in 50ms, on top of the burst.
-	limitBytes := uint32(rateBps/20) + burstBytes
+	limitBytes := uint32(bytesPerSecond/20) + burstBytes
 
 	if err := netlink.QdiscAdd(&netlink.Tbf{
 		QdiscAttrs: netlink.QdiscAttrs{

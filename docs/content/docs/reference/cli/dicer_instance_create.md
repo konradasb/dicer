@@ -31,6 +31,9 @@ $ dicer instance create worker -i alpine:3.21 -e QUEUE=jobs -- /bin/worker --ver
 | Flag | Description |
 |---|---|
 | `--disk string` | Overlay disk size, e.g. 10GiB. Default: `10GiB`. |
+| `--disk-iops int` | Operations per second each disk can be read and written at (0: unlimited). |
+| `--disk-rate string` | Bytes per second each disk can be read and written at, e.g. 50MiB (0: unlimited). |
+| `--download-rate string` | Bytes per second the guest can receive, e.g. 10MiB (0: unlimited). |
 | `-e`, `--env stringArray` | Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable). |
 | `--env-file stringArray` | Read environment variables from a file of KEY=VALUE lines (repeatable). |
 | `--health-cmd string` | Command to check health with, run by /bin/sh in the guest. |
@@ -60,6 +63,7 @@ $ dicer instance create worker -i alpine:3.21 -e QUEUE=jobs -- /bin/worker --ver
 | `--restart string` | Restart policy when the instance ends on its own: no, on-failure[:max-retries], unless-stopped or always (default no). |
 | `--rm` | Delete the instance once it stops, the daemon doing the deleting. |
 | `--start` | Start the instance immediately after defining it. |
+| `--upload-rate string` | Bytes per second the guest can send, e.g. 10MiB (0: unlimited). |
 | `--vcpus int32` | Number of virtual CPUs. Default: `1`. |
 
 ## Global flags

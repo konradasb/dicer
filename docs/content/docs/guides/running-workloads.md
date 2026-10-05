@@ -92,6 +92,34 @@ Sizes are written as `512MiB`, `2GiB` and so on. An instance holds its vCPUs
 and memory while it runs, and a start the host has no room for is refused;
 see [Capacity](../capacity).
 
+## Rate Limits
+
+Disk and network can be held to a rate, so that one busy guest
+cannot starve the others of the host's disk or uplink:
+
+| Flag | |
+|---|---|
+| `--disk-rate` | Bytes per second each disk can be read and written at. |
+| `--disk-iops` | Operations per second each disk can be read and written at. |
+| `--download-rate` | Bytes per second the guest can receive. |
+| `--upload-rate` | Bytes per second the guest can send. |
+
+```console
+$ dicer run -d --disk-rate 50MiB --disk-iops 1000 --upload-rate 10MiB postgres:17
+```
+
+Rates are written as sizes, `50MiB` or `50MiB/s`, and none is limited
+unless given. The disk limits apply to each of the instance's disks on its
+own, its image, its own disk and every volume, not to all of them together.
+A guest may briefly exceed its network limits, by the burst multipliers in
+the daemon's [configuration](../../reference/configuration#network-upload-burst-multiplier).
+
+Limit is a ceiling, not a reservation: it is not counted against the
+host's [capacity](../capacity). It is changed with `dicer update`, with 0
+removing it, and takes effect on the next start. An instance restored from a
+[snapshot](../snapshots) keeps the disk limits it had when the snapshot was
+taken.
+
 ## Ports
 
 A guest's port is published on the host with `-p`, as

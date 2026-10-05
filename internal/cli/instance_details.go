@@ -61,6 +61,7 @@ func instanceView(instance *dicerdv1.Instance, recent []*dicerdv1.Event, p palet
 	)
 	v.block(
 		field{"Machine", machineLines(instance)},
+		field{"Limits", oneLine(limitsDetail(instance))},
 		field{"Network", networkLines(instance)},
 		field{"Ports", portLines(instance.GetPorts())},
 		field{"Mounts", mountLines(instance.GetMounts())},
@@ -159,6 +160,28 @@ func machineLines(instance *dicerdv1.Instance) []string {
 	}
 
 	return []string{resources, hypervisor, kernel}
+}
+
+// limitsDetail describes the rate limits an instance has, if any: "disk
+// 50 MiB/s and 1000 IOPS each, upload 10 MiB/s".
+func limitsDetail(instance *dicerdv1.Instance) string {
+	var disk, limits []string
+	if n := instance.GetDiskBytesPerSecond(); n > 0 {
+		disk = append(disk, humanize.Bytes(n)+"/s")
+	}
+	if n := instance.GetDiskIops(); n > 0 {
+		disk = append(disk, fmt.Sprintf("%d IOPS", n))
+	}
+	if len(disk) > 0 {
+		limits = append(limits, "disk "+strings.Join(disk, " and ")+" each")
+	}
+	if n := instance.GetUploadBytesPerSecond(); n > 0 {
+		limits = append(limits, "upload "+humanize.Bytes(n)+"/s")
+	}
+	if n := instance.GetDownloadBytesPerSecond(); n > 0 {
+		limits = append(limits, "download "+humanize.Bytes(n)+"/s")
+	}
+	return strings.Join(limits, ", ")
 }
 
 // networkLines describes an instance's place on its network: its address,

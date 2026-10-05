@@ -93,17 +93,16 @@ type ConsoleConfig struct {
 	Path string
 }
 
-// DiskConfig attaches a disk image to the guest. A zero rate limit leaves
-// the disk unlimited.
+// DiskConfig attaches a disk image to the guest.
 type DiskConfig struct {
 	Path     string
 	ReadOnly bool
 
-	// RateLimitBytesPerSecond is the rate the disk may be read and written
-	// at, and RateLimitBurstBytesPerSecond the rate it may burst to at
-	// first.
-	RateLimitBytesPerSecond      int64
-	RateLimitBurstBytesPerSecond int64
+	// RateLimitBytesPerSecond and RateLimitIOPS limit the bytes and the
+	// operations per second the disk is read and written at, together. Zero
+	// is unlimited.
+	RateLimitBytesPerSecond int64
+	RateLimitIOPS           int64
 }
 
 // NetworkInterfaceConfig attaches the guest to a host TAP device.

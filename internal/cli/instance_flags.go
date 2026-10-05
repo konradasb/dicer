@@ -64,6 +64,10 @@ func addInstanceSpecFlags(cmd *cobra.Command, withDefaults bool) {
 	flags.Int32("max-vcpus", 0, "Most vCPUs 'dicer resize' can give the running instance, on Cloud Hypervisor (0: none)")
 	flags.String("max-memory", "", "Most memory 'dicer resize' can give the running instance, e.g. 4GiB (0: none)")
 	flags.String("disk", disk, "Overlay disk size, e.g. 10GiB")
+	flags.String("disk-rate", "", "Bytes per second each disk can be read and written at, e.g. 50MiB (0: unlimited)")
+	flags.Int64("disk-iops", 0, "Operations per second each disk can be read and written at (0: unlimited)")
+	flags.String("upload-rate", "", "Bytes per second the guest can send, e.g. 10MiB (0: unlimited)")
+	flags.String("download-rate", "", "Bytes per second the guest can receive, e.g. 10MiB (0: unlimited)")
 	flags.String("network", "", "Network to attach to")
 	flags.String("ip", "", "Static IP address (default: assigned from the subnet)")
 	flags.StringArrayP("publish", "p", nil,
@@ -262,6 +266,19 @@ func applySpecFlags(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) err
 			return err
 		}
 	}
+	for flag, dst := range map[string]*int64{
+		"disk-rate":     &req.DiskBytesPerSecond,
+		"upload-rate":   &req.UploadBytesPerSecond,
+		"download-rate": &req.DownloadBytesPerSecond,
+	} {
+		if flags.Changed(flag) {
+			v, _ := flags.GetString(flag)
+			if *dst, err = parseBytesPerSecond(flag, v); err != nil {
+				return err
+			}
+		}
+	}
+	req.DiskIops, _ = flags.GetInt64("disk-iops")
 
 	lists, err := parseListFlags(cmd)
 	if err != nil {
@@ -348,6 +365,23 @@ func buildUpdateRequest(cmd *cobra.Command, args []string) (*dicerdv1.UpdateInst
 			return nil, usagef(cmd, "%s", err)
 		}
 		req.DiskBytes = &bytes
+	}
+	for flag, dst := range map[string]**int64{
+		"disk-rate":     &req.DiskBytesPerSecond,
+		"upload-rate":   &req.UploadBytesPerSecond,
+		"download-rate": &req.DownloadBytesPerSecond,
+	} {
+		if v := optionalString(flag); v != nil {
+			bytes, err := parseBytesPerSecond(flag, *v)
+			if err != nil {
+				return nil, usagef(cmd, "%s", err)
+			}
+			*dst = &bytes
+		}
+	}
+	if flags.Changed("disk-iops") {
+		v, _ := flags.GetInt64("disk-iops")
+		req.DiskIops = &v
 	}
 	if flags.Changed("restart") {
 		v, _ := flags.GetString("restart")
@@ -544,6 +578,16 @@ func parseDiskBytes(size string) (int64, error) {
 		return 0, fmt.Errorf("disk size %q is below the 1MiB minimum", size)
 	}
 
+	return bytes, nil
+}
+
+// parseBytesPerSecond converts the value of the rate flag named flag, a
+// human-readable size with or without a trailing /s, to bytes per second.
+func parseBytesPerSecond(flag, rate string) (int64, error) {
+	bytes, err := units.RAMInBytes(strings.TrimSuffix(rate, "/s"))
+	if err != nil {
+		return 0, fmt.Errorf("invalid --%s %q: want bytes per second, such as 50MiB, or 0 for unlimited", flag, rate)
+	}
 	return bytes, nil
 }
 

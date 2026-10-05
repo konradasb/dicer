@@ -193,8 +193,20 @@ const statusDevice = "/dev/vdd"
 const MaxVolumeMounts = 'z' - 'e' + 1
 
 // vmSpec is the specification instance boots with. Disk order matters: image,
-// overlay, config, status, then volumes.
+// overlay, config, status, then volumes. Each disk has the instance's disk
+// rate limits.
 func (m *Manager) vmSpec(instance types.InstanceSpec, b bootAssets, nic hypervisor.NetworkInterfaceConfig) hypervisor.VMSpec {
+	disks := append([]hypervisor.DiskConfig{
+		{Path: b.image.DiskPath, ReadOnly: true},
+		{Path: m.overlayDiskPath(instance)},
+		{Path: m.configDiskPath(instance.ID), ReadOnly: true},
+		{Path: m.statusDiskPath(instance.ID)},
+	}, b.volumeDisks...)
+	for i := range disks {
+		disks[i].RateLimitBytesPerSecond = instance.DiskBytesPerSecond
+		disks[i].RateLimitIOPS = instance.DiskIOPS
+	}
+
 	return hypervisor.VMSpec{
 		Boot: hypervisor.BootConfig{
 			KernelPath: b.kernelPath,
@@ -206,12 +218,7 @@ func (m *Manager) vmSpec(instance types.InstanceSpec, b bootAssets, nic hypervis
 			SizeBytes:    instance.MemoryBytes,
 			HotplugBytes: max(instance.MaxMemoryBytes-instance.MemoryBytes, 0),
 		},
-		Disks: append([]hypervisor.DiskConfig{
-			{Path: b.image.DiskPath, ReadOnly: true},
-			{Path: m.overlayDiskPath(instance)},
-			{Path: m.configDiskPath(instance.ID), ReadOnly: true},
-			{Path: m.statusDiskPath(instance.ID)},
-		}, b.volumeDisks...),
+		Disks:             disks,
 		NetworkInterfaces: []hypervisor.NetworkInterfaceConfig{nic},
 		Console:           hypervisor.ConsoleConfig{Path: m.serialLogPath(instance)},
 		Vsock: &hypervisor.VsockConfig{

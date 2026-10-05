@@ -157,6 +157,30 @@ depends_on:
 
 `disk` is the size of the instance's disk, as `dicer run --disk`. Unset is 10GiB.
 
+### `services.*.disk_rate` {#services-disk-rate}
+
+*size per second, such as 50MiB or 50MiB/s*
+
+`disk_rate` is the bytes per second each of the instance's disks can be read and written at, as `dicer run --disk-rate`. Unset is unlimited.
+
+### `services.*.disk_iops` {#services-disk-iops}
+
+*integer*
+
+`disk_iops` is the operations per second each of the instance's disks can be read and written at, as `dicer run --disk-iops`. Unset is unlimited.
+
+### `services.*.upload_rate` {#services-upload-rate}
+
+*size per second, such as 50MiB or 50MiB/s*
+
+`upload_rate` is the bytes per second the instance can send, as `dicer run --upload-rate`. Unset is unlimited.
+
+### `services.*.download_rate` {#services-download-rate}
+
+*size per second, such as 50MiB or 50MiB/s*
+
+`download_rate` is the bytes per second the instance can receive, as `dicer run --download-rate`. Unset is unlimited.
+
 ### `services.*.kernel` {#services-kernel}
 
 *string*

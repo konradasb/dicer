@@ -38,3 +38,30 @@ func TestMachineLineShowsTheMaximums(t *testing.T) {
 		})
 	}
 }
+
+// TestLimitsDetailNamesOnlyTheLimitsSet checks that inspect's Limits line
+// lists the limits an instance has, and is empty for one with none.
+func TestLimitsDetailNamesOnlyTheLimitsSet(t *testing.T) {
+	tests := []struct {
+		name     string
+		instance *dicerdv1.Instance
+		want     string
+	}{
+		{"none", &dicerdv1.Instance{}, ""},
+		{"disk IOPS", &dicerdv1.Instance{DiskIops: 1000}, "disk 1000 IOPS each"},
+		{
+			"all",
+			&dicerdv1.Instance{
+				DiskBytesPerSecond: 50 << 20, DiskIops: 1000, UploadBytesPerSecond: 1 << 20, DownloadBytesPerSecond: 2 << 20,
+			},
+			"disk 50 MiB/s and 1000 IOPS each, upload 1 MiB/s, download 2 MiB/s",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := limitsDetail(tt.instance); got != tt.want {
+				t.Errorf("limits = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

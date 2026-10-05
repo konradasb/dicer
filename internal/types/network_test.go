@@ -54,8 +54,8 @@ func TestValidatePorts(t *testing.T) {
 		{HostIP: "10.0.0.1", HostPort: 443, GuestPort: 443},
 		{HostIP: "10.0.0.2", HostPort: 443, GuestPort: 8443},
 	}
-	if err := ValidatePorts(valid); err != nil {
-		t.Errorf("ValidatePorts(valid) = %v, want nil", err)
+	if err := validatePorts(valid); err != nil {
+		t.Errorf("validatePorts(valid) = %v, want nil", err)
 	}
 
 	invalid := map[string][]PortMapping{
@@ -73,8 +73,8 @@ func TestValidatePorts(t *testing.T) {
 	}
 	for name, ports := range invalid {
 		t.Run(name, func(t *testing.T) {
-			if err := ValidatePorts(ports); !errors.Is(err, errdefs.ErrInvalidArgument) {
-				t.Errorf("ValidatePorts(%+v) = %v, want an invalid argument error", ports, err)
+			if err := validatePorts(ports); !errors.Is(err, errdefs.ErrInvalidArgument) {
+				t.Errorf("validatePorts(%+v) = %v, want an invalid argument error", ports, err)
 			}
 		})
 	}

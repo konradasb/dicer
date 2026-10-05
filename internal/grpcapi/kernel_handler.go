@@ -5,8 +5,6 @@ package grpcapi
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -18,7 +16,6 @@ import (
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/filestore"
 	"github.com/konradasb/dicer/internal/kernel"
-	"github.com/konradasb/dicer/internal/naming"
 	"github.com/konradasb/dicer/internal/types"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
@@ -34,27 +31,9 @@ type kernelHandler struct {
 func (h *kernelHandler) ImportKernel(
 	_ context.Context, req *dicerdv1.ImportKernelRequest,
 ) (*dicerdv1.Kernel, error) {
-	if err := naming.Validate(req.GetName()); err != nil {
-		return nil, err
-	}
-
-	switch {
-	case req.GetUrl() == "":
-		return nil, errdefs.InvalidArgument("url is required")
-	case req.GetArch() == dicerdv1.Architecture_ARCHITECTURE_UNSPECIFIED:
-		return nil, errdefs.InvalidArgument("arch is required")
-	case req.GetSha256() != "" && !isSHA256Hex(req.GetSha256()):
-		return nil, errdefs.InvalidArgument(
-			"sha256 %q is not a hex-encoded SHA-256 digest", req.GetSha256())
-	}
-
 	arch, err := architectures.fromProto(req.GetArch())
 	if err != nil {
 		return nil, err
-	}
-
-	if _, err := h.definitions.Kernel(req.GetName()); err == nil {
-		return nil, errdefs.Exists("kernel %q already exists", req.GetName())
 	}
 
 	now := time.Now()
@@ -68,6 +47,12 @@ func (h *kernelHandler) ImportKernel(
 		UpdatedAt:    now,
 	}
 
+	if err := k.Validate(); err != nil {
+		return nil, err
+	}
+	if _, err := h.definitions.Kernel(k.Name); err == nil {
+		return nil, errdefs.Exists("kernel %q already exists", k.Name)
+	}
 	if err := h.definitions.CreateKernel(k); err != nil {
 		return nil, err
 	}
@@ -79,12 +64,6 @@ func (h *kernelHandler) ImportKernel(
 	h.record(k, events.ActionImported, message)
 
 	return kernelToProto(k), nil
-}
-
-// isSHA256Hex reports whether s is a hex-encoded SHA-256 digest.
-func isSHA256Hex(s string) bool {
-	b, err := hex.DecodeString(s)
-	return err == nil && len(b) == sha256.Size
 }
 
 // ListKernels lists the imported kernels, sorted by name.

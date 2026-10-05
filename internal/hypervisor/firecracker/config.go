@@ -111,19 +111,26 @@ func checkSupported(spec hypervisor.VMSpec) error {
 	return nil
 }
 
-// diskRateLimiter converts a disk's byte rate limit into Firecracker's token
-// bucket: the rate in tokens refilled every second, plus the burst above the
-// rate as a one-time allowance. An unlimited disk has none.
+// diskRateLimiter converts a disk's rate limit into Firecracker's token
+// buckets, each holding what the disk may do in a second, refilled every
+// second. An unlimited disk has none.
 func diskRateLimiter(d hypervisor.DiskConfig) *rateLimiter {
-	if d.RateLimitBytesPerSecond <= 0 {
+	if d.RateLimitBytesPerSecond <= 0 && d.RateLimitIOPS <= 0 {
 		return nil
 	}
-
-	bucket := &tokenBucket{Size: d.RateLimitBytesPerSecond, RefillTime: 1000}
-	if d.RateLimitBurstBytesPerSecond > d.RateLimitBytesPerSecond {
-		bucket.OneTimeBurst = d.RateLimitBurstBytesPerSecond - d.RateLimitBytesPerSecond
+	return &rateLimiter{
+		Bandwidth: perSecondBucket(d.RateLimitBytesPerSecond),
+		Ops:       perSecondBucket(d.RateLimitIOPS),
 	}
-	return &rateLimiter{Bandwidth: bucket}
+}
+
+// perSecondBucket returns a token bucket refilled with n tokens every
+// second, or nil for none if n is zero.
+func perSecondBucket(n int64) *tokenBucket {
+	if n <= 0 {
+		return nil
+	}
+	return &tokenBucket{Size: n, RefillTime: 1000}
 }
 
 // apply sends the setup to a Firecracker process that has not yet booted.

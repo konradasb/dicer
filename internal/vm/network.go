@@ -48,7 +48,11 @@ func (m *Manager) setupNetwork(ctx context.Context, instance types.InstanceSpec)
 		m.hostNetwork.RemoveTAP(ctx, &nw, instance.ID)
 	}
 
-	servesDNS, err := m.attachTAP(ctx, &nw, &allocation)
+	bandwidth := network.Bandwidth{
+		UploadBytesPerSecond:   instance.UploadBytesPerSecond,
+		DownloadBytesPerSecond: instance.DownloadBytesPerSecond,
+	}
+	servesDNS, err := m.attachTAP(ctx, &nw, &allocation, bandwidth)
 	if err != nil {
 		return nil, err
 	}
@@ -108,9 +112,11 @@ func upstreamNameservers(nw types.Network) []string {
 }
 
 // attachTAP brings the network's bridge up, with its DNS server, and
-// attaches the instance's TAP device to it, under the network lock. It
-// reports whether the network's DNS server is serving.
-func (m *Manager) attachTAP(ctx context.Context, nw *types.Network, allocation *types.NetworkAllocation) (bool, error) {
+// attaches the instance's TAP device to it, limited to bandwidth, under the
+// network lock. It reports whether the network's DNS server is serving.
+func (m *Manager) attachTAP(
+	ctx context.Context, nw *types.Network, allocation *types.NetworkAllocation, bandwidth network.Bandwidth,
+) (bool, error) {
 	lock := m.networkLock(nw.Name)
 	lock.Lock()
 	defer lock.Unlock()
@@ -118,7 +124,7 @@ func (m *Manager) attachTAP(ctx context.Context, nw *types.Network, allocation *
 	if err := m.hostNetwork.SetupBridge(ctx, nw); err != nil {
 		return false, fmt.Errorf("set up bridge %q: %w", nw.Bridge, err)
 	}
-	if err := m.hostNetwork.CreateTAP(ctx, nw, allocation, network.Bandwidth{}); err != nil {
+	if err := m.hostNetwork.CreateTAP(ctx, nw, allocation, bandwidth); err != nil {
 		m.hostNetwork.RemoveTAP(context.WithoutCancel(ctx), nw, allocation.InstanceID)
 		return false, fmt.Errorf("create TAP device: %w", err)
 	}

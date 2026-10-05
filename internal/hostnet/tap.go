@@ -38,14 +38,14 @@ func (h *Host) CreateTAP(
 		return err
 	}
 
-	if bw.DownloadBps > 0 {
-		if err := limitEgressRate(tap, bw.DownloadBps, h.config.DownloadBurstMultiplier); err != nil {
+	if bw.DownloadBytesPerSecond > 0 {
+		if err := limitEgressRate(tap, bw.DownloadBytesPerSecond, h.config.DownloadBurstMultiplier); err != nil {
 			return fmt.Errorf("apply download limit: %w", err)
 		}
 	}
 
-	if bw.UploadBps > 0 {
-		if err := limitUpload(tap, ifb, bw.UploadBps, h.config.UploadBurstMultiplier); err != nil {
+	if bw.UploadBytesPerSecond > 0 {
+		if err := limitUpload(tap, ifb, bw.UploadBytesPerSecond, h.config.UploadBurstMultiplier); err != nil {
 			return fmt.Errorf("apply upload limit: %w", err)
 		}
 	}

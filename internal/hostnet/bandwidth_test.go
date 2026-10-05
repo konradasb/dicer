@@ -20,7 +20,7 @@ import (
 const (
 	testTAP             = "tap-dicertest"
 	testIFB             = "ifb-dicertest"
-	testRateBps         = 100_000
+	testBytesPerSecond  = 100_000
 	testBurstMultiplier = 4
 	// testSendFor is how long a test sends for, far faster than the rate.
 	testSendFor = 2 * time.Second
@@ -43,7 +43,7 @@ func TestUploadLimitShapesWhatTheGuestSends(t *testing.T) {
 			t.Errorf("IFB %s is still there after removeUploadLimit", testIFB)
 		}
 	})
-	if err := limitUpload(testTAP, testIFB, testRateBps, testBurstMultiplier); err != nil {
+	if err := limitUpload(testTAP, testIFB, testBytesPerSecond, testBurstMultiplier); err != nil {
 		t.Fatalf("limitUpload: %v", err)
 	}
 
@@ -72,7 +72,7 @@ func TestDownloadLimitShapesWhatTheGuestReceives(t *testing.T) {
 	skipUnlessRoot(t)
 
 	guest := openGuestSide(t, testTAP)
-	if err := limitEgressRate(testTAP, testRateBps, testBurstMultiplier); err != nil {
+	if err := limitEgressRate(testTAP, testBytesPerSecond, testBurstMultiplier); err != nil {
 		t.Fatalf("limitEgressRate: %v", err)
 	}
 	received := readUntilDone(t, guest)
@@ -110,8 +110,8 @@ func TestDownloadLimitShapesWhatTheGuestReceives(t *testing.T) {
 func checkRate(t *testing.T, sent, passed int) {
 	t.Helper()
 
-	atRate := int(testRateBps * testSendFor / time.Second)
-	most := atRate + testRateBps*testBurstMultiplier/kernelHZ + testRateBps/20 + 2*len(testFrame())
+	atRate := int(testBytesPerSecond * testSendFor / time.Second)
+	most := atRate + testBytesPerSecond*testBurstMultiplier/kernelHZ + testBytesPerSecond/20 + 2*len(testFrame())
 	least := atRate * 9 / 10
 	switch {
 	case sent <= most:

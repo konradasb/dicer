@@ -836,6 +836,28 @@ func TestUpdateSetsAndRemovesMaximums(t *testing.T) {
 	}
 }
 
+func TestUpdateSetsAndRemovesRateLimits(t *testing.T) {
+	d := newFakeInstanceDaemon(fakeInstances()...)
+	serveFakeDaemon(t, d)
+
+	if out, err := run(t, "update", "db", "--disk-rate", "50MiB/s", "--disk-iops", "1000",
+		"--download-rate", "0"); err != nil {
+		t.Fatalf("update: %v\n%s", err, out)
+	}
+	diskRate, iops, download := int64(50<<20), int64(1000), int64(0)
+	want := &dicerdv1.UpdateInstanceRequest{
+		Name: "db", DiskBytesPerSecond: &diskRate, DiskIops: &iops, DownloadBytesPerSecond: &download,
+	}
+	if !proto.Equal(d.updated, want) {
+		t.Errorf("request = %v\nwant      %v", d.updated, want)
+	}
+
+	if _, err := run(t, "update", "db", "--upload-rate", "fast"); err == nil ||
+		!strings.Contains(err.Error(), "invalid --upload-rate") {
+		t.Errorf("an invalid rate should be refused, got %v", err)
+	}
+}
+
 func TestInspect(t *testing.T) {
 	serveFakeDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
 
