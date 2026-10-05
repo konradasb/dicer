@@ -30,6 +30,7 @@ const (
 	DaemonService_StopInstance_FullMethodName           = "/dicerd.v1.DaemonService/StopInstance"
 	DaemonService_PauseInstance_FullMethodName          = "/dicerd.v1.DaemonService/PauseInstance"
 	DaemonService_ResumeInstance_FullMethodName         = "/dicerd.v1.DaemonService/ResumeInstance"
+	DaemonService_StandbyInstance_FullMethodName        = "/dicerd.v1.DaemonService/StandbyInstance"
 	DaemonService_ResizeInstance_FullMethodName         = "/dicerd.v1.DaemonService/ResizeInstance"
 	DaemonService_DeleteInstance_FullMethodName         = "/dicerd.v1.DaemonService/DeleteInstance"
 	DaemonService_ListInstances_FullMethodName          = "/dicerd.v1.DaemonService/ListInstances"
@@ -114,7 +115,7 @@ type DaemonServiceClient interface {
 	// RenameInstance changes a stopped instance's name. The instance keeps its
 	// ID, its disks and its address; only what people call it changes.
 	RenameInstance(ctx context.Context, in *RenameInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
-	// StartInstance boots a defined instance.
+	// StartInstance boots a defined instance, or resumes one on standby.
 	StartInstance(ctx context.Context, in *StartInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
 	// StopInstance shuts a running instance down, keeping its definition,
 	// overlay disk and address.
@@ -123,6 +124,11 @@ type DaemonServiceClient interface {
 	PauseInstance(ctx context.Context, in *PauseInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
 	// ResumeInstance continues a paused instance.
 	ResumeInstance(ctx context.Context, in *ResumeInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
+	// StandbyInstance freezes a running or paused instance to disk and ends
+	// its hypervisor, freeing the CPU and memory it holds, and keeping its
+	// address, host ports and writable volumes. StartInstance resumes it where
+	// it was; StopInstance discards what was frozen.
+	StandbyInstance(ctx context.Context, in *StandbyInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
 	// ResizeInstance changes a running instance's vCPUs and memory without
 	// restarting it, within its max_vcpus and max_memory_bytes, and its
 	// definition with them, so it keeps them when it next starts. Memory can
@@ -320,6 +326,16 @@ func (c *daemonServiceClient) ResumeInstance(ctx context.Context, in *ResumeInst
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Instance)
 	err := c.cc.Invoke(ctx, DaemonService_ResumeInstance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) StandbyInstance(ctx context.Context, in *StandbyInstanceRequest, opts ...grpc.CallOption) (*Instance, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Instance)
+	err := c.cc.Invoke(ctx, DaemonService_StandbyInstance_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -792,7 +808,7 @@ type DaemonServiceServer interface {
 	// RenameInstance changes a stopped instance's name. The instance keeps its
 	// ID, its disks and its address; only what people call it changes.
 	RenameInstance(context.Context, *RenameInstanceRequest) (*Instance, error)
-	// StartInstance boots a defined instance.
+	// StartInstance boots a defined instance, or resumes one on standby.
 	StartInstance(context.Context, *StartInstanceRequest) (*Instance, error)
 	// StopInstance shuts a running instance down, keeping its definition,
 	// overlay disk and address.
@@ -801,6 +817,11 @@ type DaemonServiceServer interface {
 	PauseInstance(context.Context, *PauseInstanceRequest) (*Instance, error)
 	// ResumeInstance continues a paused instance.
 	ResumeInstance(context.Context, *ResumeInstanceRequest) (*Instance, error)
+	// StandbyInstance freezes a running or paused instance to disk and ends
+	// its hypervisor, freeing the CPU and memory it holds, and keeping its
+	// address, host ports and writable volumes. StartInstance resumes it where
+	// it was; StopInstance discards what was frozen.
+	StandbyInstance(context.Context, *StandbyInstanceRequest) (*Instance, error)
 	// ResizeInstance changes a running instance's vCPUs and memory without
 	// restarting it, within its max_vcpus and max_memory_bytes, and its
 	// definition with them, so it keeps them when it next starts. Memory can
@@ -953,6 +974,9 @@ func (UnimplementedDaemonServiceServer) PauseInstance(context.Context, *PauseIns
 }
 func (UnimplementedDaemonServiceServer) ResumeInstance(context.Context, *ResumeInstanceRequest) (*Instance, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResumeInstance not implemented")
+}
+func (UnimplementedDaemonServiceServer) StandbyInstance(context.Context, *StandbyInstanceRequest) (*Instance, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StandbyInstance not implemented")
 }
 func (UnimplementedDaemonServiceServer) ResizeInstance(context.Context, *ResizeInstanceRequest) (*Instance, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResizeInstance not implemented")
@@ -1207,6 +1231,24 @@ func _DaemonService_ResumeInstance_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServiceServer).ResumeInstance(ctx, req.(*ResumeInstanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_StandbyInstance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StandbyInstanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).StandbyInstance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_StandbyInstance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).StandbyInstance(ctx, req.(*StandbyInstanceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1854,6 +1896,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResumeInstance",
 			Handler:    _DaemonService_ResumeInstance_Handler,
+		},
+		{
+			MethodName: "StandbyInstance",
+			Handler:    _DaemonService_StandbyInstance_Handler,
 		},
 		{
 			MethodName: "ResizeInstance",

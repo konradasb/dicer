@@ -23,8 +23,9 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// Start boots a defined instance. It cancels any pending restart, resets the
-// restart count and clears StoppedByUser.
+// Start boots a defined instance, or resumes one on standby where it was. It
+// cancels any pending restart, resets the restart count and clears
+// StoppedByUser.
 func (m *Manager) Start(ctx context.Context, instance types.InstanceSpec) (err error) {
 	started := time.Now()
 	defer func() { m.observeOperation(operationStart, started, err) }()
@@ -41,6 +42,10 @@ func (m *Manager) Start(ctx context.Context, instance types.InstanceSpec) (err e
 		return errdefs.InvalidState("instance %q is already %s", instance.Name, status.State.Lowercase())
 	}
 	m.cancelRestart(instance.ID)
+
+	if m.onStandby(instance) {
+		return m.resumeStandby(ctx, instance)
+	}
 
 	if err := m.admit(instance, instance.Resources()); err != nil {
 		return err
@@ -66,6 +71,11 @@ func (m *Manager) boot(ctx context.Context, instance types.InstanceSpec, restart
 	}
 	boot, err := m.resolveBoot(ctx, instance, starter)
 	if err != nil {
+		return err
+	}
+
+	// Booted afresh, the disk moves on from anything frozen on standby.
+	if err := m.discardStandby(instance); err != nil {
 		return err
 	}
 

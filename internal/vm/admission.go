@@ -121,7 +121,7 @@ func (m *Manager) allocated(excludeID string) (types.Resources, error) {
 }
 
 // checkPorts refuses an instance that would publish a host port another
-// active instance holds. The caller must hold admissionMu.
+// instance holds. The caller must hold admissionMu.
 func (m *Manager) checkPorts(instance types.InstanceSpec) error {
 	if len(instance.Ports) == 0 {
 		return nil
@@ -138,7 +138,7 @@ func (m *Manager) checkPorts(instance types.InstanceSpec) error {
 		if err != nil {
 			return err
 		}
-		if !status.State.HoldsResources() && status.State != types.InstanceStateStopping {
+		if !status.State.HoldsPortsAndVolumes() {
 			continue
 		}
 
@@ -153,8 +153,8 @@ func (m *Manager) checkPorts(instance types.InstanceSpec) error {
 	return nil
 }
 
-// checkVolumes refuses an instance that would share a volume with an active
-// instance unless both mount it read-only. The caller must hold admissionMu.
+// checkVolumes refuses an instance that would share a volume with another
+// that holds it, unless both mount it read-only. The caller must hold admissionMu.
 func (m *Manager) checkVolumes(instance types.InstanceSpec) error {
 	if !slices.ContainsFunc(instance.Mounts, isVolume) {
 		return nil
@@ -171,7 +171,7 @@ func (m *Manager) checkVolumes(instance types.InstanceSpec) error {
 		if err != nil {
 			return err
 		}
-		if !status.State.HoldsResources() && status.State != types.InstanceStateStopping {
+		if !status.State.HoldsPortsAndVolumes() {
 			continue
 		}
 

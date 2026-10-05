@@ -36,7 +36,8 @@ The common commands are shortcuts for the management commands most used: `dicer 
 | [`dicer rm`]({{< relref "/docs/reference/cli/dicer_rm" >}}) | Delete one or more instances, or all of them. |
 | [`dicer rmi`]({{< relref "/docs/reference/cli/dicer_rmi" >}}) | Delete one or more unused images, or all of them. |
 | [`dicer run`]({{< relref "/docs/reference/cli/dicer_run" >}}) | Create an instance from an image and start it. |
-| [`dicer start`]({{< relref "/docs/reference/cli/dicer_start" >}}) | Start one or more defined instances. |
+| [`dicer standby`]({{< relref "/docs/reference/cli/dicer_standby" >}}) | Freeze one or more running instances to disk, freeing their CPU and memory. |
+| [`dicer start`]({{< relref "/docs/reference/cli/dicer_start" >}}) | Start one or more defined instances, or resume them from standby. |
 | [`dicer stats`]({{< relref "/docs/reference/cli/dicer_stats" >}}) | Show what instances use of the host, live. |
 | [`dicer stop`]({{< relref "/docs/reference/cli/dicer_stop" >}}) | Stop one or more running instances, keeping their definitions and disks. |
 | [`dicer top`]({{< relref "/docs/reference/cli/dicer_top" >}}) | List the processes running in an instance. |

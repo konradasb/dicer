@@ -51,7 +51,7 @@ func (m *Manager) Fork(ctx context.Context, snapshot types.Snapshot, instance ty
 	lock.Lock()
 	defer lock.Unlock()
 
-	if err := m.resume(ctx, instance, snapshot); err != nil {
+	if err := m.resume(ctx, instance, m.frozenSnapshot(snapshot)); err != nil {
 		return err
 	}
 

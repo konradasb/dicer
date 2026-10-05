@@ -23,7 +23,16 @@ import (
 // Status returns an instance's status. An instance with no status file is
 // Stopped.
 func (m *Manager) Status(instance types.InstanceSpec) (types.InstanceStatus, error) {
-	return m.readStatus(instance.ID)
+	status, err := m.readStatus(instance.ID)
+	if err != nil {
+		return types.InstanceStatus{}, err
+	}
+	// Standby leaves no runtime status, which a reboot would lose: the guest
+	// frozen to disk is what says the instance is on standby.
+	if status.State == types.InstanceStateStopped && m.onStandby(instance) {
+		status.State = types.InstanceStateStandby
+	}
+	return status, nil
 }
 
 // readStatus returns the status of an instance by ID.

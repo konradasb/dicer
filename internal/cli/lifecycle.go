@@ -49,9 +49,9 @@ func eachName(
 func newInstanceStartCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:               "start NAME...",
-		Short:             "Start one or more defined instances",
+		Short:             "Start one or more defined instances, or resume them from standby",
 		Args:              oneOrMore("instance name"),
-		ValidArgsFunction: complete(0, instancesIn(stateStopped, stateFailed, stateRestarting)),
+		ValidArgsFunction: complete(0, instancesIn(stateStopped, stateFailed, stateRestarting, stateStandby)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return eachName(cmd, args, instancesIn(), func(client *dicer.Client, name string) error {
 				return runTask(cmd, "Starting "+name, func() (*dicerdv1.Instance, error) {
@@ -67,10 +67,12 @@ func newInstanceStartCommand() *cobra.Command {
 
 func newInstanceStopCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:               "stop NAME...",
-		Short:             "Stop one or more running instances, keeping their definitions and disks",
+		Use:   "stop NAME...",
+		Short: "Stop one or more running instances, keeping their definitions and disks",
+		Long: "Stops each instance, keeping its definition, disk and address. An instance on\n" +
+			"standby is stopped by discarding what it froze, so that it boots afresh.",
 		Args:              oneOrMore("instance name"),
-		ValidArgsFunction: complete(0, instancesIn(stateRunning, statePaused, stateStarting, stateRestarting)),
+		ValidArgsFunction: complete(0, instancesIn(stateRunning, statePaused, stateStarting, stateRestarting, stateStandby)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return eachName(cmd, args, instancesIn(), func(client *dicer.Client, name string) error {
 				return runTask(cmd, "Stopping "+name, func() (*dicerdv1.Instance, error) {
@@ -87,9 +89,9 @@ func newInstanceRestartCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "restart NAME...",
 		Short: "Stop one or more instances if they are running, then start them",
-		Long: "Stops each instance if it is running or paused, then starts it. A stopped\n" +
-			"instance is just started. Restarting is how a changed file mount or an\n" +
-			"updated image takes effect.",
+		Long: "Stops each instance if it is running, paused or on standby, then starts it\n" +
+			"afresh. A stopped instance is just started. Restarting is how a changed file\n" +
+			"mount or an updated image takes effect.",
 		Args:              oneOrMore("instance name"),
 		ValidArgsFunction: complete(0, instancesIn()),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -101,7 +103,7 @@ func newInstanceRestartCommand() *cobra.Command {
 					}
 
 					switch instance.GetState() {
-					case stateRunning, statePaused, stateStarting:
+					case stateRunning, statePaused, stateStarting, stateStandby:
 						if _, err := client.StopInstance(cmd.Context(), &dicerdv1.StopInstanceRequest{Name: name}); err != nil {
 							return nil, err
 						}
@@ -133,6 +135,28 @@ func newInstancePauseCommand() *cobra.Command {
 				succeeded(cmd, "Instance %s paused", instance.GetName())
 
 				return nil
+			})
+		},
+	}
+}
+
+func newInstanceStandbyCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "standby NAME...",
+		Short: "Freeze one or more running instances to disk, freeing their CPU and memory",
+		Long: "Freezes each running or paused instance to disk and ends its hypervisor, so\n" +
+			"that it holds no CPU or memory. It keeps its disk, address, published ports\n" +
+			"and writable volumes. Starting it resumes it where it was; stopping it\n" +
+			"discards what it froze.",
+		Args:              oneOrMore("instance name"),
+		ValidArgsFunction: complete(0, instancesIn(stateRunning, statePaused)),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return eachName(cmd, args, instancesIn(), func(client *dicer.Client, name string) error {
+				return runTask(cmd, "Putting "+name+" on standby", func() (*dicerdv1.Instance, error) {
+					return client.StandbyInstance(cmd.Context(), &dicerdv1.StandbyInstanceRequest{Name: name})
+				}, func(instance *dicerdv1.Instance, took string) string {
+					return fmt.Sprintf("Instance %s put on standby in %s", instance.GetName(), took)
+				})
 			})
 		},
 	}

@@ -50,10 +50,11 @@ was, and whose message says it for a person:
 | `CreateInstance` | [`CreateInstanceRequest`](#createinstancerequest) | [`Instance`](#instance) | CreateInstance records an instance definition without starting it, unless start is set. It first pulls the image as the request's pull policy says, reporting no progress: to show a pull's progress, call PullImage first. Nothing is recorded if the image cannot be had. |
 | `UpdateInstance` | [`UpdateInstanceRequest`](#updateinstancerequest) | [`Instance`](#instance) | UpdateInstance modifies the definition of a stopped instance. |
 | `RenameInstance` | [`RenameInstanceRequest`](#renameinstancerequest) | [`Instance`](#instance) | RenameInstance changes a stopped instance's name. The instance keeps its ID, its disks and its address; only what people call it changes. |
-| `StartInstance` | [`StartInstanceRequest`](#startinstancerequest) | [`Instance`](#instance) | StartInstance boots a defined instance. |
+| `StartInstance` | [`StartInstanceRequest`](#startinstancerequest) | [`Instance`](#instance) | StartInstance boots a defined instance, or resumes one on standby. |
 | `StopInstance` | [`StopInstanceRequest`](#stopinstancerequest) | [`Instance`](#instance) | StopInstance shuts a running instance down, keeping its definition, overlay disk and address. |
 | `PauseInstance` | [`PauseInstanceRequest`](#pauseinstancerequest) | [`Instance`](#instance) | PauseInstance halts a running instance's vCPUs, keeping it resident. |
 | `ResumeInstance` | [`ResumeInstanceRequest`](#resumeinstancerequest) | [`Instance`](#instance) | ResumeInstance continues a paused instance. |
+| `StandbyInstance` | [`StandbyInstanceRequest`](#standbyinstancerequest) | [`Instance`](#instance) | StandbyInstance freezes a running or paused instance to disk and ends its hypervisor, freeing the CPU and memory it holds, and keeping its address, host ports and writable volumes. StartInstance resumes it where it was; StopInstance discards what was frozen. |
 | `ResizeInstance` | [`ResizeInstanceRequest`](#resizeinstancerequest) | [`Instance`](#instance) | ResizeInstance changes a running instance's vCPUs and memory without restarting it, within its max_vcpus and max_memory_bytes, and its definition with them, so it keeps them when it next starts. Memory can be resized from what the instance booted with up to its maximum, in steps of 2 MiB, and waits for the guest where the hypervisor can tell: Firecracker can, Cloud Hypervisor cannot; Firecracker also needs a host CPU with at least 40 bits of physical address. vCPUs can be resized on Cloud Hypervisor only. The guest's kernel must support virtio-mem and CPU hotplug. Growing needs room on the host (RESOURCE_EXHAUSTED). If the guest fails the resize, the instance holds the larger of the two sizes until it next starts. |
 | `DeleteInstance` | [`DeleteInstanceRequest`](#deleteinstancerequest) | `google.protobuf.Empty` | DeleteInstance removes an instance and its overlay disk. It refuses a running instance unless force is set. |
 | `ListInstances` | [`ListInstancesRequest`](#listinstancesrequest) | [`ListInstancesResponse`](#listinstancesresponse) | ListInstances returns every defined instance. |
@@ -894,6 +895,12 @@ taken from, and never holds the instance's volumes.
 | `size_bytes` | `int64` | What the snapshot occupies on disk, which on a copy-on-write filesystem may be far less than the guest's memory and disk together. |
 | `create_time` | `google.protobuf.Timestamp` |  |
 
+### StandbyInstanceRequest
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `string` |  |
+
 ### StartInstanceRequest
 
 | Field | Type | Description |
@@ -1008,6 +1015,7 @@ EventAction is what happened to the resource.
 | `EVENT_ACTION_IMPORTED` | 19 | A kernel, recorded by its URL to be fetched on first use. |
 | `EVENT_ACTION_FETCHED` | 20 | The kernel was downloaded, or copied from a local path, and verified. |
 | `EVENT_ACTION_RESIZED` | 21 | A running instance was given other vCPUs or memory. |
+| `EVENT_ACTION_STANDBY` | 22 | The instance was frozen to disk, and its hypervisor ended. |
 
 ### EventKind
 
@@ -1069,6 +1077,7 @@ InstanceState is where an instance is in its lifecycle.
 | `INSTANCE_STATE_STOPPING` | 5 | A stop is in progress. |
 | `INSTANCE_STATE_RESTARTING` | 6 | The instance ended without being asked to, and its restart policy will start it again at next_restart_time. It holds nothing meanwhile. |
 | `INSTANCE_STATE_FAILED` | 7 | The last operation failed; state_error says why. |
+| `INSTANCE_STATE_STANDBY` | 8 | The guest is frozen to disk, its hypervisor ended: it holds no CPU or memory, and starting it resumes it where it was. |
 
 ### LogSource
 

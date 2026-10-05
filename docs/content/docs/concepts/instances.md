@@ -39,6 +39,10 @@ stateDiagram-v2
   Paused --> Running: resume
   Running --> Stopping: stop
   Paused --> Stopping: stop
+  Running --> Standby: standby
+  Paused --> Standby: standby
+  Standby --> Starting: start, resuming it
+  Standby --> Stopped: stop
   Stopping --> Stopped
   Running --> Stopped: ended cleanly
   Running --> Restarting: ended, to be restarted
@@ -54,6 +58,7 @@ stateDiagram-v2
 | Starting | A start is in progress. |
 | Running | The guest is running. |
 | Paused | The guest's vCPUs are halted, and it stays in memory. |
+| Standby | The guest is frozen to disk and its hypervisor ended, so it holds no CPU or memory. Starting it resumes it where it was. |
 | Stopping | A stop is in progress. |
 | Restarting | The instance ended without being asked to, and its [restart policy](../../guides/restarts) will start it again. It holds nothing meanwhile. |
 | Failed | The last start or run failed; the state says why. |
@@ -61,6 +66,26 @@ stateDiagram-v2
 An instance holds its vCPUs and memory while it is starting, running or
 paused. A start that would take more than the host allows is refused; see
 [Capacity](../../guides/capacity).
+
+## Standby
+
+`dicer standby` parks an instance that has nothing to do: its guest's memory
+and device state are written to disk, under the instance's directory, and its
+hypervisor ends, freeing every vCPU and byte of memory it held. Its disk stays
+where it is, and its address, its published host ports and the volumes it
+can write to stay its own: no other instance can take them while it is on
+standby. A host reboot keeps it on standby.
+
+`dicer start` resumes it where it was, its processes running on as if nothing
+had happened but for the time, which is set as it wakes. Resuming takes the
+time to read its memory back, and needs room on the host for its vCPUs and
+memory, as a start does. Connections it had open to the outside have likely
+been dropped by the other end meanwhile. `dicer stop` discards what it froze,
+and the instance boots afresh at its next start; `dicer restart` does both.
+
+What it froze takes as much disk as its memory: its memory is written to disk
+in full. An instance on standby cannot be changed or renamed until it is
+stopped, and its restart policy does not start it when the host boots.
 
 ## How an instance ends
 

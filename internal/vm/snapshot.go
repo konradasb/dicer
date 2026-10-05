@@ -316,7 +316,7 @@ func (m *Manager) restoreMemory(ctx context.Context, instance types.InstanceSpec
 			"a memory snapshot can be restored only where it was taken, or forked", instance.Name, snapshot.IP, snapshot.Name)
 	}
 
-	if err := m.resume(ctx, instance, snapshot); err != nil {
+	if err := m.resume(ctx, instance, m.frozenSnapshot(snapshot)); err != nil {
 		return err
 	}
 
@@ -326,11 +326,29 @@ func (m *Manager) restoreMemory(ctx context.Context, instance types.InstanceSpec
 	return nil
 }
 
-// resume runs instance from a memory snapshot, of the instance or, as a
-// fork, of another, and records it running. On failure the instance is
+// frozenGuest is a guest frozen to disk, to be resumed: a memory snapshot's,
+// or an instance's on standby.
+type frozenGuest struct {
+	// snapshot is what the guest ran with.
+	snapshot types.Snapshot
+	// dir holds the hypervisor's files.
+	dir string
+	// overlay is a copy of the guest's disk to resume it on, or empty to
+	// resume it on the instance's own disk, as standby left it.
+	overlay string
+}
+
+// frozenSnapshot returns the guest a memory snapshot holds.
+func (m *Manager) frozenSnapshot(snapshot types.Snapshot) frozenGuest {
+	return frozenGuest{snapshot: snapshot, dir: m.snapshotDir(snapshot), overlay: m.snapshotOverlayDiskPath(snapshot)}
+}
+
+// resume runs instance from a frozen guest: its own, or, as a fork,
+// another's. It records the instance running. On failure the instance is
 // marked failed, and keeps the disk it had. The caller must hold the
 // instance lock.
-func (m *Manager) resume(ctx context.Context, instance types.InstanceSpec, snapshot types.Snapshot) (err error) {
+func (m *Manager) resume(ctx context.Context, instance types.InstanceSpec, frozen frozenGuest) (err error) {
+	snapshot := frozen.snapshot
 	starter, err := m.snapshotStarter(snapshot)
 	if err != nil {
 		return err
@@ -352,7 +370,7 @@ func (m *Manager) resume(ctx context.Context, instance types.InstanceSpec, snaps
 		return err
 	}
 
-	vmm, undo, err := m.restore(ctx, instance, snapshot, starter, image)
+	vmm, undo, err := m.restore(ctx, instance, frozen, starter, image)
 	if err != nil {
 		return err
 	}
@@ -377,14 +395,14 @@ func (m *Manager) resume(ctx context.Context, instance types.InstanceSpec, snaps
 	return nil
 }
 
-// restore recreates the disks and TAP device a memory snapshot's devices
-// refer to, restores the VMM and resumes the guest. It tells the guest the
-// time and, if it is a fork of another instance's, its own identity. The
-// returned function undoes all of it, putting back the overlay disk the
-// instance had.
+// restore recreates the disks and TAP device a frozen guest's devices refer
+// to, restores the VMM and resumes the guest. It tells the guest the time
+// and, if it is a fork of another instance's, its own identity. The returned
+// function undoes all of it, putting back the overlay disk the instance had.
 func (m *Manager) restore(
-	ctx context.Context, instance types.InstanceSpec, snapshot types.Snapshot, starter hypervisor.Starter, image *types.Image,
+	ctx context.Context, instance types.InstanceSpec, frozen frozenGuest, starter hypervisor.Starter, image *types.Image,
 ) (*process.Process, func(), error) {
+	snapshot := frozen.snapshot
 	cu := cleanup.Make(func() {})
 	defer cu.Clean()
 
@@ -393,20 +411,22 @@ func (m *Manager) restore(
 	}
 	cu.Add(func() { _ = m.removeRuntimeDir(instance.ID) })
 
-	// The disk is kept under a second name until the restore succeeds. One
-	// already there is from a restore a crash interrupted. A fork has no
-	// disk yet to keep.
-	overlay, kept := m.overlayDiskPath(instance), m.keptOverlayDiskPath(instance)
-	_ = os.Remove(kept)
-	switch err := os.Link(overlay, kept); {
-	case err == nil:
-		cu.Add(func() { _ = os.Rename(kept, overlay) })
-	case !errors.Is(err, fs.ErrNotExist):
-		return nil, nil, fmt.Errorf("keep overlay disk: %w", err)
-	}
+	if frozen.overlay != "" {
+		// The disk is kept under a second name until the restore succeeds.
+		// One already there is from a restore a crash interrupted. A fork
+		// has no disk yet to keep.
+		overlay, kept := m.overlayDiskPath(instance), m.keptOverlayDiskPath(instance)
+		_ = os.Remove(kept)
+		switch err := os.Link(overlay, kept); {
+		case err == nil:
+			cu.Add(func() { _ = os.Rename(kept, overlay) })
+		case !errors.Is(err, fs.ErrNotExist):
+			return nil, nil, fmt.Errorf("keep overlay disk: %w", err)
+		}
 
-	if err := diskfile.Copy(m.snapshotOverlayDiskPath(snapshot), overlay); err != nil {
-		return nil, nil, fmt.Errorf("restore overlay disk: %w", err)
+		if err := diskfile.Copy(frozen.overlay, overlay); err != nil {
+			return nil, nil, fmt.Errorf("restore overlay disk: %w", err)
+		}
 	}
 
 	// The restored VMM keeps the disks it was snapshotted with; only the
@@ -440,7 +460,7 @@ func (m *Manager) restore(
 	restoreCtx, cancel := context.WithTimeout(ctx, memoryTransferTimeout(snapshot.MemoryBytes))
 	defer cancel()
 	spec := hypervisor.RestoreSpec{Console: hypervisor.ConsoleConfig{Path: serialLogFile}, TAPDevice: setup.nic.TAPDevice}
-	vmm, hv, err := starter.RestoreVM(restoreCtx, m.hypervisorSocketPath(instance.ID), m.snapshotDir(snapshot), spec)
+	vmm, hv, err := starter.RestoreVM(restoreCtx, m.hypervisorSocketPath(instance.ID), frozen.dir, spec)
 	if err != nil {
 		return nil, nil, fmt.Errorf("restore vm: %w", err)
 	}

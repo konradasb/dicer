@@ -52,7 +52,7 @@ service DaemonService {
   // RenameInstance changes a stopped instance's name. The instance keeps its
   // ID, its disks and its address; only what people call it changes.
   rpc RenameInstance(RenameInstanceRequest) returns (Instance);
-  // StartInstance boots a defined instance.
+  // StartInstance boots a defined instance, or resumes one on standby.
   rpc StartInstance(StartInstanceRequest) returns (Instance);
   // StopInstance shuts a running instance down, keeping its definition,
   // overlay disk and address.
@@ -61,6 +61,11 @@ service DaemonService {
   rpc PauseInstance(PauseInstanceRequest) returns (Instance);
   // ResumeInstance continues a paused instance.
   rpc ResumeInstance(ResumeInstanceRequest) returns (Instance);
+  // StandbyInstance freezes a running or paused instance to disk and ends
+  // its hypervisor, freeing the CPU and memory it holds, and keeping its
+  // address, host ports and writable volumes. StartInstance resumes it where
+  // it was; StopInstance discards what was frozen.
+  rpc StandbyInstance(StandbyInstanceRequest) returns (Instance);
   // ResizeInstance changes a running instance's vCPUs and memory without
   // restarting it, within its max_vcpus and max_memory_bytes, and its
   // definition with them, so it keeps them when it next starts. Memory can
@@ -220,6 +225,9 @@ enum InstanceState {
   INSTANCE_STATE_RESTARTING = 6;
   // The last operation failed; state_error says why.
   INSTANCE_STATE_FAILED = 7;
+  // The guest is frozen to disk, its hypervisor ended: it holds no CPU or
+  // memory, and starting it resumes it where it was.
+  INSTANCE_STATE_STANDBY = 8;
 }
 
 // InitMode is how the guest starts an instance's command.
@@ -352,6 +360,8 @@ enum EventAction {
   EVENT_ACTION_FETCHED = 20;
   // A running instance was given other vCPUs or memory.
   EVENT_ACTION_RESIZED = 21;
+  // The instance was frozen to disk, and its hypervisor ended.
+  EVENT_ACTION_STANDBY = 22;
 
   // A snapshot's creation and deletion are EVENT_ACTION_CREATED and
   // EVENT_ACTION_DELETED of an EVENT_KIND_SNAPSHOT.
@@ -645,6 +655,10 @@ message PauseInstanceRequest {
 }
 
 message ResumeInstanceRequest {
+  string name = 1;
+}
+
+message StandbyInstanceRequest {
   string name = 1;
 }
 

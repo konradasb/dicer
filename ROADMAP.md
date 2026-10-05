@@ -23,7 +23,7 @@ expose them.
 
 | Feature | Description |
 |---------|-------------|
-| Standby | Snapshot and stop in one operation, freeing a VM's memory while keeping it ready to resume; optionally automatic for idle instances |
+| Automatic standby | Put an instance on standby once it has been idle for a while, by a policy of its own |
 | Lazy restore | Restore a snapshot with guest memory paged in on demand (userfaultfd), so resuming takes milliseconds rather than the time to read all of memory |
 
 ### Devices and hypervisors

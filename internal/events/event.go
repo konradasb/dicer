@@ -38,6 +38,10 @@ const (
 	ActionPaused  Action = "paused"
 	ActionResumed Action = "resumed"
 
+	// ActionStandby is an instance frozen to disk, its VMM ended. A start
+	// resumes it, and is recorded as ActionStarted.
+	ActionStandby Action = "standby"
+
 	// ActionExited is an instance whose guest ended cleanly, of its own
 	// accord; ActionDied one whose guest ended in failure.
 	ActionExited Action = "exited"

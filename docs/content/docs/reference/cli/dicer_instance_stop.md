@@ -4,7 +4,8 @@ title: "dicer instance stop"
 description: "Stop one or more running instances, keeping their definitions and disks"
 ---
 
-Stop one or more running instances, keeping their definitions and disks.
+Stops each instance, keeping its definition, disk and address. An instance on
+standby is stopped by discarding what it froze, so that it boots afresh.
 
 ## Usage
 

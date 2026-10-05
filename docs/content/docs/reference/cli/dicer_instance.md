@@ -23,7 +23,8 @@ Manage instances.
 | [`dicer instance resume`]({{< relref "/docs/reference/cli/dicer_instance_resume" >}}) | Resume one or more paused instances. |
 | [`dicer instance run`]({{< relref "/docs/reference/cli/dicer_instance_run" >}}) | Create an instance from an image and start it. |
 | [`dicer instance show`]({{< relref "/docs/reference/cli/dicer_instance_show" >}}) | Show everything about one or more instances. |
-| [`dicer instance start`]({{< relref "/docs/reference/cli/dicer_instance_start" >}}) | Start one or more defined instances. |
+| [`dicer instance standby`]({{< relref "/docs/reference/cli/dicer_instance_standby" >}}) | Freeze one or more running instances to disk, freeing their CPU and memory. |
+| [`dicer instance start`]({{< relref "/docs/reference/cli/dicer_instance_start" >}}) | Start one or more defined instances, or resume them from standby. |
 | [`dicer instance stats`]({{< relref "/docs/reference/cli/dicer_instance_stats" >}}) | Show what instances use of the host, live. |
 | [`dicer instance stop`]({{< relref "/docs/reference/cli/dicer_instance_stop" >}}) | Stop one or more running instances, keeping their definitions and disks. |
 | [`dicer instance top`]({{< relref "/docs/reference/cli/dicer_instance_top" >}}) | List the processes running in an instance. |

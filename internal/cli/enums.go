@@ -77,6 +77,7 @@ const (
 	stateStarting   = dicerdv1.InstanceState_INSTANCE_STATE_STARTING
 	stateRunning    = dicerdv1.InstanceState_INSTANCE_STATE_RUNNING
 	statePaused     = dicerdv1.InstanceState_INSTANCE_STATE_PAUSED
+	stateStandby    = dicerdv1.InstanceState_INSTANCE_STATE_STANDBY
 	stateStopping   = dicerdv1.InstanceState_INSTANCE_STATE_STOPPING
 	stateRestarting = dicerdv1.InstanceState_INSTANCE_STATE_RESTARTING
 	stateFailed     = dicerdv1.InstanceState_INSTANCE_STATE_FAILED

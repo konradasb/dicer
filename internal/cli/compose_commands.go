@@ -385,11 +385,11 @@ func startInstance(s *composeSession, name string, out *lineWriter) error {
 	return nil
 }
 
-// stopService stops a service's instance if it is running, paused, starting
-// or restarting.
+// stopService stops a service's instance if it is running, paused,
+// starting, restarting or on standby.
 func stopService(s *composeSession, instance *dicerdv1.Instance, out *lineWriter) error {
 	switch instance.GetState() {
-	case stateRunning, statePaused, stateStarting, stateRestarting:
+	case stateRunning, statePaused, stateStarting, stateRestarting, stateStandby:
 	default:
 		return nil
 	}

@@ -13,8 +13,10 @@ import (
 )
 
 // Stop shuts down an instance and releases its host resources, keeping its
-// definition, disk and address. It cancels any pending restart and sets
-// StoppedByUser. Stopping a stopped instance is not an error.
+// definition, disk and address. An instance on standby is stopped by
+// discarding what it has frozen, so that it boots afresh. It cancels any
+// pending restart and sets StoppedByUser. Stopping a stopped instance is not
+// an error.
 func (m *Manager) Stop(ctx context.Context, instance types.InstanceSpec) (err error) {
 	started := time.Now()
 	defer func() { m.observeOperation(operationStop, started, err) }()
@@ -30,7 +32,16 @@ func (m *Manager) Stop(ctx context.Context, instance types.InstanceSpec) (err er
 	if err != nil {
 		return err
 	}
-	if status.State == types.InstanceStateStopped {
+	if err := m.discardStandby(instance); err != nil {
+		return err
+	}
+	switch status.State {
+	case types.InstanceStateStopped:
+		return nil
+	case types.InstanceStateStandby:
+		m.record(instance, events.ActionStopped, "Stopped instance: discarded what it had frozen on standby", nil)
+		m.logger.InfoContext(ctx, "stopped instance", "instance", instance.Name)
+		m.scheduleRemoval(ctx, instance)
 		return nil
 	}
 

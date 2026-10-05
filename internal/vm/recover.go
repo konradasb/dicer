@@ -86,7 +86,7 @@ func (m *Manager) recoverInstance(ctx context.Context, instance types.InstanceSp
 	}
 
 	switch status.State {
-	case types.InstanceStateStopped, types.InstanceStateFailed:
+	case types.InstanceStateStopped, types.InstanceStateFailed, types.InstanceStateStandby:
 		return recoveryNone
 	case types.InstanceStateRestarting:
 		m.scheduleRestart(ctx, instance.ID, status.NextRestartAt)

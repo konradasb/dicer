@@ -11,7 +11,8 @@ import (
 )
 
 // An instance's files live in two places: the persistent instance directory,
-// keyed by name, holds the overlay disk and console log; the runtime
+// keyed by name, holds the overlay disk, console log and, on standby, its
+// frozen guest; the runtime
 // directory under RunDir, keyed by ID, holds the status, sockets, config and
 // status disks and the VMM's log.
 //
@@ -21,6 +22,7 @@ import (
 // restores into any instance's runtime directory: the same instance's after
 // a rename, or another's.
 const (
+	standbyDirName       = "standby"
 	overlayDiskFile      = "overlay.img"
 	serialLogFile        = "serial.log"
 	statusFile           = "state.json"
@@ -45,6 +47,11 @@ func (m *Manager) overlayDiskPath(instance types.InstanceSpec) string {
 // a restore replaces it, until the restore succeeds.
 func (m *Manager) keptOverlayDiskPath(instance types.InstanceSpec) string {
 	return m.overlayDiskPath(instance) + ".kept"
+}
+
+// standbyDir returns the directory an instance on standby is frozen in.
+func (m *Manager) standbyDir(instance types.InstanceSpec) string {
+	return filepath.Join(m.instanceDir(instance), standbyDirName)
 }
 
 // serialLogPath returns the file an instance's serial console is written to.

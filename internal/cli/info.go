@@ -19,7 +19,7 @@ import (
 // stateOrder is the order instance states are summarised in: what is using
 // the host first, what is not last.
 var stateOrder = []dicerdv1.InstanceState{
-	stateRunning, statePaused, stateStarting, stateStopping, stateRestarting, stateFailed, stateStopped,
+	stateRunning, statePaused, stateStarting, stateStopping, stateRestarting, stateStandby, stateFailed, stateStopped,
 }
 
 func newInfoCommand() *cobra.Command {

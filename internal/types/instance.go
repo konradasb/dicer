@@ -239,6 +239,11 @@ const (
 	// InstanceStatePaused means the vCPUs are halted but the VM is resident.
 	InstanceStatePaused InstanceState = "Paused"
 
+	// InstanceStateStandby means the guest is frozen to disk, its VMM ended:
+	// it holds no CPU or memory, but keeps its address, host ports and
+	// writable volumes, and a start resumes it where it was.
+	InstanceStateStandby InstanceState = "Standby"
+
 	// InstanceStateStopping means a shutdown is in progress.
 	InstanceStateStopping InstanceState = "Stopping"
 
@@ -260,6 +265,7 @@ func InstanceStates() []InstanceState {
 		InstanceStateStarting,
 		InstanceStateRunning,
 		InstanceStatePaused,
+		InstanceStateStandby,
 		InstanceStateStopping,
 		InstanceStateRestarting,
 		InstanceStateFailed,
@@ -280,6 +286,7 @@ var allowedTransitions = map[InstanceState][]InstanceState{
 		InstanceStateRunning, InstanceStateStopping, InstanceStateStopped,
 		InstanceStateRestarting, InstanceStateFailed,
 	},
+	InstanceStateStandby:  {InstanceStateStarting},
 	InstanceStateStopping: {InstanceStateStopped, InstanceStateFailed},
 	InstanceStateRestarting: {
 		InstanceStateStarting, InstanceStateStopping, InstanceStateFailed,
@@ -298,6 +305,13 @@ func (s InstanceState) CanTransitionTo(target InstanceState) bool {
 // memory it was admitted with: starting, running or paused.
 func (s InstanceState) HoldsResources() bool {
 	return s == InstanceStateStarting || s.IsActive()
+}
+
+// HoldsPortsAndVolumes reports whether an instance in the state keeps its
+// published host ports and writable volumes to itself: one that holds
+// resources, is stopping, or is on standby, to resume with them.
+func (s InstanceState) HoldsPortsAndVolumes() bool {
+	return s.HoldsResources() || s == InstanceStateStopping || s == InstanceStateStandby
 }
 
 // IsActive reports whether the state implies a live VMM.

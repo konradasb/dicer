@@ -329,6 +329,23 @@ func (h *instanceHandler) PauseInstance(
 	return h.view(instance)
 }
 
+// StandbyInstance freezes a running or paused instance to disk. See
+// vm.Manager.Standby.
+func (h *instanceHandler) StandbyInstance(
+	ctx context.Context, req *dicerdv1.StandbyInstanceRequest,
+) (*dicerdv1.Instance, error) {
+	instance, err := h.definitions.Instance(req.GetName())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := h.instances.Standby(ctx, instance); err != nil {
+		return nil, err
+	}
+
+	return h.view(instance)
+}
+
 // ResizeInstance changes a running instance's vCPUs and memory. See
 // vm.Manager.Resize.
 func (h *instanceHandler) ResizeInstance(
