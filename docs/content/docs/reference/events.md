@@ -1,12 +1,12 @@
 ---
 title: Events
 weight: 6
-description: "Every event Dicer records of instances, images, networks, volumes and kernels, with its attributes."
+description: "Every event Dicer records of instances, snapshots, images, networks, volumes and kernels, with its attributes."
 icon: bell
 ---
 
-The events the daemon records of what happened to the instances, images,
-networks, volumes and kernels on its host, and why.
+The events the daemon records of what happened to the instances, snapshots,
+images, networks, volumes and kernels on its host, and why.
 [`dicer events`](../cli/dicer_events) shows them, and `dicer inspect` an
 instance's last ten; each event below is named as they print it, and by its
 `action` in `--format json`.
@@ -16,7 +16,7 @@ instance's last ten; each event below is named as they print it, and by its
 | Field | Description |
 |---|---|
 | `time` | When it happened. |
-| `kind` | What it is about: an instance, an image, a network, a volume or a kernel. |
+| `kind` | What it is about: an instance, a snapshot, an image, a network, a volume or a kernel. |
 | `id` | The resource's ID, which tells apart two resources that had the same name at different times. An image has none: it is known by its name. |
 | `name` | The resource's name. An image's is its full reference, such as `docker.io/library/busybox:latest`, which `dicer events` shortens to `busybox:latest`. |
 | `action` | What happened: one of the events below. |
@@ -58,14 +58,24 @@ In the file, `kind` and `action` are lower case, `instance` and `died`;
 | Restarting | `EVENT_ACTION_RESTARTING` | `delay`, `restart_count` | The instance ended, Exited or Died just before, and its restart policy will start it again. `delay` is how long it waits first, as a Go duration, and `restart_count` which restart in a row this is. |
 | Healthy | `EVENT_ACTION_HEALTHY` | | The instance's health check passed, after it had been starting or unhealthy. The message has the first line of the check's output. |
 | Unhealthy | `EVENT_ACTION_UNHEALTHY` | `failing_streak` | The instance's health check failed `failing_streak` times in a row, its retries. The message has the first line of the last check's output. |
-| Snapshot created | `EVENT_ACTION_SNAPSHOT_CREATED` | `snapshot`, `size_bytes` | A snapshot of the instance's memory and disk was taken. `snapshot` is its name and `size_bytes` its size. |
-| Snapshot restored | `EVENT_ACTION_SNAPSHOT_RESTORED` | `snapshot` | The instance was started from snapshot `snapshot`, its memory and disk rolled back to when it was taken. |
-| Snapshot deleted | `EVENT_ACTION_SNAPSHOT_DELETED` | `snapshot` | Snapshot `snapshot` was deleted. |
-| Deleted | `EVENT_ACTION_DELETED` | | The instance was deleted: its definition, disks and snapshots removed, and its address on its network released. |
+| Snapshot restored | `EVENT_ACTION_SNAPSHOT_RESTORED` | `snapshot` | The instance was put back as snapshot `snapshot` holds it. From a memory snapshot, it was started with its memory and disk rolled back to when the snapshot was taken; from a disk snapshot, its disk was rolled back, and it was left stopped. |
+| Deleted | `EVENT_ACTION_DELETED` | | The instance was deleted: its definition and disks removed, and its address on its network released. Its snapshots are kept. |
 
 An instance that crashes and is restarted by its policy records Died,
 Restarting and Started in turn, so `dicer events --name NAME` is its
 timeline: why it ended, how long it waited, and how it came back.
+
+## Snapshots
+
+Every snapshot event has among its attributes the `instance` it was taken of,
+by the name it had then.
+
+| Event | `action` | Attributes | What it means |
+|---|---|---|---|
+| Created | `EVENT_ACTION_CREATED` | `instance`, `kind`, `size_bytes`, `paused_seconds` | The snapshot was taken with `dicer snapshot create`. `kind` is `memory`, of a running or paused instance's memory and disk, or `disk`, of a stopped instance's disk alone; `size_bytes` is the space it takes. `paused_seconds` is how long a running instance was paused to take it, which the copy of its disk can make long where the filesystem cannot reflink; a snapshot that paused nothing has none. |
+| Deleted | `EVENT_ACTION_DELETED` | `instance` | The snapshot was deleted, and its files with it. |
+
+Restoring a snapshot is an event of its instance: Snapshot restored, above.
 
 ## Images
 

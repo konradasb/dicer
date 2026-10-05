@@ -97,8 +97,14 @@ var architectures = enum[string, dicerdv1.Architecture]{"architecture", map[stri
 	types.ArchitectureAArch64: dicerdv1.Architecture_ARCHITECTURE_AARCH64,
 }}
 
+var snapshotKinds = enum[types.SnapshotKind, dicerdv1.SnapshotKind]{"snapshot kind", map[types.SnapshotKind]dicerdv1.SnapshotKind{
+	types.SnapshotKindMemory: dicerdv1.SnapshotKind_SNAPSHOT_KIND_MEMORY,
+	types.SnapshotKindDisk:   dicerdv1.SnapshotKind_SNAPSHOT_KIND_DISK,
+}}
+
 var eventKinds = enum[events.Kind, dicerdv1.EventKind]{"event kind", map[events.Kind]dicerdv1.EventKind{
 	events.KindInstance: dicerdv1.EventKind_EVENT_KIND_INSTANCE,
+	events.KindSnapshot: dicerdv1.EventKind_EVENT_KIND_SNAPSHOT,
 	events.KindImage:    dicerdv1.EventKind_EVENT_KIND_IMAGE,
 	events.KindNetwork:  dicerdv1.EventKind_EVENT_KIND_NETWORK,
 	events.KindVolume:   dicerdv1.EventKind_EVENT_KIND_VOLUME,
@@ -120,9 +126,7 @@ var eventActions = enum[events.Action, dicerdv1.EventAction]{"event action", map
 	events.ActionResized:          dicerdv1.EventAction_EVENT_ACTION_RESIZED,
 	events.ActionHealthy:          dicerdv1.EventAction_EVENT_ACTION_HEALTHY,
 	events.ActionUnhealthy:        dicerdv1.EventAction_EVENT_ACTION_UNHEALTHY,
-	events.ActionSnapshotCreated:  dicerdv1.EventAction_EVENT_ACTION_SNAPSHOT_CREATED,
 	events.ActionSnapshotRestored: dicerdv1.EventAction_EVENT_ACTION_SNAPSHOT_RESTORED,
-	events.ActionSnapshotDeleted:  dicerdv1.EventAction_EVENT_ACTION_SNAPSHOT_DELETED,
 	events.ActionPulled:           dicerdv1.EventAction_EVENT_ACTION_PULLED,
 	events.ActionCollected:        dicerdv1.EventAction_EVENT_ACTION_COLLECTED,
 	events.ActionImported:         dicerdv1.EventAction_EVENT_ACTION_IMPORTED,

@@ -37,8 +37,9 @@ func LogPath(socketPath string) string {
 }
 
 // StartProcess launches a VMM detached from the daemon and waits for it to
-// serve on socketPath. ctx bounds only the wait; on failure the process is
-// killed and the error includes its log.
+// serve on socketPath. The VMM runs in the directory holding socketPath, so
+// that relative paths given to it resolve there. ctx bounds only the wait;
+// on failure the process is killed and the error includes its log.
 func StartProcess(ctx context.Context, socketPath, binaryPath string, args ...string) (*process.Process, error) {
 	if socketInUse(socketPath) {
 		return nil, fmt.Errorf("socket %s is already in use; is a hypervisor already running?", socketPath)
@@ -60,6 +61,7 @@ func StartProcess(ctx context.Context, socketPath, binaryPath string, args ...st
 	defer func() { _ = logFile.Close() }()
 
 	cmd := exec.Command(binaryPath, args...) //nolint:noctx // the VMM must outlive ctx; see above
+	cmd.Dir = filepath.Dir(socketPath)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	// A process group of its own, so signals aimed at the daemon's group do

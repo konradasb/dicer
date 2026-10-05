@@ -4,6 +4,7 @@
 package cloudhypervisor
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,7 +16,8 @@ import (
 	"github.com/konradasb/dicer/internal/hypervisor"
 )
 
-// apiTimeout bounds each request to the VMM's API.
+// apiTimeout bounds a request to the VMM's API whose context has no
+// deadline.
 const apiTimeout = 30 * time.Second
 
 // Hypervisor controls one Cloud Hypervisor VMM over its API socket.
@@ -36,7 +38,6 @@ func NewHypervisor(socketPath string) *Hypervisor {
 			},
 			DisableKeepAlives: true,
 		},
-		Timeout: apiTimeout,
 	}
 	client := &Client{Server: "http://localhost/api/v1/", Client: statusCheckingClient{httpClient}}
 	return &Hypervisor{client: &ClientWithResponses{ClientInterface: client}}
@@ -177,23 +178,36 @@ func (h *Hypervisor) ResizeVMMemory(ctx context.Context, bytes int64) error {
 
 // statusCheckingClient is an HTTP client that turns a response with a
 // failure status into a statusError, so every API call reports failure
-// through its error alone.
+// through its error alone, and bounds a request whose context has no
+// deadline by apiTimeout.
 type statusCheckingClient struct {
 	*http.Client
 }
 
 // Do sends req, returning a statusError for a response with a status other
-// than 2xx.
+// than 2xx. The body is read before Do returns, while the request's
+// timeout still allows it.
 func (c statusCheckingClient) Do(req *http.Request) (*http.Response, error) {
+	if _, ok := req.Context().Deadline(); !ok {
+		ctx, cancel := context.WithTimeout(req.Context(), apiTimeout)
+		defer cancel()
+		req = req.WithContext(ctx)
+	}
+
 	resp, err := c.Client.Do(req)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		defer func() { _ = resp.Body.Close() }()
-		body, _ := io.ReadAll(resp.Body)
 		return nil, &statusError{code: resp.StatusCode, body: body}
 	}
+	resp.Body = io.NopCloser(bytes.NewReader(body))
 	return resp, nil
 }
 

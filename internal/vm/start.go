@@ -72,7 +72,7 @@ func (m *Manager) boot(ctx context.Context, instance types.InstanceSpec, restart
 	cu := cleanup.Make(func() {})
 	defer cu.Clean()
 
-	if err := m.prepareRuntimeDir(instance.ID); err != nil {
+	if err := m.prepareRuntimeDir(instance); err != nil {
 		return err
 	}
 	cu.Add(func() { _ = m.removeRuntimeDir(instance.ID) })
@@ -194,13 +194,15 @@ const MaxVolumeMounts = 'z' - 'e' + 1
 
 // vmSpec is the specification instance boots with. Disk order matters: image,
 // overlay, config, status, then volumes. Each disk has the instance's disk
-// rate limits.
+// rate limits. The instance's own files are named relative to its runtime
+// directory, where the VMM runs; the image and volumes, which are not the
+// instance's alone, by their absolute paths.
 func (m *Manager) vmSpec(instance types.InstanceSpec, b bootAssets, nic hypervisor.NetworkInterfaceConfig) hypervisor.VMSpec {
 	disks := append([]hypervisor.DiskConfig{
 		{Path: b.image.DiskPath, ReadOnly: true},
-		{Path: m.overlayDiskPath(instance)},
-		{Path: m.configDiskPath(instance.ID), ReadOnly: true},
-		{Path: m.statusDiskPath(instance.ID)},
+		{Path: overlayDiskFile},
+		{Path: configDiskFile, ReadOnly: true},
+		{Path: statusDiskFile},
 	}, b.volumeDisks...)
 	for i := range disks {
 		disks[i].RateLimitBytesPerSecond = instance.DiskBytesPerSecond
@@ -220,10 +222,10 @@ func (m *Manager) vmSpec(instance types.InstanceSpec, b bootAssets, nic hypervis
 		},
 		Disks:             disks,
 		NetworkInterfaces: []hypervisor.NetworkInterfaceConfig{nic},
-		Console:           hypervisor.ConsoleConfig{Path: m.serialLogPath(instance)},
+		Console:           hypervisor.ConsoleConfig{Path: serialLogFile},
 		Vsock: &hypervisor.VsockConfig{
 			CID:        uint32(vsockCID(instance.ID)),
-			SocketPath: m.vsockPath(instance.ID),
+			SocketPath: vsockSocketFile,
 		},
 	}
 }

@@ -129,14 +129,13 @@ func TestRestoreSnapshotPublishesPorts(t *testing.T) {
 	h.withPorts(types.PortMapping{HostPort: 8080, GuestPort: 80})
 	h.running(t)
 
-	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "good"); err != nil {
+	snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "good")
+	if err != nil {
 		t.Fatalf("CreateSnapshot: %v", err)
 	}
-	if err := h.manager.removeRuntimeDir(h.instance.ID); err != nil {
-		t.Fatal(err)
-	}
+	h.stopped(t)
 
-	if err := h.manager.RestoreSnapshot(t.Context(), h.instance, "good"); err != nil {
+	if _, err := h.manager.RestoreSnapshot(t.Context(), snapshot); err != nil {
 		t.Fatalf("RestoreSnapshot: %v", err)
 	}
 	if _, ok := h.hostNetwork.published[h.instance.ID]; !ok {

@@ -38,7 +38,7 @@ func TestParseSince(t *testing.T) {
 }
 
 // testEvent is an event about the instance grafana. action is written as
-// the CLI writes it: "snapshot-created".
+// the CLI writes it: "snapshot-restored".
 func testEvent(action, message string) *dicerdv1.Event {
 	return &dicerdv1.Event{
 		Time: timestamppb.New(time.Date(2026, 9, 1, 9, 49, 48, 0, time.Local)),
@@ -211,12 +211,12 @@ func TestEventLabel(t *testing.T) {
 
 // The API's own values are what scripts match on: JSON keeps them.
 func TestJSONEventsKeepTheAPIsValues(t *testing.T) {
-	line := writeEvents(t, "json", imageEvent("docker.io/library/busybox:latest", "snapshot-created", "before"))
+	line := writeEvents(t, "json", imageEvent("docker.io/library/busybox:latest", "snapshot-restored", "before"))
 	var record map[string]any
 	if err := json.Unmarshal([]byte(line), &record); err != nil {
 		t.Fatal(err)
 	}
-	if record["action"] != "EVENT_ACTION_SNAPSHOT_CREATED" || record["kind"] != "EVENT_KIND_IMAGE" ||
+	if record["action"] != "EVENT_ACTION_SNAPSHOT_RESTORED" || record["kind"] != "EVENT_KIND_IMAGE" ||
 		record["message"] != "before" ||
 		record["name"] != "docker.io/library/busybox:latest" {
 		t.Errorf("json = %s, want the API's values", line)

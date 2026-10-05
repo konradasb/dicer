@@ -14,7 +14,7 @@ import (
 )
 
 // Delete removes an instance and everything it owns: its VM, network
-// resources, address, status and directory. Volumes are kept. An
+// resources, address, status and directory. Volumes and snapshots are kept. An
 // active instance is refused unless force is set.
 func (m *Manager) Delete(ctx context.Context, instance types.InstanceSpec, force bool) (err error) {
 	started := time.Now()
@@ -54,7 +54,7 @@ func (m *Manager) Delete(ctx context.Context, instance types.InstanceSpec, force
 	}
 
 	m.record(instance, events.ActionDeleted,
-		"Deleted instance: removed its definition, disks and snapshots; released its address on network "+instance.NetworkName, nil)
+		"Deleted instance: removed its definition and disks; released its address on network "+instance.NetworkName, nil)
 	m.logger.InfoContext(ctx, "deleted instance", "instance", instance.Name)
 	return nil
 }

@@ -61,11 +61,11 @@ was, and whose message says it for a person:
 | `GetInstanceLogs` | [`GetInstanceLogsRequest`](#getinstancelogsrequest) | stream [`InstanceLogChunk`](#instancelogchunk) | GetInstanceLogs streams an instance's log. The guest's console is kept with the instance, so it can be read after a stop to explain one. |
 | `GetInstanceStats` | [`GetInstanceStatsRequest`](#getinstancestatsrequest) | stream [`GetInstanceStatsResponse`](#getinstancestatsresponse) | GetInstanceStats streams what running and paused instances use of the host, read from their hypervisor processes rather than asked of their guests: a batch a second while it follows, or a single batch. Each batch is read over a second, so the first comes a second after the call. |
 | `ListInstanceProcesses` | [`ListInstanceProcessesRequest`](#listinstanceprocessesrequest) | [`ListInstanceProcessesResponse`](#listinstanceprocessesresponse) | ListInstanceProcesses returns the processes running in a running instance, as its guest sees them: kernel threads are left out, and PIDs are the ones a command run by ExecInstance sees. |
-| `CreateSnapshot` | [`CreateSnapshotRequest`](#createsnapshotrequest) | [`Snapshot`](#snapshot) | CreateSnapshot freezes a running or paused instance to disk: its memory, its device state and a copy of its overlay disk. A running instance is paused for as long as it takes and resumed afterwards. |
-| `ListSnapshots` | [`ListSnapshotsRequest`](#listsnapshotsrequest) | [`ListSnapshotsResponse`](#listsnapshotsresponse) | ListSnapshots returns an instance's snapshots, oldest first. |
+| `CreateSnapshot` | [`CreateSnapshotRequest`](#createsnapshotrequest) | [`Snapshot`](#snapshot) | CreateSnapshot freezes an instance to disk. Of a running or paused instance it takes a memory snapshot: its memory, its device state and a copy of its overlay disk, pausing a running one for as long as it takes. Of a stopped one it takes a disk snapshot, of its overlay disk alone. Volumes are never included, so an instance that can write to one cannot have a memory snapshot taken. |
+| `ListSnapshots` | [`ListSnapshotsRequest`](#listsnapshotsrequest) | [`ListSnapshotsResponse`](#listsnapshotsresponse) | ListSnapshots returns the snapshots, or one instance's, oldest first. |
 | `GetSnapshot` | [`GetSnapshotRequest`](#getsnapshotrequest) | [`Snapshot`](#snapshot) | GetSnapshot returns one snapshot. |
 | `DeleteSnapshot` | [`DeleteSnapshotRequest`](#deletesnapshotrequest) | `google.protobuf.Empty` | DeleteSnapshot removes a snapshot. |
-| `RestoreSnapshot` | [`RestoreSnapshotRequest`](#restoresnapshotrequest) | [`Instance`](#instance) | RestoreSnapshot puts a stopped instance back to the moment a snapshot was taken and resumes it. Anything written to its disk since is discarded. |
+| `RestoreSnapshot` | [`RestoreSnapshotRequest`](#restoresnapshotrequest) | [`Instance`](#instance) | RestoreSnapshot puts the instance a snapshot was taken from, which must be stopped, back as it was then, discarding whatever it has written to its disk since. A memory snapshot resumes the guest where it was, and is refused if the instance's address or mounts have changed; a disk snapshot leaves the instance stopped. |
 | `ExecInstance` | stream [`ExecInstanceRequest`](#execinstancerequest) | stream [`ExecInstanceResponse`](#execinstanceresponse) | ExecInstance runs a command inside a running instance. The first client message must be an ExecInstanceStart; subsequent messages carry stdin data or terminal resize events. |
 | `CopyToInstance` | stream [`CopyToInstanceRequest`](#copytoinstancerequest) | `google.protobuf.Empty` | CopyToInstance writes a file or directory into a running instance. The first message must be a CopyToInstanceStart; the rest carry a tar archive of it, in chunks, which lands at the path as cp would put it. |
 | `CopyFromInstance` | [`CopyFromInstanceRequest`](#copyfrominstancerequest) | stream [`CopyFromInstanceResponse`](#copyfrominstanceresponse) | CopyFromInstance reads a file or directory out of a running instance, as a tar archive in chunks. |
@@ -187,7 +187,7 @@ CopyToInstanceStart is the first message on a CopyToInstance stream.
 | Field | Type | Description |
 |---|---|---|
 | `instance` | `string` | The instance to snapshot. |
-| `name` | `string` | The snapshot's name. Generated from the current time when empty. |
+| `name` | `string` | The snapshot's name. The instance's and the time's when empty, as in web-20260102t150405z. |
 
 ### CreateVolumeRequest
 
@@ -226,8 +226,7 @@ CopyToInstanceStart is the first message on a CopyToInstance stream.
 
 | Field | Type | Description |
 |---|---|---|
-| `instance` | `string` |  |
-| `name` | `string` |  |
+| `name` | `string` | The snapshot's name or ID. |
 
 ### DeleteVolumeRequest
 
@@ -414,8 +413,7 @@ GetEventsResponse is a batch of events, oldest first.
 
 | Field | Type | Description |
 |---|---|---|
-| `instance` | `string` |  |
-| `name` | `string` |  |
+| `name` | `string` | The snapshot's name or ID. |
 
 ### GetVolumeRequest
 
@@ -692,7 +690,7 @@ Kernel is a guest kernel image available to instances.
 
 | Field | Type | Description |
 |---|---|---|
-| `instance` | `string` |  |
+| `instance` | `string` | Lists only the snapshots taken of this instance, if set. |
 
 ### ListSnapshotsResponse
 
@@ -858,8 +856,7 @@ an instance that stays up for ten minutes starts the count again.
 
 | Field | Type | Description |
 |---|---|---|
-| `instance` | `string` |  |
-| `name` | `string` |  |
+| `name` | `string` | The snapshot's name or ID. |
 
 ### ResumeInstanceRequest
 
@@ -869,16 +866,20 @@ an instance that stays up for ten minutes starts the count again.
 
 ### Snapshot
 
-Snapshot is a point-in-time copy of an instance: the guest's memory and
-device state, plus the overlay disk as it was at that moment.
+Snapshot is an instance frozen to disk. It outlives the instance it was
+taken from, and never holds the instance's volumes.
 
 | Field | Type | Description |
 |---|---|---|
+| `id` | `string` |  |
 | `name` | `string` |  |
+| `kind` | [`SnapshotKind`](#snapshotkind) |  |
+| `instance_id` | `string` | The instance it was taken from: its ID, and its name now, or, if it has been deleted, its name then. |
 | `instance_name` | `string` |  |
-| `hypervisor_type` | [`HypervisorType`](#hypervisortype) | The hypervisor that took it, and the version of it. Restoring needs the same version, since snapshot formats are specific to it. |
+| `hypervisor_type` | [`HypervisorType`](#hypervisortype) | The hypervisor that took a memory snapshot, and the version of it. Restoring needs the same version, since snapshot formats are specific to it. Unset for a disk snapshot. |
 | `hypervisor_version` | `string` |  |
-| `memory_bytes` | `int64` | The guest memory the snapshot was taken with. |
+| `vcpus` | `int32` | The vCPUs and memory a memory snapshot's guest had. Unset for a disk snapshot. |
+| `memory_bytes` | `int64` |  |
 | `size_bytes` | `int64` | What the snapshot occupies on disk, which on a copy-on-write filesystem may be far less than the guest's memory and disk together. |
 | `create_time` | `google.protobuf.Timestamp` |  |
 
@@ -990,9 +991,7 @@ EventAction is what happened to the resource.
 | `EVENT_ACTION_RENAMED` | 11 |  |
 | `EVENT_ACTION_HEALTHY` | 12 | The health check reached a verdict. |
 | `EVENT_ACTION_UNHEALTHY` | 13 |  |
-| `EVENT_ACTION_SNAPSHOT_CREATED` | 14 |  |
-| `EVENT_ACTION_SNAPSHOT_RESTORED` | 15 |  |
-| `EVENT_ACTION_SNAPSHOT_DELETED` | 16 |  |
+| `EVENT_ACTION_SNAPSHOT_RESTORED` | 15 | The instance was put back as a snapshot of it holds it. |
 | `EVENT_ACTION_PULLED` | 17 | An image. |
 | `EVENT_ACTION_COLLECTED` | 18 | Garbage collection removed the image. |
 | `EVENT_ACTION_IMPORTED` | 19 | A kernel, recorded by its URL to be fetched on first use. |
@@ -1011,6 +1010,7 @@ EventKind is the kind of resource an event is about.
 | `EVENT_KIND_NETWORK` | 3 |  |
 | `EVENT_KIND_VOLUME` | 4 |  |
 | `EVENT_KIND_KERNEL` | 5 |  |
+| `EVENT_KIND_SNAPSHOT` | 6 |  |
 
 ### HealthStatus
 
@@ -1126,4 +1126,14 @@ started again.
 | `RESTART_MODE_ON_FAILURE` | 2 | Restart it unless it ended cleanly, by its workload exiting 0 or its guest powering off. |
 | `RESTART_MODE_UNLESS_STOPPED` | 3 | Restart it however it ended, and start it when the daemon starts, unless a user stopped it. |
 | `RESTART_MODE_ALWAYS` | 4 | Restart it however it ended, and start it when the daemon starts, even if a user stopped it. |
+
+### SnapshotKind
+
+SnapshotKind is what a snapshot holds.
+
+| Value | Number | Description |
+|---|---|---|
+| `SNAPSHOT_KIND_UNSPECIFIED` | 0 |  |
+| `SNAPSHOT_KIND_MEMORY` | 1 | A running or paused guest's memory and device state, with its overlay disk as it was at the same moment. Restoring it resumes the guest. |
+| `SNAPSHOT_KIND_DISK` | 2 | A stopped instance's overlay disk alone. Restoring it rolls the disk back, and the guest boots from it afresh. |
 

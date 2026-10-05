@@ -139,6 +139,7 @@ func NewCommand() *cobra.Command {
 	)
 	inGroup(groupManagement, cmd,
 		newInstanceCommand(),
+		newSnapshotCommand(),
 		newImageCommand(),
 		newNetworkCommand(),
 		newVolumeCommand(),
@@ -165,7 +166,7 @@ func NewCommand() *cobra.Command {
 }
 
 // forEachGroup calls fn for every command below root that only holds
-// others: 'dicer instance', 'dicer instance snapshot'.
+// others: 'dicer instance', 'dicer snapshot'.
 func forEachGroup(root *cobra.Command, fn func(*cobra.Command)) {
 	for _, c := range root.Commands() {
 		if c.HasSubCommands() {

@@ -25,7 +25,10 @@ type snapshotHandler struct {
 func (h *snapshotHandler) CreateSnapshot(
 	ctx context.Context, req *dicerdv1.CreateSnapshotRequest,
 ) (*dicerdv1.Snapshot, error) {
-	instance, err := h.instance(req.GetInstance())
+	if req.GetInstance() == "" {
+		return nil, errdefs.InvalidArgument("instance is required")
+	}
+	instance, err := h.definitions.Instance(req.GetInstance())
 	if err != nil {
 		return nil, err
 	}
@@ -38,84 +41,88 @@ func (h *snapshotHandler) CreateSnapshot(
 	return snapshotToProto(snapshot, instance.Name), nil
 }
 
-// ListSnapshots lists an instance's snapshots.
+// ListSnapshots lists the snapshots, or those of one instance.
 func (h *snapshotHandler) ListSnapshots(
 	_ context.Context, req *dicerdv1.ListSnapshotsRequest,
 ) (*dicerdv1.ListSnapshotsResponse, error) {
-	instance, err := h.instance(req.GetInstance())
-	if err != nil {
-		return nil, err
+	var instanceID string
+	if req.GetInstance() != "" {
+		instance, err := h.definitions.Instance(req.GetInstance())
+		if err != nil {
+			return nil, err
+		}
+		instanceID = instance.ID
 	}
 
-	snapshots, err := h.instances.Snapshots(instance)
-	if err != nil {
-		return nil, err
-	}
-
-	resp := &dicerdv1.ListSnapshotsResponse{
-		Snapshots: make([]*dicerdv1.Snapshot, 0, len(snapshots)),
-	}
-	for _, snapshot := range snapshots {
-		resp.Snapshots = append(resp.Snapshots, snapshotToProto(snapshot, instance.Name))
+	resp := &dicerdv1.ListSnapshotsResponse{}
+	for _, snapshot := range h.instances.Snapshots() {
+		if instanceID == "" || snapshot.Instance.ID == instanceID {
+			resp.Snapshots = append(resp.Snapshots, snapshotToProto(snapshot, h.instanceName(snapshot)))
+		}
 	}
 
 	return resp, nil
 }
 
-// GetSnapshot returns one of an instance's snapshots.
+// GetSnapshot returns a snapshot.
 func (h *snapshotHandler) GetSnapshot(
 	_ context.Context, req *dicerdv1.GetSnapshotRequest,
 ) (*dicerdv1.Snapshot, error) {
-	instance, err := h.instance(req.GetInstance())
+	snapshot, err := h.snapshot(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	snapshot, err := h.instances.Snapshot(instance, req.GetName())
-	if err != nil {
-		return nil, err
-	}
-
-	return snapshotToProto(snapshot, instance.Name), nil
+	return snapshotToProto(snapshot, h.instanceName(snapshot)), nil
 }
 
-// DeleteSnapshot removes one of an instance's snapshots.
+// DeleteSnapshot removes a snapshot.
 func (h *snapshotHandler) DeleteSnapshot(
 	ctx context.Context, req *dicerdv1.DeleteSnapshotRequest,
 ) (*emptypb.Empty, error) {
-	instance, err := h.instance(req.GetInstance())
+	snapshot, err := h.snapshot(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.instances.DeleteSnapshot(ctx, instance, req.GetName()); err != nil {
+	if err := h.instances.DeleteSnapshot(ctx, snapshot); err != nil {
 		return nil, err
 	}
 
 	return &emptypb.Empty{}, nil
 }
 
-// RestoreSnapshot rolls an instance back to one of its snapshots.
+// RestoreSnapshot puts the instance a snapshot was taken of back as it was.
 func (h *snapshotHandler) RestoreSnapshot(
 	ctx context.Context, req *dicerdv1.RestoreSnapshotRequest,
 ) (*dicerdv1.Instance, error) {
-	instance, err := h.instance(req.GetInstance())
+	snapshot, err := h.snapshot(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.instances.RestoreSnapshot(ctx, instance, req.GetName()); err != nil {
+	instance, err := h.instances.RestoreSnapshot(ctx, snapshot)
+	if err != nil {
 		return nil, err
 	}
 
 	return viewInstance(h.instances, instance)
 }
 
-// instance resolves the instance a snapshot request names.
-func (h *snapshotHandler) instance(nameOrID string) (types.InstanceSpec, error) {
+// snapshot resolves the snapshot a request names.
+func (h *snapshotHandler) snapshot(nameOrID string) (types.Snapshot, error) {
 	if nameOrID == "" {
-		return types.InstanceSpec{}, errdefs.InvalidArgument("instance is required")
+		return types.Snapshot{}, errdefs.InvalidArgument("snapshot name is required")
 	}
 
-	return h.definitions.Instance(nameOrID)
+	return h.instances.Snapshot(nameOrID)
+}
+
+// instanceName returns the name a snapshot's instance has now, or, if it
+// has been deleted, the name it had.
+func (h *snapshotHandler) instanceName(snapshot types.Snapshot) string {
+	if instance, err := h.definitions.Instance(snapshot.Instance.ID); err == nil {
+		return instance.Name
+	}
+	return snapshot.Instance.Name
 }

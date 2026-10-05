@@ -22,10 +22,8 @@ import (
 type storeDaemon struct {
 	*fakeInstanceDaemon
 
-	networkSet, volumeSet, kernelSet, imageSet map[string]bool
-	inUse                                      map[string]bool
-	// snapshots are each instance's, by instance name.
-	snapshots map[string][]string
+	networkSet, volumeSet, kernelSet, imageSet, snapshotSet map[string]bool
+	inUse                                                   map[string]bool
 }
 
 func newStoreDaemon(instances ...*dicerdv1.Instance) *storeDaemon {
@@ -35,8 +33,8 @@ func newStoreDaemon(instances ...*dicerdv1.Instance) *storeDaemon {
 		volumeSet:          make(map[string]bool),
 		kernelSet:          make(map[string]bool),
 		imageSet:           make(map[string]bool),
+		snapshotSet:        make(map[string]bool),
 		inUse:              make(map[string]bool),
-		snapshots:          make(map[string][]string),
 	}
 }
 
@@ -115,34 +113,16 @@ func (d *storeDaemon) DeleteImage(_ context.Context, req *dicerdv1.DeleteImageRe
 	return &emptypb.Empty{}, err
 }
 
-func (d *storeDaemon) ListSnapshots(
-	_ context.Context, req *dicerdv1.ListSnapshotsRequest,
-) (*dicerdv1.ListSnapshotsResponse, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if _, err := d.get(req.GetInstance()); err != nil {
-		return nil, err
-	}
+func (d *storeDaemon) ListSnapshots(context.Context, *dicerdv1.ListSnapshotsRequest) (*dicerdv1.ListSnapshotsResponse, error) {
 	resp := &dicerdv1.ListSnapshotsResponse{}
-	for _, n := range d.snapshots[req.GetInstance()] {
-		resp.Snapshots = append(resp.Snapshots, &dicerdv1.Snapshot{Name: n, InstanceName: req.GetInstance()})
+	for _, n := range d.names(d.snapshotSet) {
+		resp.Snapshots = append(resp.Snapshots, &dicerdv1.Snapshot{Name: n})
 	}
 	return resp, nil
 }
 
 func (d *storeDaemon) DeleteSnapshot(_ context.Context, req *dicerdv1.DeleteSnapshotRequest) (*emptypb.Empty, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	list := d.snapshots[req.GetInstance()]
-	i := slices.Index(list, req.GetName())
-	if i < 0 {
-		return nil, errdefs.NotFound("no snapshot %q of instance %q", req.GetName(), req.GetInstance())
-	}
-	d.record("delete snapshot " + req.GetInstance() + "/" + req.GetName())
-	d.snapshots[req.GetInstance()] = slices.Delete(list, i, i+1)
-	return &emptypb.Empty{}, nil
+	return &emptypb.Empty{}, d.remove("snapshot", d.snapshotSet, req.GetName(), false)
 }
 
 func TestDeleteAllInstances(t *testing.T) {
@@ -177,20 +157,19 @@ func TestDeleteAllInstances(t *testing.T) {
 func TestDeleteAllNeedsNamesOrAll(t *testing.T) {
 	serveFakeDaemon(t, newStoreDaemon(fakeInstances()...))
 
-	for _, args := range [][]string{{"rm", "web", "--all"}, {"network", "rm", "default", "-A"}} {
+	for _, args := range [][]string{{"rm", "web", "--all"}, {"network", "rm", "default", "-A"}, {"snapshot", "rm", "snap", "-A"}} {
 		if _, err := run(t, args...); err == nil || !strings.Contains(err.Error(), "names or --all, not both") {
 			t.Errorf("%q = %v, want names and --all refused together", args, err)
 		}
 	}
 	for _, args := range [][]string{
 		{"remote", "rm", "prod", "--all"},
-		{"instance", "snapshot", "delete", "web", "snap", "--all"},
 	} {
 		if _, err := run(t, args...); err == nil {
 			t.Errorf("%q succeeded, want too many arguments for --all refused", args)
 		}
 	}
-	for _, args := range [][]string{{"rm"}, {"volume", "rm"}, {"instance", "snapshot", "delete", "web"}} {
+	for _, args := range [][]string{{"rm"}, {"volume", "rm"}, {"snapshot", "delete"}} {
 		if _, err := run(t, args...); err == nil {
 			t.Errorf("%q succeeded, want it to need names or --all", args)
 		}
@@ -208,6 +187,9 @@ func TestDeleteAllResources(t *testing.T) {
 	for _, n := range []string{"linux-6.18", "linux-6.12"} {
 		d.kernelSet[n] = true
 	}
+	for _, n := range []string{"web-before", "db-before"} {
+		d.snapshotSet[n] = true
+	}
 	d.inUse["default"] = true
 	d.inUse["linux-6.18"] = true
 	serveFakeDaemon(t, d)
@@ -220,6 +202,7 @@ func TestDeleteAllResources(t *testing.T) {
 		{[]string{"network", "rm", "--all"}, d.networkSet, []string{"default"}},
 		{[]string{"volume", "delete", "-A"}, d.volumeSet, nil},
 		{[]string{"kernel", "rm", "-A", "-y"}, d.kernelSet, []string{"linux-6.18"}},
+		{[]string{"snapshot", "rm", "--all"}, d.snapshotSet, nil},
 	}
 	for _, tt := range tests {
 		out, err := run(t, tt.args...)
@@ -252,32 +235,6 @@ func TestDeleteAllImages(t *testing.T) {
 	}
 	if got := d.names(d.imageSet); len(got) != 0 {
 		t.Errorf("left %q, want none", got)
-	}
-}
-
-func TestDeleteAllSnapshots(t *testing.T) {
-	d := newStoreDaemon(fakeInstances()...)
-	d.snapshots["web"] = []string{"a", "b"}
-	d.snapshots["db"] = []string{"c"}
-	serveFakeDaemon(t, d)
-
-	if out, err := run(t, "instance", "snapshot", "delete", "web", "--all"); err != nil {
-		t.Fatalf("snapshot delete web --all: %v\n%s", err, out)
-	}
-	if len(d.snapshots["web"]) != 0 || len(d.snapshots["db"]) != 1 {
-		t.Errorf("snapshots = %v, want web's gone and db's kept", d.snapshots)
-	}
-
-	out, err := run(t, "instance", "snapshot", "rm", "-A")
-	if err != nil {
-		t.Fatalf("snapshot rm -A: %v\n%s", err, out)
-	}
-	if len(d.snapshots["db"]) != 0 || !strings.Contains(out, "Snapshot c of instance db deleted") {
-		t.Errorf("snapshots = %v, output %q; want every instance's gone", d.snapshots, out)
-	}
-
-	if _, err := run(t, "instance", "snapshot", "delete", "nope", "--all"); err == nil {
-		t.Error("deleting all of an unknown instance's snapshots succeeded")
 	}
 }
 

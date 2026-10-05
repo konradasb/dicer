@@ -153,6 +153,15 @@ func (h *harness) running(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writeStatus: %v", err)
 	}
+
+	// A running guest holds an address on its network.
+	nw, err := h.definitions.Network(h.instance.NetworkName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.manager.networks.Allocate(nw, h.instance.ID, h.instance.StaticIP); err != nil {
+		t.Fatalf("Allocate: %v", err)
+	}
 }
 
 // status reads the instance's status under its lock. Taking the lock

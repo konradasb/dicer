@@ -11,7 +11,9 @@ import (
 	"github.com/konradasb/dicer/internal/process"
 )
 
-// Hypervisor controls a single running virtual machine.
+// Hypervisor controls a single running virtual machine. Each request is
+// bounded by ctx's deadline or, if it has none, by a timeout of the
+// implementation's, long enough for anything but SnapshotVM.
 type Hypervisor interface {
 	// DestroyVM immediately and forcefully destroys the guest without sending
 	// any ACPI signal. Use ShutdownVM for a graceful guest shutdown instead.
@@ -31,7 +33,9 @@ type Hypervisor interface {
 	PauseVM(ctx context.Context) error
 	ResumeVM(ctx context.Context) error
 
-	// SnapshotVM writes the VM's state to destPath. The VM must be paused.
+	// SnapshotVM writes the VM's state, its memory included, into the
+	// directory destPath. The VM must be paused. Writing a large guest's
+	// memory can take minutes: ctx should have a deadline to suit.
 	SnapshotVM(ctx context.Context, destPath string) error
 
 	// ResizeVMMemory sets the guest's memory, from the memory it booted with
@@ -81,7 +85,10 @@ type Capabilities struct {
 
 // Starter launches and connects to VMMs of one hypervisor version. The VMM
 // process must have socketPath among its arguments, so process.Attach can
-// identify it after a daemon restart.
+// identify it after a daemon restart, and runs in the directory holding
+// socketPath: a relative path in a VMSpec resolves there, both when the VM
+// boots and when a snapshot of it is restored, maybe by another VMM in
+// another directory. The caller clears stale sockets from the directory.
 type Starter interface {
 	// Version returns the hypervisor binary version string (e.g. "v49.0").
 	Version() string
@@ -101,9 +108,10 @@ type Starter interface {
 	// then on.
 	StartVM(ctx context.Context, socketPath string, spec VMSpec) (vmm *process.Process, hypervisor Hypervisor, err error)
 
-	// RestoreVM launches a VMM and restores the VM from a snapshot
-	// at the given path, leaving it paused. The console is passed because
-	// not every snapshot carries it.
+	// RestoreVM launches a VMM and restores the VM from the snapshot
+	// SnapshotVM wrote into the directory snapshotPath, leaving it paused.
+	// The console is passed because not every snapshot carries it. As with
+	// SnapshotVM, ctx should have a deadline that suits the guest's memory.
 	RestoreVM(
 		ctx context.Context, socketPath string, snapshotPath string, console ConsoleConfig,
 	) (vmm *process.Process, hypervisor Hypervisor, err error)

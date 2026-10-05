@@ -32,8 +32,11 @@ alone. Change it only through the API, which keeps it consistent.
 ├── instances/<name>/
 │   ├── config.yaml           the instance's definition
 │   ├── overlay.img           its writable disk (sparse)
-│   ├── serial.log            its console log: dicer logs
-│   └── snapshots/<snapshot>/ its snapshots
+│   └── serial.log            its console log: dicer logs
+├── snapshots/<name>/
+│   ├── config.yaml           the snapshot's definition
+│   ├── overlay.img           its copy of its instance's disk
+│   └── ...                   a memory snapshot's memory and device state
 ├── networks/<name>.yaml      network definitions
 ├── allocations/<network>.yaml   which instance has which address
 ├── volumes/
@@ -66,11 +69,16 @@ sparse, so `ls -l` shows their size, and `du` what they take.
     ├── vsock.sock            the channel to the guest's agent
     ├── config.img            the disk dicer-init reads its configuration from
     ├── status.img            the disk the guest reports how it ended on
+    ├── overlay.img           a link to the instance's disk
+    ├── serial.log            a link to its console log
     └── logs/vmm.log          the hypervisor's log: dicer logs --source hypervisor
 ```
 
 A reboot clears it, and every instance is then stopped. `config.img` holds
-the instance's environment and the contents of its file mounts.
+the instance's environment and the contents of its file mounts. The
+hypervisor runs in the directory and is given each of the instance's files
+by its name there, so that a snapshot of it names no directory of the
+instance's.
 
 ## Inside a guest
 

@@ -140,13 +140,18 @@ func allocationToProto(a types.NetworkAllocation, instanceName string) *dicerdv1
 	}
 }
 
-// snapshotToProto converts a snapshot of the named instance.
+// snapshotToProto converts a snapshot of the instance now named
+// instanceName.
 func snapshotToProto(snapshot types.Snapshot, instanceName string) *dicerdv1.Snapshot {
 	return &dicerdv1.Snapshot{
+		Id:                snapshot.ID,
 		Name:              snapshot.Name,
+		Kind:              snapshotKinds.toProto(snapshot.Kind),
+		InstanceId:        snapshot.Instance.ID,
 		InstanceName:      instanceName,
 		HypervisorType:    hypervisorTypes.toProto(snapshot.HypervisorType),
 		HypervisorVersion: snapshot.HypervisorVersion,
+		Vcpus:             int32(snapshot.VCPUs),
 		MemoryBytes:       snapshot.MemoryBytes,
 		SizeBytes:         snapshot.SizeBytes,
 		CreateTime:        timestamppb.New(snapshot.CreatedAt),

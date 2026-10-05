@@ -5,9 +5,7 @@ package firecracker
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -64,14 +62,6 @@ func (s *Starter) StartVM(
 	setup, err := newSetup(spec)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	// Firecracker creates the vsock socket itself and refuses to bind over
-	// a file left by a previous run.
-	if setup.vsock != nil {
-		if err := os.Remove(setup.vsock.UDSPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return nil, nil, fmt.Errorf("remove stale vsock socket: %w", err)
-		}
 	}
 
 	proc, hv, cu, err := s.start(ctx, socketPath)

@@ -92,8 +92,8 @@ definition, disk and address.
   [Resizing a running instance](../../guides/running-workloads#resizing-a-running-instance).
 - `dicer rename` gives a stopped or failed instance a new name. It keeps its ID, disks
   and address.
-- `dicer rm` deletes an instance: its disk, console log, snapshots and
-  address. [Volumes](../storage#volumes) it mounted are kept. A running
+- `dicer rm` deletes an instance: its disk, console log and address. Its
+  [snapshots](../../guides/snapshots) are kept. [Volumes](../storage#volumes) it mounted are kept. A running
   instance is only deleted with `--force`, which stops it first.
 
 An instance created with `--rm` is deleted by the daemon once it stops,

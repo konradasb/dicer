@@ -54,10 +54,10 @@ func newEventsCommand() *cobra.Command {
 	cmd.Flags().BoolP("follow", "f", false, "Keep writing new events as they happen")
 	cmd.Flags().Int32P("tail", "n", 0, "Show only the last events (default: all kept)")
 	cmd.Flags().String("since", "", "Show only events since a time, or for a duration: 2026-09-22, 10:30, 1h")
-	cmd.Flags().String("kind", "", "Show only events about one kind of resource: instance, image, network, volume or kernel")
+	cmd.Flags().String("kind", "", "Show only events about one kind of resource: instance, snapshot, image, network, volume or kernel")
 	cmd.Flags().String("name", "", "Show only events about the resource with this name")
 	cmd.Flags().String("format", "text", "Output format: text or json")
-	_ = cmd.RegisterFlagCompletionFunc("kind", fixedCompletions("instance", "image", "network", "volume", "kernel"))
+	_ = cmd.RegisterFlagCompletionFunc("kind", fixedCompletions("instance", "snapshot", "image", "network", "volume", "kernel"))
 	_ = cmd.RegisterFlagCompletionFunc("format", fixedCompletions("text", "json"))
 
 	return cmd
@@ -231,8 +231,8 @@ func eventAction(e *dicerdv1.Event, width int, p palette) string {
 	return p.event(e.GetAction(), pad(action, width)) + "  " + e.GetMessage()
 }
 
-// eventLabel humanises a kind or action: "snapshot-created" is "Snapshot
-// created".
+// eventLabel humanises a kind or action: "snapshot-restored" is "Snapshot
+// restored".
 func eventLabel(s string) string {
 	return capitalize(strings.ReplaceAll(s, "-", " "))
 }

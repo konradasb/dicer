@@ -1,17 +1,20 @@
 // Copyright 2026 Dicer Authors
 // SPDX-License-Identifier: MIT
 
-// Package filestore stores the instance, network, volume and kernel
-// definitions as YAML files, cached in memory and written through:
+// Package filestore stores the instance, snapshot, network, volume and
+// kernel definitions as YAML files, cached in memory and written through:
 //
 //	/var/lib/dicer/instances/<name>/config.yaml
+//	/var/lib/dicer/snapshots/<name>/config.yaml
 //	/var/lib/dicer/networks/<name>.yaml
 //	/var/lib/dicer/volumes/<name>.yaml
 //	/var/lib/dicer/kernels/<name>.yaml
 package filestore
 
 import (
+	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/konradasb/dicer/internal/defaults"
@@ -33,6 +36,7 @@ type Config struct {
 // if there is no such definition.
 type Manager struct {
 	instances *collection[types.InstanceSpec]
+	snapshots *collection[types.Snapshot]
 	networks  *collection[types.Network]
 	volumes   *collection[types.Volume]
 	kernels   *collection[types.Kernel]
@@ -54,6 +58,10 @@ func NewManager(cfg Config) (*Manager, error) {
 			"instance", filepath.Join(cfg.DataDir, "instances"), nested, logger,
 			func(v types.InstanceSpec) (string, string) { return v.ID, v.Name },
 		),
+		snapshots: newCollection(
+			"snapshot", filepath.Join(cfg.DataDir, "snapshots"), nested, logger,
+			func(v types.Snapshot) (string, string) { return v.ID, v.Name },
+		),
 		networks: newCollection(
 			"network", filepath.Join(cfg.DataDir, "networks"), flat, logger,
 			func(v types.Network) (string, string) { return v.ID, v.Name },
@@ -68,7 +76,7 @@ func NewManager(cfg Config) (*Manager, error) {
 		),
 	}
 	for _, load := range []func() error{
-		m.instances.load, m.networks.load, m.volumes.load, m.kernels.load,
+		m.instances.load, m.snapshots.load, m.networks.load, m.volumes.load, m.kernels.load,
 	} {
 		if err := load(); err != nil {
 			return nil, err
@@ -78,6 +86,7 @@ func NewManager(cfg Config) (*Manager, error) {
 	logger.Info("definitions loaded",
 		"data_dir", cfg.DataDir,
 		"instances", m.instances.len(),
+		"snapshots", m.snapshots.len(),
 		"networks", m.networks.len(),
 		"volumes", m.volumes.len(),
 		"kernels", m.kernels.len(),
@@ -128,6 +137,44 @@ func (m *Manager) MatchingInstances(match func(types.InstanceSpec) bool) []types
 // instance is deleted.
 func (m *Manager) InstanceDir(name string) string {
 	return m.instances.nestedDir(name)
+}
+
+// StageSnapshot returns a new, empty directory beside the snapshots for a
+// snapshot's files to be written in before CreateSnapshot moves it into
+// place. One a crash leaves behind is removed when the store next loads.
+func (m *Manager) StageSnapshot() (string, error) {
+	dir, err := os.MkdirTemp(m.snapshots.dir, stagingPrefix)
+	if err != nil {
+		return "", fmt.Errorf("create snapshot staging directory: %w", err)
+	}
+	return dir, nil
+}
+
+// CreateSnapshot records a new snapshot whose files are in staged, a
+// directory from StageSnapshot, moving it into place. A snapshot is thus
+// either whole or absent.
+func (m *Manager) CreateSnapshot(v types.Snapshot, staged string) error {
+	return m.snapshots.createFrom(v, staged)
+}
+
+// Snapshot returns a snapshot by name or ID.
+func (m *Manager) Snapshot(nameOrID string) (types.Snapshot, error) {
+	return m.snapshots.definition(nameOrID)
+}
+
+// Snapshots returns every snapshot, sorted by name.
+func (m *Manager) Snapshots() []types.Snapshot {
+	return m.snapshots.definitions()
+}
+
+// DeleteSnapshot removes a snapshot and its files.
+func (m *Manager) DeleteSnapshot(nameOrID string) error {
+	return m.snapshots.delete(nameOrID)
+}
+
+// SnapshotDir returns the directory holding a snapshot's files.
+func (m *Manager) SnapshotDir(name string) string {
+	return m.snapshots.nestedDir(name)
 }
 
 // CreateNetwork records a new network definition.

@@ -153,19 +153,24 @@ type DaemonServiceClient interface {
 	// instance, as its guest sees them: kernel threads are left out, and PIDs
 	// are the ones a command run by ExecInstance sees.
 	ListInstanceProcesses(ctx context.Context, in *ListInstanceProcessesRequest, opts ...grpc.CallOption) (*ListInstanceProcessesResponse, error)
-	// CreateSnapshot freezes a running or paused instance to disk: its memory,
-	// its device state and a copy of its overlay disk. A running instance is
-	// paused for as long as it takes and resumed afterwards.
+	// CreateSnapshot freezes an instance to disk. Of a running or paused
+	// instance it takes a memory snapshot: its memory, its device state and a
+	// copy of its overlay disk, pausing a running one for as long as it takes.
+	// Of a stopped one it takes a disk snapshot, of its overlay disk alone.
+	// Volumes are never included, so an instance that can write to one cannot
+	// have a memory snapshot taken.
 	CreateSnapshot(ctx context.Context, in *CreateSnapshotRequest, opts ...grpc.CallOption) (*Snapshot, error)
-	// ListSnapshots returns an instance's snapshots, oldest first.
+	// ListSnapshots returns the snapshots, or one instance's, oldest first.
 	ListSnapshots(ctx context.Context, in *ListSnapshotsRequest, opts ...grpc.CallOption) (*ListSnapshotsResponse, error)
 	// GetSnapshot returns one snapshot.
 	GetSnapshot(ctx context.Context, in *GetSnapshotRequest, opts ...grpc.CallOption) (*Snapshot, error)
 	// DeleteSnapshot removes a snapshot.
 	DeleteSnapshot(ctx context.Context, in *DeleteSnapshotRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// RestoreSnapshot puts a stopped instance back to the moment a snapshot
-	// was taken and resumes it. Anything written to its disk since is
-	// discarded.
+	// RestoreSnapshot puts the instance a snapshot was taken from, which must
+	// be stopped, back as it was then, discarding whatever it has written to
+	// its disk since. A memory snapshot resumes the guest where it was, and is
+	// refused if the instance's address or mounts have changed; a disk
+	// snapshot leaves the instance stopped.
 	RestoreSnapshot(ctx context.Context, in *RestoreSnapshotRequest, opts ...grpc.CallOption) (*Instance, error)
 	// ExecInstance runs a command inside a running instance. The first client
 	// message must be an ExecInstanceStart; subsequent messages carry stdin data
@@ -809,19 +814,24 @@ type DaemonServiceServer interface {
 	// instance, as its guest sees them: kernel threads are left out, and PIDs
 	// are the ones a command run by ExecInstance sees.
 	ListInstanceProcesses(context.Context, *ListInstanceProcessesRequest) (*ListInstanceProcessesResponse, error)
-	// CreateSnapshot freezes a running or paused instance to disk: its memory,
-	// its device state and a copy of its overlay disk. A running instance is
-	// paused for as long as it takes and resumed afterwards.
+	// CreateSnapshot freezes an instance to disk. Of a running or paused
+	// instance it takes a memory snapshot: its memory, its device state and a
+	// copy of its overlay disk, pausing a running one for as long as it takes.
+	// Of a stopped one it takes a disk snapshot, of its overlay disk alone.
+	// Volumes are never included, so an instance that can write to one cannot
+	// have a memory snapshot taken.
 	CreateSnapshot(context.Context, *CreateSnapshotRequest) (*Snapshot, error)
-	// ListSnapshots returns an instance's snapshots, oldest first.
+	// ListSnapshots returns the snapshots, or one instance's, oldest first.
 	ListSnapshots(context.Context, *ListSnapshotsRequest) (*ListSnapshotsResponse, error)
 	// GetSnapshot returns one snapshot.
 	GetSnapshot(context.Context, *GetSnapshotRequest) (*Snapshot, error)
 	// DeleteSnapshot removes a snapshot.
 	DeleteSnapshot(context.Context, *DeleteSnapshotRequest) (*emptypb.Empty, error)
-	// RestoreSnapshot puts a stopped instance back to the moment a snapshot
-	// was taken and resumes it. Anything written to its disk since is
-	// discarded.
+	// RestoreSnapshot puts the instance a snapshot was taken from, which must
+	// be stopped, back as it was then, discarding whatever it has written to
+	// its disk since. A memory snapshot resumes the guest where it was, and is
+	// refused if the instance's address or mounts have changed; a disk
+	// snapshot leaves the instance stopped.
 	RestoreSnapshot(context.Context, *RestoreSnapshotRequest) (*Instance, error)
 	// ExecInstance runs a command inside a running instance. The first client
 	// message must be an ExecInstanceStart; subsequent messages carry stdin data

@@ -7,12 +7,10 @@ import "github.com/konradasb/dicer/internal/types"
 
 // ImagesInUse returns the digests of images that must be kept: those
 // instances are defined to boot from, those active guests booted from, and
-// those snapshots need.
+// those memory snapshots' guests booted from.
 func (m *Manager) ImagesInUse() (map[string]struct{}, error) {
-	instances := m.definitions.Instances()
-
 	inUse := make(map[string]struct{})
-	for _, instance := range instances {
+	for _, instance := range m.definitions.Instances() {
 		if image, err := m.images.Image(instance.ImageRef); err == nil {
 			inUse[image.Digest] = struct{}{}
 		}
@@ -24,12 +22,9 @@ func (m *Manager) ImagesInUse() (map[string]struct{}, error) {
 		if status.ImageDigest != "" && (status.State.HoldsResources() || status.State == types.InstanceStateStopping) {
 			inUse[status.ImageDigest] = struct{}{}
 		}
-
-		snapshots, err := m.Snapshots(instance)
-		if err != nil {
-			return nil, err
-		}
-		for _, snapshot := range snapshots {
+	}
+	for _, snapshot := range m.definitions.Snapshots() {
+		if snapshot.ImageDigest != "" {
 			inUse[snapshot.ImageDigest] = struct{}{}
 		}
 	}

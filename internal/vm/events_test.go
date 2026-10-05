@@ -157,21 +157,25 @@ func TestHealthVerdictsAreRecorded(t *testing.T) {
 	}
 }
 
+// A snapshot's creation and deletion are events of the snapshot, naming the
+// instance it was taken of.
 func TestSnapshotsAreRecorded(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
 
-	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "before"); err != nil {
+	snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "before")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := h.manager.DeleteSnapshot(t.Context(), h.instance, "before"); err != nil {
+	if err := h.manager.DeleteSnapshot(t.Context(), snapshot); err != nil {
 		t.Fatal(err)
 	}
 
-	created, _ := h.events.last(events.ActionSnapshotCreated)
-	deleted, _ := h.events.last(events.ActionSnapshotDeleted)
-	if created.Attributes["snapshot"] != "before" || deleted.Attributes["snapshot"] != "before" {
-		t.Errorf("snapshot events = %+v, %+v; want them to name the snapshot", created, deleted)
+	for _, action := range []events.Action{events.ActionCreated, events.ActionDeleted} {
+		e, _ := h.events.last(action)
+		if e.Kind != events.KindSnapshot || e.Name != "before" || e.Attributes["instance"] != h.instance.Name {
+			t.Errorf("%s event = %+v; want one of snapshot before, of instance %s", action, e, h.instance.Name)
+		}
 	}
 }
 

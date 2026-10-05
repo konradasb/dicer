@@ -5,18 +5,22 @@ package vm
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/konradasb/dicer/internal/errdefs"
+	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/hypervisor"
 	"github.com/konradasb/dicer/internal/types"
 )
 
-func TestCreateSnapshot(t *testing.T) {
+func TestCreateMemorySnapshot(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
 
@@ -25,11 +29,18 @@ func TestCreateSnapshot(t *testing.T) {
 		t.Fatalf("CreateSnapshot: %v", err)
 	}
 
-	if snapshot.Name != "before-upgrade" || snapshot.InstanceID != h.instance.ID {
+	if snapshot.Name != "before-upgrade" || snapshot.Kind != types.SnapshotKindMemory || snapshot.Instance.ID != h.instance.ID {
 		t.Errorf("snapshot = %+v", snapshot)
 	}
 	if snapshot.HypervisorVersion != testHypervisorVersion {
 		t.Errorf("hypervisor version = %q, want %q", snapshot.HypervisorVersion, testHypervisorVersion)
+	}
+	allocation, err := h.manager.Allocation(h.instance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.IP != allocation.IP || snapshot.MAC != allocation.MAC {
+		t.Errorf("snapshot address = %s %s, want the guest's %s %s", snapshot.IP, snapshot.MAC, allocation.IP, allocation.MAC)
 	}
 	if snapshot.SizeBytes == 0 {
 		t.Error("snapshot reports no size")
@@ -41,24 +52,17 @@ func TestCreateSnapshot(t *testing.T) {
 		t.Errorf("paused %d times and resumed %d, want 1 and 1", h.hv.paused, h.hv.resumed)
 	}
 
-	dir := h.manager.snapshotDir(h.instance, "before-upgrade")
-	for _, f := range []string{snapshotMetadataFile, overlayDiskFile, "vmstate"} {
+	dir := h.manager.snapshotDir(snapshot)
+	for _, f := range []string{overlayDiskFile, "vmstate"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("snapshot is missing %s: %v", f, err)
 		}
 	}
+	assertSameFile(t, filepath.Join(dir, overlayDiskFile), h.overlay)
 
-	// The disk copy must hold what the original held, holes included.
-	want, err := os.ReadFile(h.overlay)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := os.ReadFile(filepath.Join(dir, overlayDiskFile))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Errorf("overlay copy is %d bytes, want %d identical bytes", len(got), len(want))
+	event, ok := h.events.last(events.ActionCreated)
+	if !ok || event.Kind != events.KindSnapshot || event.Attributes["paused_seconds"] == "" {
+		t.Errorf("event = %+v, want a snapshot's creation saying how long the guest was paused", event)
 	}
 }
 
@@ -81,7 +85,24 @@ func TestCreateSnapshotOfPausedInstance(t *testing.T) {
 	}
 }
 
-func TestCreateSnapshotGeneratesName(t *testing.T) {
+func TestCreateDiskSnapshotOfStoppedInstance(t *testing.T) {
+	h := newHarness(t)
+
+	snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "cold")
+	if err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+
+	if snapshot.Kind != types.SnapshotKindDisk || snapshot.HypervisorVersion != "" || snapshot.IP != "" {
+		t.Errorf("snapshot = %+v, want a disk snapshot with no hypervisor or address", snapshot)
+	}
+	if h.hv.paused != 0 || len(h.hv.snapshotDirs) != 0 {
+		t.Error("a stopped instance's disk snapshot asked a hypervisor for something")
+	}
+	assertSameFile(t, h.manager.snapshotOverlayDiskPath(snapshot), h.overlay)
+}
+
+func TestCreateSnapshotGeneratesNameFromInstance(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
 
@@ -89,29 +110,67 @@ func TestCreateSnapshotGeneratesName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSnapshot: %v", err)
 	}
-	if snapshot.Name == "" {
-		t.Fatal("no name was generated")
+	if !strings.HasPrefix(snapshot.Name, h.instance.Name+"-") {
+		t.Errorf("generated name %q does not start with the instance's", snapshot.Name)
 	}
-	if _, err := h.manager.Snapshot(h.instance, snapshot.Name); err != nil {
+	if _, err := h.manager.Snapshot(snapshot.Name); err != nil {
 		t.Errorf("generated name %q cannot be read back: %v", snapshot.Name, err)
 	}
 }
 
 func TestCreateSnapshotRejections(t *testing.T) {
-	t.Run("stopped instance", func(t *testing.T) {
+	t.Run("instance stopping", func(t *testing.T) {
 		h := newHarness(t)
+		h.running(t)
+		forceState(t, h.manager, h.instance.ID, types.InstanceStateStopping)
 
 		_, err := h.manager.CreateSnapshot(t.Context(), h.instance, "nope")
 		if !errors.Is(err, errdefs.ErrInvalidState) {
-			t.Errorf("CreateSnapshot of a stopped instance = %v, want ErrInvalidState", err)
+			t.Errorf("CreateSnapshot of a stopping instance = %v, want ErrInvalidState", err)
 		}
 	})
 
-	t.Run("duplicate name", func(t *testing.T) {
+	t.Run("instance never started", func(t *testing.T) {
 		h := newHarness(t)
+		if err := os.Remove(h.overlay); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := h.manager.CreateSnapshot(t.Context(), h.instance, "nope")
+		if !errors.Is(err, errdefs.ErrInvalidState) {
+			t.Errorf("CreateSnapshot of an instance with no disk = %v, want ErrInvalidState", err)
+		}
+	})
+
+	// A volume is not in the snapshot, and the guest's memory of it would
+	// not match what it holds by the time the snapshot is restored.
+	t.Run("running instance writing to a volume", func(t *testing.T) {
+		h := newHarness(t)
+		h.instance.Mounts = []types.Mount{{Type: types.MountTypeVolume, Source: "data", Target: "/data"}}
 		h.running(t)
 
-		if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "twice"); err != nil {
+		_, err := h.manager.CreateSnapshot(t.Context(), h.instance, "nope")
+		if !errors.Is(err, errdefs.ErrInvalidState) {
+			t.Errorf("CreateSnapshot = %v, want ErrInvalidState", err)
+		}
+		if h.hv.paused != 0 {
+			t.Error("the guest was paused for a snapshot that was refused")
+		}
+	})
+
+	// Snapshot names are the host's, not an instance's.
+	t.Run("name another instance's snapshot has", func(t *testing.T) {
+		h := newHarness(t)
+		h.running(t)
+		other := seedInstance(t, h.definitions, "other")
+		if err := os.MkdirAll(filepath.Dir(h.manager.overlayDiskPath(other)), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(h.manager.overlayDiskPath(other), []byte("disk"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := h.manager.CreateSnapshot(t.Context(), other, "twice"); err != nil {
 			t.Fatal(err)
 		}
 		_, err := h.manager.CreateSnapshot(t.Context(), h.instance, "twice")
@@ -143,7 +202,7 @@ func TestCreateSnapshotRejections(t *testing.T) {
 }
 
 // TestCreateSnapshotCleansUpAfterFailure checks that a failed snapshot
-// leaves nothing behind to be mistaken for a usable one.
+// leaves nothing behind to be mistaken for a usable one, or to take space.
 func TestCreateSnapshotCleansUpAfterFailure(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
@@ -153,8 +212,15 @@ func TestCreateSnapshotCleansUpAfterFailure(t *testing.T) {
 		t.Fatal("CreateSnapshot succeeded despite the hypervisor failing")
 	}
 
-	if _, err := os.Stat(h.manager.snapshotDir(h.instance, "doomed")); !errors.Is(err, fs.ErrNotExist) {
-		t.Error("a failed snapshot left its directory behind")
+	if _, err := h.manager.Snapshot("doomed"); !errors.Is(err, errdefs.ErrNotFound) {
+		t.Errorf("Snapshot after a failure = %v, want ErrNotFound", err)
+	}
+	entries, err := os.ReadDir(filepath.Dir(h.definitions.SnapshotDir("doomed")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("a failed snapshot left %d entries behind", len(entries))
 	}
 	// The guest was paused for the attempt and must not be left that way.
 	if h.hv.resumed != 1 {
@@ -166,70 +232,70 @@ func TestListAndDeleteSnapshots(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
 
-	for _, name := range []string{"first", "second"} {
+	for _, name := range []string{"second", "first"} {
 		if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, name); err != nil {
 			t.Fatalf("CreateSnapshot(%s): %v", name, err)
 		}
+		time.Sleep(time.Millisecond)
 	}
 
-	snapshots, err := h.manager.Snapshots(h.instance)
-	if err != nil {
-		t.Fatalf("Snapshots: %v", err)
-	}
-	if len(snapshots) != 2 {
-		t.Fatalf("got %d snapshots, want 2", len(snapshots))
-	}
 	// Oldest first, so a listing reads as a history.
-	if snapshots[0].CreatedAt.After(snapshots[1].CreatedAt) {
-		t.Error("snapshots are not ordered oldest first")
+	snapshots := h.manager.Snapshots()
+	if len(snapshots) != 2 || snapshots[0].Name != "second" {
+		t.Fatalf("snapshots = %+v, want second, then first", snapshots)
 	}
 
-	if err := h.manager.DeleteSnapshot(t.Context(), h.instance, "first"); err != nil {
+	if err := h.manager.DeleteSnapshot(t.Context(), snapshots[1]); err != nil {
 		t.Fatalf("DeleteSnapshot: %v", err)
 	}
-	if _, err := h.manager.Snapshot(h.instance, "first"); !errors.Is(err, errdefs.ErrNotFound) {
+	if _, err := h.manager.Snapshot("first"); !errors.Is(err, errdefs.ErrNotFound) {
 		t.Errorf("Snapshot after delete = %v, want ErrNotFound", err)
 	}
-	if err := h.manager.DeleteSnapshot(t.Context(), h.instance, "first"); !errors.Is(err, errdefs.ErrNotFound) {
+	if _, err := os.Stat(h.manager.snapshotDir(snapshots[1])); !errors.Is(err, fs.ErrNotExist) {
+		t.Error("the deleted snapshot's files are still there")
+	}
+	if err := h.manager.DeleteSnapshot(t.Context(), snapshots[1]); !errors.Is(err, errdefs.ErrNotFound) {
 		t.Errorf("second DeleteSnapshot = %v, want ErrNotFound", err)
 	}
 }
 
-func TestSnapshotsOfInstanceWithNone(t *testing.T) {
+// TestSnapshotOutlivesItsInstance checks that deleting an instance keeps its
+// snapshots, and that restoring one then says why it cannot.
+func TestSnapshotOutlivesItsInstance(t *testing.T) {
 	h := newHarness(t)
 
-	snapshots, err := h.manager.Snapshots(h.instance)
+	snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "keep")
 	if err != nil {
-		t.Fatalf("Snapshots: %v", err)
+		t.Fatal(err)
 	}
-	if len(snapshots) != 0 {
-		t.Errorf("got %d snapshots, want none", len(snapshots))
+	if err := h.manager.Delete(t.Context(), h.instance, false); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	if _, err := h.manager.Snapshot("keep"); err != nil {
+		t.Errorf("Snapshot after its instance was deleted: %v", err)
+	}
+	if _, err := h.manager.RestoreSnapshot(t.Context(), snapshot); !errors.Is(err, errdefs.ErrNotFound) {
+		t.Errorf("RestoreSnapshot = %v, want ErrNotFound for the deleted instance", err)
 	}
 }
 
-func TestRestoreSnapshot(t *testing.T) {
+func TestRestoreMemorySnapshot(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
 
-	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "good"); err != nil {
+	snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "good")
+	if err != nil {
 		t.Fatalf("CreateSnapshot: %v", err)
 	}
-
-	// The instance stops, and its disk moves on from the snapshot.
-	if err := h.manager.removeRuntimeDir(h.instance.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(h.overlay, []byte("written after the snapshot"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	h.stopped(t)
 	h.hv.resumed = 0
 
-	if err := h.manager.RestoreSnapshot(t.Context(), h.instance, "good"); err != nil {
+	if _, err := h.manager.RestoreSnapshot(t.Context(), snapshot); err != nil {
 		t.Fatalf("RestoreSnapshot: %v", err)
 	}
 
-	if len(h.starter.restoredFrom) != 1 ||
-		h.starter.restoredFrom[0] != h.manager.snapshotDir(h.instance, "good") {
+	if len(h.starter.restoredFrom) != 1 || h.starter.restoredFrom[0] != h.manager.snapshotDir(snapshot) {
 		t.Errorf("restored from %v, want the snapshot's directory", h.starter.restoredFrom)
 	}
 
@@ -238,10 +304,7 @@ func TestRestoreSnapshot(t *testing.T) {
 	if h.hv.resumed != 1 {
 		t.Errorf("resumed %d times, want 1", h.hv.resumed)
 	}
-	status, err := h.manager.Status(h.instance)
-	if err != nil {
-		t.Fatal(err)
-	}
+	status := h.status(t)
 	if status.State != types.InstanceStateRunning {
 		t.Errorf("state = %s, want %s", status.State, types.InstanceStateRunning)
 	}
@@ -250,13 +313,34 @@ func TestRestoreSnapshot(t *testing.T) {
 	}
 
 	// The guest's memory expects the disk as it was, so the disk written
-	// after the snapshot must be gone.
-	got, err := os.ReadFile(h.overlay)
+	// after the snapshot must be gone, and no copy of it kept.
+	assertSameFile(t, h.overlay, h.manager.snapshotOverlayDiskPath(snapshot))
+	if _, err := os.Stat(h.manager.keptOverlayDiskPath(h.instance)); !errors.Is(err, fs.ErrNotExist) {
+		t.Error("the disk the instance had is still kept after a successful restore")
+	}
+}
+
+func TestRestoreDiskSnapshot(t *testing.T) {
+	h := newHarness(t)
+
+	snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "cold")
 	if err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+	if err := os.WriteFile(h.overlay, []byte("written after the snapshot"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(got, []byte("written after the snapshot")) {
-		t.Error("the overlay disk was not rolled back to the snapshot")
+
+	if _, err := h.manager.RestoreSnapshot(t.Context(), snapshot); err != nil {
+		t.Fatalf("RestoreSnapshot: %v", err)
+	}
+
+	assertSameFile(t, h.overlay, h.manager.snapshotOverlayDiskPath(snapshot))
+	if h.starter.vmmCount() != 0 {
+		t.Error("restoring a disk snapshot started a VMM")
+	}
+	if status := h.status(t); status.State != types.InstanceStateStopped {
+		t.Errorf("state = %s, want the instance left %s", status.State, types.InstanceStateStopped)
 	}
 }
 
@@ -264,15 +348,16 @@ func TestRestoreSnapshot(t *testing.T) {
 // and then restored is no longer one a user stopped.
 func TestRestoreSnapshotIsAUserStart(t *testing.T) {
 	h := newHarness(t)
-	h.running(t)
+	h.start(t)
 
-	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "good"); err != nil {
+	snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "good")
+	if err != nil {
 		t.Fatalf("CreateSnapshot: %v", err)
 	}
 	if err := h.manager.Stop(t.Context(), h.instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	if err := h.manager.RestoreSnapshot(t.Context(), h.instance, "good"); err != nil {
+	if _, err := h.manager.RestoreSnapshot(t.Context(), snapshot); err != nil {
 		t.Fatalf("RestoreSnapshot: %v", err)
 	}
 
@@ -281,30 +366,76 @@ func TestRestoreSnapshotIsAUserStart(t *testing.T) {
 	}
 }
 
-// TestRestoreSnapshotKeepsConsole checks that a restored guest keeps its
-// console log: where the console is written is host-side configuration that a
-// Firecracker snapshot does not carry, so restoring has to set it again.
-func TestRestoreSnapshotKeepsConsole(t *testing.T) {
+// TestRestoredVMMFindsTheInstancesFiles checks that a restored VMM, which
+// opens the files its snapshot names relative to its runtime directory,
+// finds there the files of the instance as it is now: after a rename, its
+// directory has moved.
+func TestRestoredVMMFindsTheInstancesFiles(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
-
-	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "snap"); err != nil {
-		t.Fatal(err)
-	}
-	if err := h.manager.removeRuntimeDir(h.instance.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := h.manager.RestoreSnapshot(t.Context(), h.instance, "snap"); err != nil {
-		t.Fatalf("RestoreSnapshot: %v", err)
-	}
-
-	want, err := h.manager.logPath(h.instance, LogSourceGuest)
+	snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "snap")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := h.starter.restoredConsole.Path; got != want {
-		t.Errorf("restored with console %q, want %q -- the guest would log nowhere", got, want)
+	h.stopped(t)
+
+	renamed, err := h.manager.Rename(t.Context(), h.instance, "renamed")
+	if err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if _, err := h.manager.RestoreSnapshot(t.Context(), snapshot); err != nil {
+		t.Fatalf("RestoreSnapshot: %v", err)
+	}
+
+	runtimeDir := h.manager.runtimeDir(h.instance.ID)
+	for name, want := range map[string]string{
+		h.starter.restoredConsole.Path: h.manager.serialLogPath(renamed),
+		overlayDiskFile:                h.manager.overlayDiskPath(renamed),
+	} {
+		if filepath.IsAbs(name) {
+			t.Errorf("the VMM is given %s, which names a directory", name)
+			continue
+		}
+		if got, err := os.Readlink(filepath.Join(runtimeDir, name)); err != nil || got != want {
+			t.Errorf("%s in the runtime directory leads to %q (%v), want %q", name, got, err, want)
+		}
+	}
+}
+
+func TestRestoreMemorySnapshotRefusesAChangedInstance(t *testing.T) {
+	tests := []struct {
+		name   string
+		change func(t *testing.T, h *harness)
+	}{
+		{"mounts", func(t *testing.T, h *harness) {
+			h.instance.Mounts = []types.Mount{{Type: types.MountTypeTmpfs, Target: "/scratch"}}
+			h.definitions.instances[h.instance.Name] = h.instance
+		}},
+		{"address", func(t *testing.T, h *harness) {
+			if err := h.manager.networks.Release(h.instance.NetworkName, h.instance.ID); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.running(t)
+			snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "snap")
+			if err != nil {
+				t.Fatal(err)
+			}
+			h.stopped(t)
+			tt.change(t, h)
+
+			_, err = h.manager.RestoreSnapshot(t.Context(), snapshot)
+			if !errors.Is(err, errdefs.ErrInvalidState) {
+				t.Errorf("RestoreSnapshot = %v, want ErrInvalidState", err)
+			}
+			if h.starter.vmmCount() != 0 {
+				t.Error("a VMM was started for a refused restore")
+			}
+		})
 	}
 }
 
@@ -312,22 +443,14 @@ func TestRestoreSnapshotRejections(t *testing.T) {
 	t.Run("running instance", func(t *testing.T) {
 		h := newHarness(t)
 		h.running(t)
-		if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "snap"); err != nil {
+		snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "snap")
+		if err != nil {
 			t.Fatal(err)
 		}
 
-		err := h.manager.RestoreSnapshot(t.Context(), h.instance, "snap")
+		_, err = h.manager.RestoreSnapshot(t.Context(), snapshot)
 		if !errors.Is(err, errdefs.ErrInvalidState) {
 			t.Errorf("RestoreSnapshot of a running instance = %v, want ErrInvalidState", err)
-		}
-	})
-
-	t.Run("unknown snapshot", func(t *testing.T) {
-		h := newHarness(t)
-
-		err := h.manager.RestoreSnapshot(t.Context(), h.instance, "ghost")
-		if !errors.Is(err, errdefs.ErrNotFound) {
-			t.Errorf("RestoreSnapshot = %v, want ErrNotFound", err)
 		}
 	})
 
@@ -337,58 +460,61 @@ func TestRestoreSnapshotRejections(t *testing.T) {
 	t.Run("hypervisor version gone", func(t *testing.T) {
 		h := newHarness(t)
 		h.running(t)
-		if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "old"); err != nil {
+		snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "old")
+		if err != nil {
 			t.Fatal(err)
 		}
-		if err := h.manager.removeRuntimeDir(h.instance.ID); err != nil {
-			t.Fatal(err)
-		}
+		h.stopped(t)
 
 		h.starter.version = "v50.0.0"
 
-		err := h.manager.RestoreSnapshot(t.Context(), h.instance, "old")
-		if err == nil || !errors.Is(err, errdefs.ErrInvalidState) {
+		_, err = h.manager.RestoreSnapshot(t.Context(), snapshot)
+		if !errors.Is(err, errdefs.ErrInvalidState) {
 			t.Errorf("RestoreSnapshot = %v, want a complaint about the missing version", err)
 		}
-		if status, _ := h.manager.Status(h.instance); status.State != types.InstanceStateStopped {
+		if status := h.status(t); status.State != types.InstanceStateStopped {
 			t.Errorf("state = %s, want the instance left %s", status.State, types.InstanceStateStopped)
 		}
 	})
 }
 
-// TestRestoreSnapshotFailureMarksFailed checks that a restore that dies
-// half-way leaves the instance Failed with the reason, not Starting.
-func TestRestoreSnapshotFailureMarksFailed(t *testing.T) {
+// TestFailedRestoreKeepsTheInstancesDisk checks that a restore that dies
+// half-way leaves the instance Failed with the reason, not Starting, and
+// with the disk it had rather than the snapshot's.
+func TestFailedRestoreKeepsTheInstancesDisk(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
-	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "snap"); err != nil {
+	snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "snap")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := h.manager.removeRuntimeDir(h.instance.ID); err != nil {
+	h.stopped(t)
+	want := []byte("written after the snapshot")
+	if err := os.WriteFile(h.overlay, want, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	h.starter.restoreErr = errors.New("hypervisor refused")
 
-	if err := h.manager.RestoreSnapshot(t.Context(), h.instance, "snap"); err == nil {
+	if _, err := h.manager.RestoreSnapshot(t.Context(), snapshot); err == nil {
 		t.Fatal("RestoreSnapshot succeeded despite the hypervisor refusing")
 	}
 
-	status, err := h.manager.Status(h.instance)
-	if err != nil {
-		t.Fatal(err)
+	status := h.status(t)
+	if status.State != types.InstanceStateFailed || status.StateError == "" {
+		t.Errorf("state = %s (%q), want %s with the reason", status.State, status.StateError, types.InstanceStateFailed)
 	}
-	if status.State != types.InstanceStateFailed {
-		t.Errorf("state = %s, want %s", status.State, types.InstanceStateFailed)
+	if got, err := os.ReadFile(h.overlay); err != nil || !bytes.Equal(got, want) {
+		t.Errorf("overlay disk = %q (%v), want the one the instance had", got, err)
 	}
-	if status.StateError == "" {
-		t.Error("no reason was recorded")
+	if _, err := os.Stat(h.manager.keptOverlayDiskPath(h.instance)); !errors.Is(err, fs.ErrNotExist) {
+		t.Error("the kept disk was left beside the one put back")
 	}
 }
 
 // TestCreateSnapshotRecordsWhatTheGuestHas checks that a snapshot records
-// the resources the guest runs with, which a restore from an earlier
-// snapshot can make differ from the definition.
+// the resources the guest runs with, which a resize can make differ from
+// the definition.
 func TestCreateSnapshotRecordsWhatTheGuestHas(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
@@ -405,5 +531,62 @@ func TestCreateSnapshotRecordsWhatTheGuestHas(t *testing.T) {
 	if snapshot.VCPUs != 3 || snapshot.MemoryBytes != 3<<30 {
 		t.Errorf("snapshot records %d vCPUs, %d bytes; want the guest's 3 vCPUs, %d bytes",
 			snapshot.VCPUs, snapshot.MemoryBytes, int64(3<<30))
+	}
+}
+
+// TestSnapshotGetsTimeForTheGuestsMemory checks that writing a snapshot is
+// given time in proportion to the guest's memory, not the hypervisor API's
+// usual bound, which a large guest would outlast.
+func TestSnapshotGetsTimeForTheGuestsMemory(t *testing.T) {
+	h := newHarness(t)
+	h.running(t)
+	if err := h.manager.transitionWith(h.instance, types.InstanceStateRunning, func(status *types.InstanceStatus) {
+		status.MemoryBytes = 64 << 30
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var left time.Duration
+	h.hv.onSnapshot = func(ctx context.Context) {
+		deadline, _ := ctx.Deadline()
+		left = time.Until(deadline)
+	}
+	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "big"); err != nil {
+		t.Fatal(err)
+	}
+
+	if left < 5*time.Minute {
+		t.Errorf("a 64 GiB guest's snapshot was given %s", left)
+	}
+}
+
+// stopped records the harness instance as stopped, its VMM gone, and its
+// disk moved on from whatever was snapshotted.
+func (h *harness) stopped(t *testing.T) {
+	t.Helper()
+
+	if err := h.manager.removeRuntimeDir(h.instance.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(h.overlay, []byte("written after the snapshot"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// assertSameFile fails the test unless the files at got and want hold the
+// same bytes.
+func assertSameFile(t *testing.T, got, want string) {
+	t.Helper()
+
+	gotData, err := os.ReadFile(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantData, err := os.ReadFile(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(gotData, wantData) {
+		t.Errorf("%s is %d bytes, want the %d of %s", got, len(gotData), len(wantData), want)
 	}
 }

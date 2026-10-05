@@ -290,3 +290,80 @@ func BenchmarkMatchingInstances(b *testing.B) {
 		})
 	}
 }
+
+func TestStagedSnapshotIsMovedIntoPlace(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{DataDir: filepath.Join(dir, "data")}
+	m, err := NewManager(cfg)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	staged, err := m.StageSnapshot()
+	if err != nil {
+		t.Fatalf("StageSnapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(staged, "overlay.img"), []byte("disk"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := types.Snapshot{ID: "id-snap", Name: "snap", Kind: types.SnapshotKindDisk, Instance: testInstance("web")}
+	if err := m.CreateSnapshot(snapshot, staged); err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(m.SnapshotDir("snap"), "overlay.img")); err != nil {
+		t.Errorf("the staged file is not in the snapshot's directory: %v", err)
+	}
+	if _, err := os.Stat(staged); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the staging directory is still there")
+	}
+
+	reopened, err := NewManager(cfg)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	got, err := reopened.Snapshot("id-snap")
+	if err != nil {
+		t.Fatalf("Snapshot after reopen: %v", err)
+	}
+	if got.Instance.Name != "web" {
+		t.Errorf("Instance.Name = %q, want the instance it was taken from", got.Instance.Name)
+	}
+}
+
+func TestCreateSnapshotOfATakenNameFails(t *testing.T) {
+	m := newTestManager(t)
+
+	for i, want := range []error{nil, errdefs.ErrExists} {
+		staged, err := m.StageSnapshot()
+		if err != nil {
+			t.Fatalf("StageSnapshot: %v", err)
+		}
+		err = m.CreateSnapshot(types.Snapshot{ID: "id-" + strconv.Itoa(i), Name: "snap"}, staged)
+		if !errors.Is(err, want) {
+			t.Errorf("CreateSnapshot %d = %v, want %v", i, err, want)
+		}
+	}
+}
+
+// TestStagingLeftByACrashIsRemoved checks that a snapshot a crash left
+// half-written takes no space, and no name, once the store loads again.
+func TestStagingLeftByACrashIsRemoved(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{DataDir: filepath.Join(dir, "data")}
+	m, err := NewManager(cfg)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	staged, err := m.StageSnapshot()
+	if err != nil {
+		t.Fatalf("StageSnapshot: %v", err)
+	}
+
+	if _, err := NewManager(cfg); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if _, err := os.Stat(staged); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the staging directory survived a reload")
+	}
+}

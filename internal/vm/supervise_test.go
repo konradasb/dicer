@@ -166,13 +166,12 @@ func TestOldVMMExitDoesNotTouchNewOne(t *testing.T) {
 func TestRestoredVMMCrashFailsInstance(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
-	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "snap"); err != nil {
+	snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "snap")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := h.manager.removeRuntimeDir(h.instance.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err := h.manager.RestoreSnapshot(t.Context(), h.instance, "snap"); err != nil {
+	h.stopped(t)
+	if _, err := h.manager.RestoreSnapshot(t.Context(), snapshot); err != nil {
 		t.Fatalf("RestoreSnapshot: %v", err)
 	}
 

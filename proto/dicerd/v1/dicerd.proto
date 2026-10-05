@@ -93,19 +93,24 @@ service DaemonService {
   // are the ones a command run by ExecInstance sees.
   rpc ListInstanceProcesses(ListInstanceProcessesRequest) returns (ListInstanceProcessesResponse);
 
-  // CreateSnapshot freezes a running or paused instance to disk: its memory,
-  // its device state and a copy of its overlay disk. A running instance is
-  // paused for as long as it takes and resumed afterwards.
+  // CreateSnapshot freezes an instance to disk. Of a running or paused
+  // instance it takes a memory snapshot: its memory, its device state and a
+  // copy of its overlay disk, pausing a running one for as long as it takes.
+  // Of a stopped one it takes a disk snapshot, of its overlay disk alone.
+  // Volumes are never included, so an instance that can write to one cannot
+  // have a memory snapshot taken.
   rpc CreateSnapshot(CreateSnapshotRequest) returns (Snapshot);
-  // ListSnapshots returns an instance's snapshots, oldest first.
+  // ListSnapshots returns the snapshots, or one instance's, oldest first.
   rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
   // GetSnapshot returns one snapshot.
   rpc GetSnapshot(GetSnapshotRequest) returns (Snapshot);
   // DeleteSnapshot removes a snapshot.
   rpc DeleteSnapshot(DeleteSnapshotRequest) returns (google.protobuf.Empty);
-  // RestoreSnapshot puts a stopped instance back to the moment a snapshot
-  // was taken and resumes it. Anything written to its disk since is
-  // discarded.
+  // RestoreSnapshot puts the instance a snapshot was taken from, which must
+  // be stopped, back as it was then, discarding whatever it has written to
+  // its disk since. A memory snapshot resumes the guest where it was, and is
+  // refused if the instance's address or mounts have changed; a disk
+  // snapshot leaves the instance stopped.
   rpc RestoreSnapshot(RestoreSnapshotRequest) returns (Instance);
 
   // ExecInstance runs a command inside a running instance. The first client
@@ -303,6 +308,7 @@ enum EventKind {
   EVENT_KIND_NETWORK = 3;
   EVENT_KIND_VOLUME = 4;
   EVENT_KIND_KERNEL = 5;
+  EVENT_KIND_SNAPSHOT = 6;
 }
 
 // EventAction is what happened to the resource.
@@ -327,9 +333,8 @@ enum EventAction {
   // The health check reached a verdict.
   EVENT_ACTION_HEALTHY = 12;
   EVENT_ACTION_UNHEALTHY = 13;
-  EVENT_ACTION_SNAPSHOT_CREATED = 14;
+  // The instance was put back as a snapshot of it holds it.
   EVENT_ACTION_SNAPSHOT_RESTORED = 15;
-  EVENT_ACTION_SNAPSHOT_DELETED = 16;
   // An image.
   EVENT_ACTION_PULLED = 17;
   // Garbage collection removed the image.
@@ -340,6 +345,11 @@ enum EventAction {
   EVENT_ACTION_FETCHED = 20;
   // A running instance was given other vCPUs or memory.
   EVENT_ACTION_RESIZED = 21;
+
+  // A snapshot's creation and deletion are EVENT_ACTION_CREATED and
+  // EVENT_ACTION_DELETED of an EVENT_KIND_SNAPSHOT.
+  reserved 14, 16;
+  reserved "EVENT_ACTION_SNAPSHOT_CREATED", "EVENT_ACTION_SNAPSHOT_DELETED";
 }
 
 // Instance combines an instance's definition with its observed runtime state.
@@ -841,16 +851,35 @@ message Process {
   int64 resident_memory_bytes = 9;
 }
 
-// Snapshot is a point-in-time copy of an instance: the guest's memory and
-// device state, plus the overlay disk as it was at that moment.
+// SnapshotKind is what a snapshot holds.
+enum SnapshotKind {
+  SNAPSHOT_KIND_UNSPECIFIED = 0;
+  // A running or paused guest's memory and device state, with its overlay
+  // disk as it was at the same moment. Restoring it resumes the guest.
+  SNAPSHOT_KIND_MEMORY = 1;
+  // A stopped instance's overlay disk alone. Restoring it rolls the disk
+  // back, and the guest boots from it afresh.
+  SNAPSHOT_KIND_DISK = 2;
+}
+
+// Snapshot is an instance frozen to disk. It outlives the instance it was
+// taken from, and never holds the instance's volumes.
 message Snapshot {
+  string id = 8;
   string name = 1;
+  SnapshotKind kind = 10;
+  // The instance it was taken from: its ID, and its name now, or, if it has
+  // been deleted, its name then.
+  string instance_id = 9;
   string instance_name = 2;
-  // The hypervisor that took it, and the version of it. Restoring needs the
-  // same version, since snapshot formats are specific to it.
+  // The hypervisor that took a memory snapshot, and the version of it.
+  // Restoring needs the same version, since snapshot formats are specific to
+  // it. Unset for a disk snapshot.
   HypervisorType hypervisor_type = 3;
   string hypervisor_version = 4;
-  // The guest memory the snapshot was taken with.
+  // The vCPUs and memory a memory snapshot's guest had. Unset for a disk
+  // snapshot.
+  int32 vcpus = 11;
   int64 memory_bytes = 5;
   // What the snapshot occupies on disk, which on a copy-on-write filesystem
   // may be far less than the guest's memory and disk together.
@@ -861,11 +890,13 @@ message Snapshot {
 message CreateSnapshotRequest {
   // The instance to snapshot.
   string instance = 1;
-  // The snapshot's name. Generated from the current time when empty.
+  // The snapshot's name. The instance's and the time's when empty, as in
+  // web-20260102t150405z.
   string name = 2;
 }
 
 message ListSnapshotsRequest {
+  // Lists only the snapshots taken of this instance, if set.
   string instance = 1;
 }
 
@@ -874,17 +905,23 @@ message ListSnapshotsResponse {
 }
 
 message GetSnapshotRequest {
-  string instance = 1;
+  reserved 1;
+  reserved "instance";
+  // The snapshot's name or ID.
   string name = 2;
 }
 
 message DeleteSnapshotRequest {
-  string instance = 1;
+  reserved 1;
+  reserved "instance";
+  // The snapshot's name or ID.
   string name = 2;
 }
 
 message RestoreSnapshotRequest {
-  string instance = 1;
+  reserved 1;
+  reserved "instance";
+  // The snapshot's name or ID.
   string name = 2;
 }
 

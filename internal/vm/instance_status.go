@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/konradasb/dicer/internal/atomicfile"
@@ -124,17 +125,33 @@ func (m *Manager) ensureRuntimeDir(instanceID string) error {
 	return nil
 }
 
-// prepareRuntimeDir readies an instance's runtime directory for a new VMM,
-// removing sockets a previous VMM left behind. The directory itself is kept
-// for the previous VMM's log.
-func (m *Manager) prepareRuntimeDir(instanceID string) error {
-	if err := m.ensureRuntimeDir(instanceID); err != nil {
+// prepareRuntimeDir readies an instance's runtime directory for a new VMM:
+// it removes sockets a previous VMM left behind and links in the overlay
+// disk and console log from the instance directory, which the VMM finds
+// there by name. The directory itself is kept for the previous VMM's log.
+func (m *Manager) prepareRuntimeDir(instance types.InstanceSpec) error {
+	if err := m.ensureRuntimeDir(instance.ID); err != nil {
 		return err
 	}
 
-	for _, path := range []string{m.hypervisorSocketPath(instanceID), m.vsockPath(instanceID)} {
+	for _, path := range []string{m.hypervisorSocketPath(instance.ID), m.vsockPath(instance.ID)} {
 		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("remove stale socket %s: %w", path, err)
+		}
+	}
+
+	// Linked afresh each time: a rename moves the instance directory.
+	links := map[string]string{
+		overlayDiskFile: m.overlayDiskPath(instance),
+		serialLogFile:   m.serialLogPath(instance),
+	}
+	for name, target := range links {
+		link := filepath.Join(m.runtimeDir(instance.ID), name)
+		if err := os.Remove(link); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("remove stale link %s: %w", link, err)
+		}
+		if err := os.Symlink(target, link); err != nil {
+			return fmt.Errorf("link %s into the runtime directory: %w", name, err)
 		}
 	}
 

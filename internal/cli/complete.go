@@ -148,26 +148,20 @@ func listKernels(ctx context.Context, client *dicer.Client, _ []string) ([]strin
 	return names, nil
 }
 
-// completeSnapshotArgs completes 'INSTANCE NAME': an instance, then one of
-// its snapshots.
-func completeSnapshotArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	if len(args) == 0 {
-		return complete(1, instancesIn())(cmd, args, toComplete)
+// listSnapshots completes snapshot names, each described by its instance
+// and age.
+func listSnapshots(ctx context.Context, client *dicer.Client, _ []string) ([]string, error) {
+	resp, err := client.ListSnapshots(ctx, &dicerdv1.ListSnapshotsRequest{})
+	if err != nil {
+		return nil, err
 	}
 
-	return complete(2, func(ctx context.Context, client *dicer.Client, args []string) ([]string, error) {
-		resp, err := client.ListSnapshots(ctx, &dicerdv1.ListSnapshotsRequest{Instance: args[0]})
-		if err != nil {
-			return nil, err
-		}
+	names := make([]string, 0, len(resp.GetSnapshots()))
+	for _, s := range resp.GetSnapshots() {
+		names = append(names, s.GetName()+"\t"+s.GetInstanceName()+", "+age(timeOf(s.GetCreateTime())))
+	}
 
-		names := make([]string, 0, len(resp.GetSnapshots()))
-		for _, s := range resp.GetSnapshots() {
-			names = append(names, s.GetName()+"\t"+age(timeOf(s.GetCreateTime())))
-		}
-
-		return names, nil
-	})(cmd, args, toComplete)
+	return names, nil
 }
 
 // completeRemotes completes the name of a configured remote. They live on

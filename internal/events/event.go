@@ -14,6 +14,7 @@ type Kind string
 // The kinds of resource events are recorded for.
 const (
 	KindInstance Kind = "instance"
+	KindSnapshot Kind = "snapshot"
 	KindImage    Kind = "image"
 	KindNetwork  Kind = "network"
 	KindVolume   Kind = "volume"
@@ -56,9 +57,9 @@ const (
 	ActionHealthy   Action = "healthy"
 	ActionUnhealthy Action = "unhealthy"
 
-	ActionSnapshotCreated  Action = "snapshot_created"
+	// ActionSnapshotRestored is an instance put back as a snapshot of it
+	// holds it. The snapshot itself is created and deleted.
 	ActionSnapshotRestored Action = "snapshot_restored"
-	ActionSnapshotDeleted  Action = "snapshot_deleted"
 )
 
 // What happens to an image.

@@ -23,12 +23,6 @@ Manage instances.
 | [`dicer instance resume`]({{< relref "/docs/reference/cli/dicer_instance_resume" >}}) | Resume one or more paused instances. |
 | [`dicer instance run`]({{< relref "/docs/reference/cli/dicer_instance_run" >}}) | Create an instance from an image and start it. |
 | [`dicer instance show`]({{< relref "/docs/reference/cli/dicer_instance_show" >}}) | Show everything about one or more instances. |
-| [`dicer instance snapshot`]({{< relref "/docs/reference/cli/dicer_instance_snapshot" >}}) | Freeze instances to disk and put them back. |
-| [`dicer instance snapshot create`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_create" >}}) | Snapshot a running or paused instance. |
-| [`dicer instance snapshot delete`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_delete" >}}) | Delete a snapshot, or all of an instance's, or all there are. |
-| [`dicer instance snapshot list`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_list" >}}) | List an instance's snapshots. |
-| [`dicer instance snapshot restore`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_restore" >}}) | Restore a stopped instance from a snapshot and resume it. |
-| [`dicer instance snapshot show`]({{< relref "/docs/reference/cli/dicer_instance_snapshot_show" >}}) | Show a snapshot. |
 | [`dicer instance start`]({{< relref "/docs/reference/cli/dicer_instance_start" >}}) | Start one or more defined instances. |
 | [`dicer instance stats`]({{< relref "/docs/reference/cli/dicer_instance_stats" >}}) | Show what instances use of the host, live. |
 | [`dicer instance stop`]({{< relref "/docs/reference/cli/dicer_instance_stop" >}}) | Stop one or more running instances, keeping their definitions and disks. |

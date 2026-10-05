@@ -139,7 +139,8 @@ type faultResponse struct {
 	FaultMessage string `json:"fault_message"`
 }
 
-// apiTimeout bounds each request to the VMM's API.
+// apiTimeout bounds a request to the VMM's API whose context has no
+// deadline.
 const apiTimeout = 30 * time.Second
 
 // client speaks the Firecracker API over its Unix socket.
@@ -158,7 +159,6 @@ func newClient(socketPath string) *client {
 			},
 			DisableKeepAlives: true,
 		},
-		Timeout: apiTimeout,
 	}}
 }
 
@@ -178,6 +178,12 @@ func (c *client) get(ctx context.Context, path string, out any) error {
 // A response with a failure status is an error carrying Firecracker's own
 // explanation of it.
 func (c *client) do(ctx context.Context, method, path string, body, out any) error {
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, apiTimeout)
+		defer cancel()
+	}
+
 	var reqBody io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)

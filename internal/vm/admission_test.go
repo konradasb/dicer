@@ -4,9 +4,7 @@
 package vm
 
 import (
-	"encoding/json"
 	"errors"
-	"os"
 	"sync"
 	"testing"
 
@@ -130,39 +128,16 @@ func TestRestoreAdmittedOnTheSnapshotsMemory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Rewrite the snapshot as if taken with 4GiB, and fill the host so
+	// Make the snapshot as if taken with 4GiB, and fill the host so
 	// only 1GiB is left: enough for the definition, not for the snapshot.
-	snapshotWithMemory(t, h, "big", 4<<30)
+	snapshot := h.definitions.snapshots["big"]
+	snapshot.MemoryBytes = 4 << 30
+	h.definitions.snapshots["big"] = snapshot
 	holding(t, h.manager, other, types.InstanceStateRunning, types.Resources{VCPUs: 1, MemoryBytes: 6 << 30})
 
-	err := h.manager.RestoreSnapshot(t.Context(), h.instance, "big")
+	_, err := h.manager.RestoreSnapshot(t.Context(), snapshot)
 	if !errors.Is(err, errdefs.ErrResourceExhausted) {
 		t.Errorf("RestoreSnapshot = %v, want ErrResourceExhausted", err)
-	}
-}
-
-// snapshotWithMemory rewrites a snapshot's metadata as if it had been taken
-// with memoryBytes of guest memory.
-func snapshotWithMemory(t *testing.T, h *harness, name string, memoryBytes int64) {
-	t.Helper()
-
-	path := h.manager.snapshotMetadataPath(h.instance, name)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var snapshot types.Snapshot
-	if err := json.Unmarshal(data, &snapshot); err != nil {
-		t.Fatal(err)
-	}
-	snapshot.MemoryBytes = memoryBytes
-
-	if data, err = json.Marshal(snapshot); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatal(err)
 	}
 }
 

@@ -39,6 +39,16 @@ type Definitions interface {
 	// definition and overlay disk.
 	InstanceDir(name string) string
 
+	// StageSnapshot returns an empty directory to write a snapshot's files
+	// in, which CreateSnapshot moves into place.
+	StageSnapshot() (string, error)
+	CreateSnapshot(snapshot types.Snapshot, staged string) error
+	Snapshot(nameOrID string) (types.Snapshot, error)
+	Snapshots() []types.Snapshot
+	DeleteSnapshot(nameOrID string) error
+	// SnapshotDir is the directory holding a snapshot's files.
+	SnapshotDir(name string) string
+
 	Network(nameOrID string) (types.Network, error)
 	Networks() []types.Network
 	Kernel(nameOrID string) (types.Kernel, error)

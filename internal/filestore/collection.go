@@ -25,6 +25,11 @@ import (
 // configFile is the file holding a definition in a nested collection.
 const configFile = "config.yaml"
 
+// stagingPrefix starts the name of a directory a nested collection's
+// definition is prepared in before it is moved into place. Names cannot
+// start with a dot, so it is never taken for a definition.
+const stagingPrefix = ".staging-"
+
 // layout describes how a collection maps names to paths.
 type layout int
 
@@ -97,6 +102,13 @@ func (c *collection[T]) load() error {
 	for _, e := range entries {
 		var name string
 		switch {
+		case c.layout == nested && e.IsDir() && strings.HasPrefix(e.Name(), stagingPrefix):
+			// What a crash left half-written.
+			path := filepath.Join(c.dir, e.Name())
+			if err := os.RemoveAll(path); err != nil {
+				c.logger.Warn("cannot remove staging directory", "path", path, "error", err)
+			}
+			continue
 		case c.layout == nested && e.IsDir():
 			name = e.Name()
 		case c.layout == flat && !e.IsDir() && filepath.Ext(e.Name()) == ".yaml":
@@ -219,6 +231,36 @@ func (c *collection[T]) create(definition T) error {
 	if err := c.write(name, definition); err != nil {
 		return err
 	}
+	c.cache(id, name, definition)
+	return nil
+}
+
+// createFrom writes a new definition into staged, a directory holding its
+// sibling files, and moves the directory into place, failing if its name is
+// already taken. It is for a nested collection only.
+func (c *collection[T]) createFrom(definition T, staged string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	id, name := c.idAndName(definition)
+	if err := naming.Validate(name); err != nil {
+		return err
+	}
+	if _, ok := c.byName[name]; ok {
+		return errdefs.Exists("%s %q already exists", c.kind, name)
+	}
+
+	data, err := yaml.Marshal(definition)
+	if err != nil {
+		return fmt.Errorf("marshal %q: %w", name, err)
+	}
+	if err := atomicfile.Write(filepath.Join(staged, configFile), data, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(staged, c.nestedDir(name)); err != nil {
+		return fmt.Errorf("move %s into place: %w", staged, err)
+	}
+
 	c.cache(id, name, definition)
 	return nil
 }

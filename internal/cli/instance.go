@@ -150,7 +150,6 @@ func newInstanceCommand() *cobra.Command {
 		newInstanceStatsCommand(),
 		newInstanceTopCommand(),
 		newInstanceWaitCommand(),
-		newInstanceSnapshotCommand(),
 	)
 
 	return cmd

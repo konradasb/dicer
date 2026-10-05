@@ -5,7 +5,9 @@ package vm
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"os/exec"
@@ -36,6 +38,7 @@ import (
 type fakeDefinitions struct {
 	mu        sync.Mutex
 	instances map[string]types.InstanceSpec
+	snapshots map[string]types.Snapshot
 	networks  map[string]types.Network
 	kernels   map[string]types.Kernel
 	volumes   map[string]types.Volume
@@ -45,6 +48,7 @@ type fakeDefinitions struct {
 func newFakeDefinitions(dir string) *fakeDefinitions {
 	return &fakeDefinitions{
 		instances: make(map[string]types.InstanceSpec),
+		snapshots: make(map[string]types.Snapshot),
 		networks:  make(map[string]types.Network),
 		kernels:   make(map[string]types.Kernel),
 		volumes:   make(map[string]types.Volume),
@@ -132,6 +136,10 @@ func (f *fakeDefinitions) RenameInstance(nameOrID string, renamed types.Instance
 		return errdefs.Exists("instance %q already exists", renamed.Name)
 	}
 
+	// The directory moves with the name, as filestore's does.
+	if err := os.Rename(f.InstanceDir(current.Name), f.InstanceDir(renamed.Name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
 	delete(f.instances, current.Name)
 	f.instances[renamed.Name] = renamed
 
@@ -152,6 +160,72 @@ func (f *fakeDefinitions) DeleteInstance(nameOrID string) error {
 
 func (f *fakeDefinitions) InstanceDir(name string) string {
 	return filepath.Join(f.dir, "instances", name)
+}
+
+func (f *fakeDefinitions) StageSnapshot() (string, error) {
+	dir := filepath.Join(f.dir, "snapshots")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(dir, ".staging-")
+}
+
+func (f *fakeDefinitions) CreateSnapshot(snapshot types.Snapshot, staged string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if _, ok := f.snapshots[snapshot.Name]; ok {
+		return fmt.Errorf("%q: %w", snapshot.Name, errdefs.ErrExists)
+	}
+	if err := os.Rename(staged, f.SnapshotDir(snapshot.Name)); err != nil {
+		return err
+	}
+	f.snapshots[snapshot.Name] = snapshot
+	return nil
+}
+
+func (f *fakeDefinitions) Snapshot(nameOrID string) (types.Snapshot, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.snapshot(nameOrID)
+}
+
+func (f *fakeDefinitions) snapshot(nameOrID string) (types.Snapshot, error) {
+	for _, s := range f.snapshots {
+		if s.Name == nameOrID || s.ID == nameOrID {
+			return s, nil
+		}
+	}
+	return types.Snapshot{}, fmt.Errorf("%q: %w", nameOrID, errdefs.ErrNotFound)
+}
+
+func (f *fakeDefinitions) Snapshots() []types.Snapshot {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	names := slices.Sorted(maps.Keys(f.snapshots))
+	out := make([]types.Snapshot, 0, len(names))
+	for _, n := range names {
+		out = append(out, f.snapshots[n])
+	}
+	return out
+}
+
+func (f *fakeDefinitions) DeleteSnapshot(nameOrID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	snapshot, err := f.snapshot(nameOrID)
+	if err != nil {
+		return err
+	}
+	delete(f.snapshots, snapshot.Name)
+	return os.RemoveAll(f.SnapshotDir(snapshot.Name))
+}
+
+func (f *fakeDefinitions) SnapshotDir(name string) string {
+	return filepath.Join(f.dir, "snapshots", name)
 }
 
 func (f *fakeDefinitions) Network(nameOrID string) (types.Network, error) {
@@ -409,6 +483,8 @@ type fakeHypervisor struct {
 	paused, resumed int
 	snapshotDirs    []string
 	snapshotErr     error
+	// onSnapshot, if set, is called with the context a snapshot is taken in.
+	onSnapshot func(ctx context.Context)
 
 	// memoryBytes and vCPUs are what the guest was last resized to, and
 	// resizeErr what a resize fails with.
@@ -437,7 +513,10 @@ func (f *fakeHypervisor) ResumeVM(context.Context) error {
 }
 
 // SnapshotVM writes a file where a hypervisor would write the guest's state.
-func (f *fakeHypervisor) SnapshotVM(_ context.Context, destPath string) error {
+func (f *fakeHypervisor) SnapshotVM(ctx context.Context, destPath string) error {
+	if f.onSnapshot != nil {
+		f.onSnapshot(ctx)
+	}
 	if f.snapshotErr != nil {
 		return f.snapshotErr
 	}

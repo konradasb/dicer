@@ -35,6 +35,18 @@ func (m *Manager) record(instance types.InstanceSpec, action events.Action, mess
 	})
 }
 
+// recordSnapshot records an event of a snapshot.
+func (m *Manager) recordSnapshot(snapshot types.Snapshot, action events.Action, message string, attrs map[string]string) {
+	m.events.Record(events.Event{
+		Kind:       events.KindSnapshot,
+		ID:         snapshot.ID,
+		Name:       snapshot.Name,
+		Action:     action,
+		Message:    message,
+		Attributes: attrs,
+	})
+}
+
 // recordEnd records how an instance ended and what its restart policy
 // decided.
 func (m *Manager) recordEnd(instance types.InstanceSpec, exit Exit, decision restartDecision, ranFor time.Duration) {
