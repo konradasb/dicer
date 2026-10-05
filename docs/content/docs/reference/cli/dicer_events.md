@@ -26,7 +26,7 @@ $ dicer events
 $ dicer events -f
 $ dicer events --name web --since 1h
 $ dicer events --kind image -n 20
-$ dicer events -f --format json | jq -r 'select(.action == "died") | .name'
+$ dicer events -f --format json | jq -r 'select(.action == "EVENT_ACTION_DIED") | .name'
 ```
 
 ## Flags

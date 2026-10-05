@@ -154,7 +154,7 @@ by default, which the `events` section of the configuration changes.
 instance dies:
 
 ```console
-$ dicer events -f --format json | jq -r 'select(.action == "died") | .name'
+$ dicer events -f --format json | jq -r 'select(.action == "EVENT_ACTION_DIED") | .name'
 ```
 
 ## The daemon's log

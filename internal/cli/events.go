@@ -45,7 +45,7 @@ func newEventsCommand() *cobra.Command {
 			"  dicer events -f\n" +
 			"  dicer events --name web --since 1h\n" +
 			"  dicer events --kind image -n 20\n" +
-			"  dicer events -f --format json | jq -r 'select(.action == \"died\") | .name'",
+			"  dicer events -f --format json | jq -r 'select(.action == \"EVENT_ACTION_DIED\") | .name'",
 		Args: noArgs,
 		RunE: runEventsCommand,
 	}
