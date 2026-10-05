@@ -320,6 +320,41 @@ func TestInstanceVMMCrashIsReported(t *testing.T) {
 	env.waitForState(t, name, "Stopped")
 }
 
+// TestInstanceKernelPanicEndsTheInstance panics the guest's kernel under
+// every hypervisor.
+//
+// The boot arguments turn a panic into a reset. Firecracker exits on a reset,
+// but Cloud Hypervisor reboots the guest in place, where dicer-init finds it
+// has booted before and powers the guest off. Either way the instance must
+// end, not run its workload a second time behind the daemon's back.
+func TestInstanceKernelPanicEndsTheInstance(t *testing.T) {
+	// Firecracker ends at the reset, before the guest can count a second
+	// boot, so the daemon only knows the guest ended without an exit code.
+	wantReasons := map[string]string{
+		"cloud-hypervisor": "guest reset",
+		"firecracker":      "no exit code reported",
+	}
+	for hypervisor, wantReason := range wantReasons {
+		t.Run(hypervisor, func(t *testing.T) {
+			name := instanceName(t)
+
+			env.createInstance(t, name, "--hypervisor-type", hypervisor)
+			env.startInstance(t, name)
+			vmmPID := env.vmmPID(t, name)
+
+			// The exec cannot answer: its guest is gone.
+			_, _ = env.tryExec(t, name, "sh", "-c", "echo c > /proc/sysrq-trigger")
+
+			if reason := env.waitForFailure(t, name); !strings.Contains(reason, wantReason) {
+				t.Errorf("failure reason = %q, want it to say %q", reason, wantReason)
+			}
+			if env.processAlive(t, vmmPID) {
+				t.Errorf("VMM %d is still running after its guest panicked", vmmPID)
+			}
+		})
+	}
+}
+
 // TestInstanceRestartPolicy runs a workload that exits 3 under on-failure:1.
 //
 // It covers the whole way an end travels: dicer-init reporting the exit code
