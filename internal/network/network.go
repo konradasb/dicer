@@ -22,9 +22,8 @@ const (
 // Bandwidth limits an instance's traffic, in bytes per second. Zero means
 // unlimited.
 type Bandwidth struct {
-	UploadBps      int64
-	UploadBurstBps int64
-	DownloadBps    int64
+	UploadBps   int64
+	DownloadBps int64
 }
 
 // maxPrefixLen is the longest prefix a network may have: a /30 is the

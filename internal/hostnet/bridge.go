@@ -16,10 +16,10 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// SetupBridge ensures the bridge, iptables rules, gateway access and root
-// qdisc for a network exist. Every step is idempotent and checked on each
-// call. The network is remembered, to set up again when firewalld reloads,
-// until TeardownBridge.
+// SetupBridge ensures the bridge, iptables rules and gateway access for a
+// network exist. Every step is idempotent and checked on each call. The
+// network is remembered, to set up again when firewalld reloads, until
+// TeardownBridge.
 func (h *Host) SetupBridge(ctx context.Context, nw *types.Network) error {
 	_, ipNet, err := net.ParseCIDR(nw.Subnet)
 	if err != nil {
@@ -42,16 +42,11 @@ func (h *Host) SetupBridge(ctx context.Context, nw *types.Network) error {
 		return fmt.Errorf("let guests reach gateway %s: %w", nw.Gateway, err)
 	}
 
-	if err := ensureBridgeQdisc(nw.Bridge, h.config.UplinkCapacityBps); err != nil {
-		return fmt.Errorf("set up bridge qdisc: %w", err)
-	}
-
 	return nil
 }
 
-// TeardownBridge removes a network's bridge, with its qdisc, its iptables
-// rules and its gateway access. Best-effort: it logs failures rather than
-// returning them.
+// TeardownBridge removes a network's bridge, with its iptables rules and its
+// gateway access. Best-effort: it logs failures rather than returning them.
 func (h *Host) TeardownBridge(ctx context.Context, nw *types.Network) {
 	h.mu.Lock()
 	delete(h.networks, nw.Bridge)

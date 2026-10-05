@@ -11,7 +11,6 @@ require (
 	github.com/distribution/reference v0.6.0
 	github.com/docker/docker-credential-helpers v0.9.9
 	github.com/docker/go-units v0.5.0
-	github.com/florianl/go-tc v0.4.7
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/go-containerregistry v0.20.7
 	github.com/mdlayher/vsock v1.2.1
@@ -50,16 +49,14 @@ require (
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.18.0 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/josharian/native v1.1.0 // indirect
 	github.com/klauspost/compress v1.19.1 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
+	github.com/kr/pretty v0.3.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
-	github.com/mdlayher/netlink v1.7.2 // indirect
 	github.com/mdlayher/socket v0.5.1 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/moby/sys/user v0.4.0 // indirect

@@ -29,10 +29,6 @@ type Config struct {
 	// UplinkInterface is the interface NAT traffic leaves by. Empty detects
 	// it from the default IPv4 route.
 	UplinkInterface string
-	// UplinkCapacityBps is the rate, in bytes per second, of each bridge's
-	// root traffic class, the ceiling for upload limits. Zero sets up no
-	// class, and an upload limit then fails to apply.
-	UplinkCapacityBps int64
 	// UploadBurstMultiplier and DownloadBurstMultiplier are how far an
 	// instance may briefly exceed its rate limits, as multiples of them.
 	// Less than 1 is DefaultBurstMultiplier.

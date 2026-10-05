@@ -19,6 +19,12 @@ func TAPName(instanceID string) string {
 	return "tap-" + shortHash(instanceID)
 }
 
+// IFBName returns the name of the IFB device an instance's upload is shaped
+// on: "ifb-" followed by the same hash as its TAP device's name.
+func IFBName(instanceID string) string {
+	return "ifb-" + shortHash(instanceID)
+}
+
 // BridgeName returns the bridge name for a network: "dicer-<name>" if it
 // fits in an interface name, otherwise "dbr-" and a hash of the name.
 func BridgeName(networkName string) string {

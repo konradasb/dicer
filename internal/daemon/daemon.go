@@ -260,7 +260,6 @@ func (d *daemon) initServices() error {
 
 	d.hostNetwork = hostnet.NewHost(hostnet.Config{
 		UplinkInterface:         d.cfg.Network.UplinkInterface,
-		UplinkCapacityBps:       d.cfg.Network.UplinkCapacityBps,
 		UploadBurstMultiplier:   d.cfg.Network.UploadBurstMultiplier,
 		DownloadBurstMultiplier: d.cfg.Network.DownloadBurstMultiplier,
 		Logger:                  d.logger,

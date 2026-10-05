@@ -373,11 +373,6 @@ type NetworkConfig struct {
 	// it from the default route.
 	UplinkInterface string `yaml:"uplink_interface,omitempty"`
 
-	// UplinkCapacityBps is the uplink's capacity in bytes per second, not
-	// bits, the ceiling for per-instance bandwidth shaping. Unset sets up no
-	// shaping.
-	UplinkCapacityBps int64 `yaml:"uplink_capacity_bps,omitempty"`
-
 	// UploadBurstMultiplier is how far an instance may briefly exceed its
 	// upload rate limit, as a multiple of it. Unset is 4.
 	UploadBurstMultiplier int `yaml:"upload_burst_multiplier,omitempty"`

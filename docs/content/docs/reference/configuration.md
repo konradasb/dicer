@@ -173,12 +173,6 @@ The daemon's own settings. The sections after them are the API, resources, netwo
 
 `uplink_interface` is the interface NAT traffic leaves by. Unset detects it from the default route.
 
-### `network.uplink_capacity_bps` {#network-uplink-capacity-bps}
-
-*integer*
-
-`uplink_capacity_bps` is the uplink's capacity in bytes per second, not bits, the ceiling for per-instance bandwidth shaping. Unset sets up no shaping.
-
 ### `network.upload_burst_multiplier` {#network-upload-burst-multiplier}
 
 *integer*

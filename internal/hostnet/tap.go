@@ -24,15 +24,13 @@ func (h *Host) CreateTAP(
 	ctx context.Context, nw *types.Network, allocation *types.NetworkAllocation, bw network.Bandwidth,
 ) error {
 	tap := network.TAPName(allocation.InstanceID)
+	ifb := network.IFBName(allocation.InstanceID)
 
-	if _, err := netlink.LinkByName(tap); err == nil {
-		if err := removeUploadLimit(nw.Bridge, tap); err != nil {
-			h.logger.WarnContext(ctx, "failed to remove stale upload limit",
-				"bridge", nw.Bridge, "tap", tap, "error", err)
-		}
-		if err := deleteTAP(tap); err != nil {
-			return fmt.Errorf("delete existing TAP: %w", err)
-		}
+	if err := removeUploadLimit(ifb); err != nil {
+		return fmt.Errorf("remove stale upload limit: %w", err)
+	}
+	if err := deleteTAP(tap); err != nil {
+		return fmt.Errorf("delete existing TAP: %w", err)
 	}
 
 	if err := addTAP(tap, nw.Bridge, nw.Isolated); err != nil {
@@ -41,17 +39,13 @@ func (h *Host) CreateTAP(
 	}
 
 	if bw.DownloadBps > 0 {
-		if err := limitDownload(tap, bw.DownloadBps, h.config.DownloadBurstMultiplier); err != nil {
+		if err := limitEgressRate(tap, bw.DownloadBps, h.config.DownloadBurstMultiplier); err != nil {
 			return fmt.Errorf("apply download limit: %w", err)
 		}
 	}
 
 	if bw.UploadBps > 0 {
-		burstBps := bw.UploadBurstBps
-		if burstBps <= 0 {
-			burstBps = bw.UploadBps * int64(h.config.UploadBurstMultiplier)
-		}
-		if err := limitUpload(nw.Bridge, tap, bw.UploadBps, burstBps); err != nil {
+		if err := limitUpload(tap, ifb, bw.UploadBps, h.config.UploadBurstMultiplier); err != nil {
 			return fmt.Errorf("apply upload limit: %w", err)
 		}
 	}
@@ -63,7 +57,7 @@ func (h *Host) CreateTAP(
 // Best-effort: it logs failures rather than returning them.
 func (h *Host) RemoveTAP(ctx context.Context, nw *types.Network, instanceID string) {
 	tap := network.TAPName(instanceID)
-	if err := removeUploadLimit(nw.Bridge, tap); err != nil {
+	if err := removeUploadLimit(network.IFBName(instanceID)); err != nil {
 		h.logger.WarnContext(ctx, "failed to remove upload limit",
 			"network_id", nw.ID, "instance_id", instanceID, "tap", tap, "error", err)
 	}
