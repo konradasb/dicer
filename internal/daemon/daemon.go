@@ -142,6 +142,7 @@ func (d *daemon) Run(ctx context.Context) error {
 
 	// Started after the API is up so slow boots do not delay it.
 	background.Go(func() { d.instances.StartOnBoot(ctx) })
+	background.Go(func() { d.instances.StandbyIdle(ctx) })
 
 	// Garbage collection needs recovery to know which images are in use.
 	if policy := d.cfg.Images.gcPolicy(); policy.Enabled() {

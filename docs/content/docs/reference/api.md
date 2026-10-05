@@ -158,6 +158,7 @@ CopyToInstanceStart is the first message on a CopyToInstance stream.
 | `start` | `bool` | Boots the instance immediately after defining it. |
 | `ports` | repeated [`PortMapping`](#portmapping) |  |
 | `remove_on_exit` | `bool` | Deletes the instance once it stops, whether its guest ended on its own or someone stopped it. The daemon does the deleting, so it happens even if whoever asked for it has gone. An instance that its restart policy will start again is not deleted. |
+| `standby_after` | `google.protobuf.Duration` | How long the instance may be idle, running with its guest using under 5% of a vCPU and its network carrying under a packet a second, before it is put on standby. At least a minute; unset is never. |
 
 ### CreateInstanceRequest.EnvEntry
 
@@ -544,6 +545,7 @@ is not running.
 | `disk_iops` | `int64` |  |
 | `upload_bytes_per_second` | `int64` |  |
 | `download_bytes_per_second` | `int64` |  |
+| `standby_after` | `google.protobuf.Duration` | How long the instance may be idle before it is put on standby; unset is never. See CreateInstanceRequest.standby_after. |
 | `network_name` | `string` |  |
 | `static_ip` | `string` |  |
 | `mounts` | repeated [`Mount`](#mount) |  |
@@ -937,6 +939,7 @@ the existing value whole.
 | `disk_iops` | optional `int64` | One of `_disk_iops`.  |
 | `upload_bytes_per_second` | optional `int64` | One of `_upload_bytes_per_second`.  |
 | `download_bytes_per_second` | optional `int64` | One of `_download_bytes_per_second`.  |
+| `standby_after` | `google.protobuf.Duration` | Zero is never. |
 | `network_name` | optional `string` | One of `_network_name`.  |
 | `static_ip` | optional `string` | One of `_static_ip`.  |
 | `hostname` | optional `string` | One of `_hostname`.  |

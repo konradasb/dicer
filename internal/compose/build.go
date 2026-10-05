@@ -364,7 +364,7 @@ func (b *builder) service(key string, raw *rawService) (*Service, error) {
 	}
 
 	steps := []func(*rawService, *dicerdv1.CreateInstanceRequest) error{
-		b.setSizes, b.setRateLimits, b.setHypervisor, b.setInitMode, b.setEnvironment, b.setLabels, b.setPorts, b.setMounts,
+		b.setSizes, b.setRateLimits, b.setStandby, b.setHypervisor, b.setInitMode, b.setEnvironment, b.setLabels, b.setPorts, b.setMounts,
 		b.setNetwork, b.setRestartPolicy, b.setHealthCheck,
 	}
 	for _, step := range steps {
@@ -430,6 +430,13 @@ func (b *builder) setSizes(raw *rawService, req *dicerdv1.CreateInstanceRequest)
 	if raw.Disk != nil {
 		req.DiskBytes = int64(*raw.Disk)
 	}
+	return nil
+}
+
+// setStandby sets how long the instance may be idle before it is put on
+// standby.
+func (b *builder) setStandby(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
+	req.StandbyAfter = duration(raw.StandbyAfter)
 	return nil
 }
 

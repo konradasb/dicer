@@ -165,7 +165,8 @@ $ dicer update web --memory 2GiB --vcpus 2
 $ dicer start web
 ```
 
-The restart policy alone can be changed while the instance runs. See
+The restart policy and `--standby-after` alone can be changed while the
+instance runs. See
 [Instances](../../concepts/instances#changing-and-deleting).
 
 ## Resizing a running instance

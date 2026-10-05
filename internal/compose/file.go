@@ -160,6 +160,10 @@ type rawService struct {
 	// be read and written at, as `dicer run --disk-iops`. Unset is unlimited.
 	DiskIOPS *int64 `yaml:"disk_iops"`
 
+	// StandbyAfter is how long the instance may be idle before it is put on
+	// standby, as `dicer run --standby-after`, e.g. `15m`. Unset is never.
+	StandbyAfter time.Duration `yaml:"standby_after"`
+
 	// UploadRate is the bytes per second the instance can send, as
 	// `dicer run --upload-rate`. Unset is unlimited.
 	UploadRate *byteRate `yaml:"upload_rate"`

@@ -8,6 +8,7 @@ package e2e
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestInstanceStandbyResumesWhereItWas checks that standby ends an
@@ -69,5 +70,34 @@ func TestInstanceStopDiscardsStandby(t *testing.T) {
 	env.startInstance(t, name)
 	if _, err := env.tryExec(t, name, "cat", "/mnt/mem/marker"); err == nil {
 		t.Error("a start after a stop resumed what standby froze, rather than booting afresh")
+	}
+}
+
+// TestIdleInstanceGoesOnStandby checks that an instance given standby_after
+// is put on standby once it has been idle that long, while one beside it
+// that keeps a vCPU busy is left running.
+func TestIdleInstanceGoesOnStandby(t *testing.T) {
+	var (
+		idle = instanceName(t) + "-idle"
+		busy = instanceName(t) + "-busy"
+	)
+
+	env.createInstance(t, idle, "--standby-after", "1m")
+	env.createInstance(t, busy, "--standby-after", "1m", "--", "sh", "-c", "while :; do :; done")
+	env.startInstance(t, idle)
+	env.startInstance(t, busy)
+
+	// Judged a minute at a time: a minute of samples to be idle for, and a
+	// minute more to catch it.
+	deadline := time.Now().Add(4 * time.Minute)
+	for env.instance(t, idle).State != "Standby" {
+		if time.Now().After(deadline) {
+			t.Fatalf("the idle instance is %q after 4m, want Standby", env.instance(t, idle).State)
+		}
+		time.Sleep(5 * time.Second)
+	}
+
+	if state := env.instance(t, busy).State; state != "Running" {
+		t.Errorf("the busy instance is %q, want Running", state)
 	}
 }

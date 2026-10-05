@@ -28,9 +28,15 @@ const standbyFile = "standby.json"
 // that it holds no CPU or memory. Start resumes it where it was; Stop
 // discards what was frozen. Its disk stays where it is, and its address, host
 // ports and writable volumes stay its own.
-func (m *Manager) Standby(ctx context.Context, instance types.InstanceSpec) (err error) {
+func (m *Manager) Standby(ctx context.Context, instance types.InstanceSpec) error {
+	return m.standby(ctx, instance, 0)
+}
+
+// standby is Standby. If idleFor is set, the instance has been idle that
+// long, and is put on standby only if it is still running and its
+// StandbyAfter, as defined now, has passed.
+func (m *Manager) standby(ctx context.Context, instance types.InstanceSpec, idleFor time.Duration) (err error) {
 	started := time.Now()
-	defer func() { m.observeOperation(operationStandby, started, err) }()
 
 	lock := m.lock(instance.ID)
 	lock.Lock()
@@ -40,6 +46,15 @@ func (m *Manager) Standby(ctx context.Context, instance types.InstanceSpec) (err
 	if err != nil {
 		return err
 	}
+	if idleFor > 0 {
+		current, err := m.definitions.Instance(instance.ID)
+		if err != nil || status.State != types.InstanceStateRunning ||
+			current.StandbyAfter == 0 || idleFor < current.StandbyAfter {
+			return nil
+		}
+	}
+	defer func() { m.observeOperation(operationStandby, started, err) }()
+
 	if !status.State.IsActive() {
 		return errdefs.InvalidState("instance %q is %s; only a running or paused instance can be put on standby",
 			instance.Name, status.State.Lowercase())
@@ -132,9 +147,14 @@ func (m *Manager) Standby(ctx context.Context, instance types.InstanceSpec) (err
 	}
 
 	size, _ := diskfile.AllocatedBytesUnder(dir)
-	m.record(instance, events.ActionStandby, fmt.Sprintf("Put instance on standby in %s: %s frozen to disk, %s memory released",
-		humanize.Duration(time.Since(started)), humanize.Bytes(size), humanize.Bytes(status.MemoryBytes)),
-		map[string]string{"size_bytes": strconv.FormatInt(size, 10)})
+	attrs := map[string]string{"size_bytes": strconv.FormatInt(size, 10)}
+	why := ""
+	if idleFor > 0 {
+		attrs["idle_seconds"] = strconv.FormatInt(int64(idleFor.Seconds()), 10)
+		why = " after " + humanize.Duration(idleFor) + " idle"
+	}
+	m.record(instance, events.ActionStandby, fmt.Sprintf("Put instance on standby%s, in %s: %s frozen to disk, %s memory released",
+		why, humanize.Duration(time.Since(started)), humanize.Bytes(size), humanize.Bytes(status.MemoryBytes)), attrs)
 	m.logger.InfoContext(ctx, "put instance on standby", "instance", instance.Name, "size_bytes", size)
 	return nil
 }

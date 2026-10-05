@@ -20,6 +20,7 @@ import (
 	"github.com/docker/go-units"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/konradasb/dicer/internal/naming"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
@@ -68,6 +69,7 @@ func addInstanceSpecFlags(cmd *cobra.Command, withDefaults bool) {
 	flags.Int64("disk-iops", 0, "Operations per second each disk can be read and written at (0: unlimited)")
 	flags.String("upload-rate", "", "Bytes per second the guest can send, e.g. 10MiB (0: unlimited)")
 	flags.String("download-rate", "", "Bytes per second the guest can receive, e.g. 10MiB (0: unlimited)")
+	flags.Duration("standby-after", 0, "Put the instance on standby once it has been idle this long, e.g. 15m (0: never)")
 	flags.String("network", "", "Network to attach to")
 	flags.String("ip", "", "Static IP address (default: assigned from the subnet)")
 	flags.StringArrayP("publish", "p", nil,
@@ -279,6 +281,9 @@ func applySpecFlags(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) err
 		}
 	}
 	req.DiskIops, _ = flags.GetInt64("disk-iops")
+	if d, _ := flags.GetDuration("standby-after"); d != 0 {
+		req.StandbyAfter = durationpb.New(d)
+	}
 
 	lists, err := parseListFlags(cmd)
 	if err != nil {
@@ -382,6 +387,10 @@ func buildUpdateRequest(cmd *cobra.Command, args []string) (*dicerdv1.UpdateInst
 	if flags.Changed("disk-iops") {
 		v, _ := flags.GetInt64("disk-iops")
 		req.DiskIops = &v
+	}
+	if flags.Changed("standby-after") {
+		d, _ := flags.GetDuration("standby-after")
+		req.StandbyAfter = durationpb.New(d)
 	}
 	if flags.Changed("restart") {
 		v, _ := flags.GetString("restart")

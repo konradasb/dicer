@@ -23,7 +23,7 @@ expose them.
 
 | Feature | Description |
 |---------|-------------|
-| Automatic standby | Put an instance on standby once it has been idle for a while, by a policy of its own |
+| Wake on traffic | Resume an instance on standby when a connection arrives for it, holding the connection until it is back |
 | Lazy restore | Restore a snapshot with guest memory paged in on demand (userfaultfd), so resuming takes milliseconds rather than the time to read all of memory |
 
 ### Devices and hypervisors

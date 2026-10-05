@@ -38,6 +38,7 @@ func instanceToProto(instance types.Instance) *dicerdv1.Instance {
 		DiskIops:               spec.DiskIOPS,
 		UploadBytesPerSecond:   spec.UploadBytesPerSecond,
 		DownloadBytesPerSecond: spec.DownloadBytesPerSecond,
+		StandbyAfter:           optionalDuration(spec.StandbyAfter),
 		NetworkName:            spec.NetworkName,
 		StaticIp:               spec.StaticIP,
 		Env:                    spec.Env,

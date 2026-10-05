@@ -6,6 +6,7 @@ package types
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/konradasb/dicer/internal/errdefs"
 )
@@ -176,6 +177,10 @@ func TestInstanceSpecValidate(t *testing.T) {
 		{name: "negative disk IOPS", modify: func(s *InstanceSpec) { s.DiskIOPS = -1 }},
 		{name: "negative upload rate", modify: func(s *InstanceSpec) { s.UploadBytesPerSecond = -1 }},
 		{name: "negative download rate", modify: func(s *InstanceSpec) { s.DownloadBytesPerSecond = -1 }},
+		{name: "standby after 15 minutes", modify: func(s *InstanceSpec) { s.StandbyAfter = 15 * time.Minute }, valid: true},
+		// Idleness is judged a minute at a time.
+		{name: "standby after 30 seconds", modify: func(s *InstanceSpec) { s.StandbyAfter = 30 * time.Second }},
+		{name: "negative standby after", modify: func(s *InstanceSpec) { s.StandbyAfter = -time.Minute }},
 		{name: "remove on exit", modify: func(s *InstanceSpec) { s.RemoveOnExit = true }, valid: true},
 		{name: "remove on exit, never restarted", modify: removeOnExitRestarted(RestartModeNo), valid: true},
 		// Deleted when it stops and started again when it stops: one of the

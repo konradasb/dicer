@@ -58,6 +58,7 @@ func instanceView(instance *dicerdv1.Instance, recent []*dicerdv1.Event, p palet
 		field{"Active", activeLines(instance, p)},
 		field{"Health", healthLines(instance, p)},
 		field{"Restart", oneLine(restartDetail(instance))},
+		field{"Standby", oneLine(standbyDetail(instance))},
 	)
 	v.block(
 		field{"Machine", machineLines(instance)},
@@ -160,6 +161,15 @@ func machineLines(instance *dicerdv1.Instance) []string {
 	}
 
 	return []string{resources, hypervisor, kernel}
+}
+
+// standbyDetail describes when an instance is put on standby, if ever:
+// "after 15m idle".
+func standbyDetail(instance *dicerdv1.Instance) string {
+	if d := instance.GetStandbyAfter().AsDuration(); d > 0 {
+		return "after " + humanize.Duration(d) + " idle"
+	}
+	return ""
 }
 
 // limitsDetail describes the rate limits an instance has, if any: "disk

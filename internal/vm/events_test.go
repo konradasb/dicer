@@ -210,7 +210,7 @@ func TestUpdateMessage(t *testing.T) {
 
 	after = before
 	after.Restart = types.RestartPolicy{Mode: types.RestartModeOnFailure, MaxRetries: 3}
-	want = "Updated instance: restart policy no → on-failure:3; takes effect when the instance next ends"
+	want = "Updated instance: restart policy no → on-failure:3; takes effect at once"
 	if got := updateMessage(before, after, types.InstanceStateRunning); got != want {
 		t.Errorf("updateMessage =\n%q\nwant\n%q", got, want)
 	}

@@ -53,6 +53,10 @@ type InstanceSpec struct {
 	UploadBytesPerSecond   int64 `yaml:"upload_bytes_per_second,omitempty" json:"upload_bytes_per_second,omitempty"`
 	DownloadBytesPerSecond int64 `yaml:"download_bytes_per_second,omitempty" json:"download_bytes_per_second,omitempty"`
 
+	// StandbyAfter is how long the instance may be idle, running but doing
+	// next to nothing, before it is put on standby. Zero is never.
+	StandbyAfter time.Duration `yaml:"standby_after,omitempty" json:"standby_after,omitempty"`
+
 	Ports  []PortMapping     `yaml:"ports,omitempty" json:"ports,omitempty"`
 	Mounts []Mount           `yaml:"mounts,omitempty" json:"mounts,omitempty"`
 	Env    map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
@@ -128,6 +132,9 @@ func (s InstanceSpec) Validate() error {
 			"or use cloud-hypervisor")
 	case s.DiskBytesPerSecond < 0 || s.DiskIOPS < 0 || s.UploadBytesPerSecond < 0 || s.DownloadBytesPerSecond < 0:
 		return errdefs.InvalidArgument("a rate limit cannot be negative: give 0 for no limit")
+	case s.StandbyAfter != 0 && s.StandbyAfter < MinStandbyAfter:
+		return errdefs.InvalidArgument("standby_after %s is too short: idleness is judged a minute at a time, "+
+			"so give %s or more, or 0 for never", s.StandbyAfter, MinStandbyAfter)
 	case s.RemoveOnExit && s.Restart.Restarts():
 		return errdefs.InvalidArgument(
 			"an instance cannot be deleted when it stops and restarted when it stops: "+
@@ -220,6 +227,10 @@ func (s InstanceStatus) HeldResources() Resources {
 
 	return Resources{VCPUs: s.VCPUs, MemoryBytes: s.MemoryBytes}
 }
+
+// MinStandbyAfter is the shortest InstanceSpec.StandbyAfter: how idle an
+// instance is, is judged a minute at a time.
+const MinStandbyAfter = time.Minute
 
 // InstanceState is the lifecycle state of an instance.
 type InstanceState string

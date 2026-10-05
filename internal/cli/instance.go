@@ -246,10 +246,11 @@ func newInstanceUpdateCommand() *cobra.Command {
 			"leaves the rest as it was. A list or map given -- --env, --label,\n" +
 			"--publish, --mount -- replaces the old one whole.\n\n" +
 			"A command after -- replaces the one the instance runs.\n\n" +
-			"The restart policy alone can be changed while the instance runs: it applies\n" +
-			"the next time the instance ends.",
+			"The restart policy and --standby-after alone can be changed while the\n" +
+			"instance runs: they apply at once.",
 		Example: "  dicer update web --memory 2GiB --vcpus 2\n" +
 			"  dicer update web --restart unless-stopped\n" +
+			"  dicer update web --standby-after 30m\n" +
 			"  dicer update web -- /usr/sbin/nginx -g 'daemon off;'",
 		Args: func(cmd *cobra.Command, args []string) error {
 			return one("an instance name")(cmd, positionalArgs(cmd, args))

@@ -10,8 +10,8 @@ leaves the rest as it was. A list or map given -- `--env`, `--label`,
 
 A command after -- replaces the one the instance runs.
 
-The restart policy alone can be changed while the instance runs: it applies
-the next time the instance ends.
+The restart policy and `--standby-after` alone can be changed while the
+instance runs: they apply at once.
 
 ## Usage
 
@@ -24,6 +24,7 @@ $ dicer update NAME [-- COMMAND [ARG...]] [flags]
 ```console
 $ dicer update web --memory 2GiB --vcpus 2
 $ dicer update web --restart unless-stopped
+$ dicer update web --standby-after 30m
 $ dicer update web -- /usr/sbin/nginx -g 'daemon off;'
 ```
 
@@ -62,6 +63,7 @@ $ dicer update web -- /usr/sbin/nginx -g 'daemon off;'
 | `-p`, `--publish stringArray` | Publish a guest port on the host, as [hostIP:]hostPort:guestPort[/tcp\|udp] (repeatable). |
 | `--restart string` | Restart policy when the instance ends on its own: no, on-failure[:max-retries], unless-stopped or always (default no). |
 | `--rm` | Delete the instance once it stops, the daemon doing the deleting. |
+| `--standby-after duration` | Put the instance on standby once it has been idle this long, e.g. 15m (0: never). |
 | `--upload-rate string` | Bytes per second the guest can send, e.g. 10MiB (0: unlimited). |
 | `--vcpus int32` | Number of virtual CPUs. |
 

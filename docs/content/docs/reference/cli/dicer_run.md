@@ -67,6 +67,7 @@ $ dicer run -d --vcpus 2 alpine:3.21 sleep infinity
 | `--pull string` | When to pull the image: missing, always or never. Default: `missing`. |
 | `--restart string` | Restart policy when the instance ends on its own: no, on-failure[:max-retries], unless-stopped or always (default no). |
 | `--rm` | Delete the instance once it stops, the daemon doing the deleting. |
+| `--standby-after duration` | Put the instance on standby once it has been idle this long, e.g. 15m (0: never). |
 | `--upload-rate string` | Bytes per second the guest can send, e.g. 10MiB (0: unlimited). |
 | `--vcpus int32` | Number of virtual CPUs. Default: `1`. |
 

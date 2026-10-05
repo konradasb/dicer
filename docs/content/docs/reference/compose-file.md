@@ -169,6 +169,12 @@ depends_on:
 
 `disk_iops` is the operations per second each of the instance's disks can be read and written at, as `dicer run --disk-iops`. Unset is unlimited.
 
+### `services.*.standby_after` {#services-standby-after}
+
+*duration, such as 30s or 5m*
+
+`standby_after` is how long the instance may be idle before it is put on standby, as `dicer run --standby-after`, e.g. `15m`. Unset is never.
+
 ### `services.*.upload_rate` {#services-upload-rate}
 
 *size per second, such as 50MiB or 50MiB/s*

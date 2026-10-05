@@ -395,6 +395,9 @@ message Instance {
   int64 disk_iops = 43;
   int64 upload_bytes_per_second = 44;
   int64 download_bytes_per_second = 45;
+  // How long the instance may be idle before it is put on standby; unset
+  // is never. See CreateInstanceRequest.standby_after.
+  google.protobuf.Duration standby_after = 46;
   string network_name = 12;
   string static_ip = 13;
   reserved 14, 15;
@@ -592,6 +595,10 @@ message CreateInstanceRequest {
   // if whoever asked for it has gone. An instance that its restart policy
   // will start again is not deleted.
   bool remove_on_exit = 24;
+  // How long the instance may be idle, running with its guest using under
+  // 5% of a vCPU and its network carrying under a packet a second, before
+  // it is put on standby. At least a minute; unset is never.
+  google.protobuf.Duration standby_after = 33;
 }
 
 // UpdateInstanceRequest changes the fields that are set: an optional field
@@ -616,6 +623,8 @@ message UpdateInstanceRequest {
   optional int64 disk_iops = 28;
   optional int64 upload_bytes_per_second = 29;
   optional int64 download_bytes_per_second = 30;
+  // Zero is never.
+  google.protobuf.Duration standby_after = 33;
   optional string network_name = 10;
   optional string static_ip = 11;
   optional string hostname = 12;

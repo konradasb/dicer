@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
@@ -20,8 +21,8 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// Update replaces a stopped instance's definition. A change to the restart
-// policy alone is accepted in any state. Changing the network or static IP
+// Update replaces a stopped instance's definition. A change to its restart
+// policy or standby_after alone is accepted in any state. Changing the network or static IP
 // releases the instance's address.
 func (m *Manager) Update(ctx context.Context, updated types.InstanceSpec) error {
 	lock := m.lock(updated.ID)
@@ -36,7 +37,7 @@ func (m *Manager) Update(ctx context.Context, updated types.InstanceSpec) error 
 	if err != nil {
 		return err
 	}
-	if status.State != types.InstanceStateStopped && !onlyRestartPolicyDiffers(current, updated) {
+	if status.State != types.InstanceStateStopped && !onlyPoliciesDiffer(current, updated) {
 		return errdefs.InvalidState("instance %q is %s; stop it before changing it", current.Name, status.State.Lowercase())
 	}
 
@@ -63,7 +64,7 @@ func updateMessage(current, updated types.InstanceSpec, state types.InstanceStat
 	}
 	when := "takes effect on next start"
 	if state != types.InstanceStateStopped {
-		when = "takes effect when the instance next ends"
+		when = "takes effect at once"
 	}
 	return "Updated instance: " + strings.Join(changed, ", ") + "; " + when
 }
@@ -107,6 +108,7 @@ func definitionChanges(a, b types.InstanceSpec) []string {
 	from("disk", humanize.Bytes(a.DiskBytes), humanize.Bytes(b.DiskBytes))
 	from("disk rate", byteRate(a.DiskBytesPerSecond), byteRate(b.DiskBytesPerSecond))
 	from("disk IOPS", iops(a.DiskIOPS), iops(b.DiskIOPS))
+	from("standby after", standbyAfter(a.StandbyAfter), standbyAfter(b.StandbyAfter))
 	from("upload rate", byteRate(a.UploadBytesPerSecond), byteRate(b.UploadBytesPerSecond))
 	from("download rate", byteRate(a.DownloadBytesPerSecond), byteRate(b.DownloadBytesPerSecond))
 	from("restart policy", a.Restart.String(), b.Restart.String())
@@ -136,10 +138,22 @@ func healthCheckString(c *types.HealthCheck) string {
 	return c.String()
 }
 
-// onlyRestartPolicyDiffers reports whether a and b differ at most in their
-// restart policy and UpdatedAt.
-func onlyRestartPolicyDiffers(a, b types.InstanceSpec) bool {
+// standbyAfter describes how long an instance may be idle before standby,
+// as an update lists it: "15m", or "never".
+func standbyAfter(d time.Duration) string {
+	if d == 0 {
+		return "never"
+	}
+	return humanize.Duration(d)
+}
+
+// onlyPoliciesDiffer reports whether a and b differ at most in what the
+// daemon decides by rather than what the guest runs with, which can change
+// in any state: their restart policy, when they go on standby, and
+// UpdatedAt.
+func onlyPoliciesDiffer(a, b types.InstanceSpec) bool {
 	a.Restart, b.Restart = types.RestartPolicy{}, types.RestartPolicy{}
+	a.StandbyAfter, b.StandbyAfter = 0, 0
 	a.UpdatedAt = b.UpdatedAt
 	return reflect.DeepEqual(a, b)
 }

@@ -87,6 +87,31 @@ What it froze takes as much disk as its memory: its memory is written to disk
 in full. An instance on standby cannot be changed or renamed until it is
 stopped, and its restart policy does not start it when the host boots.
 
+### Automatic standby
+
+An instance given `--standby-after`, or `standby_after` in a compose file, is
+put on standby once it has been idle that long, at least a minute:
+
+```console
+$ dicer run -d --name preview --standby-after 15m nginx:1.27
+```
+
+The daemon judges every running instance that has one a minute at a time,
+from the host, as `dicer stats` sees it: a minute is idle if its guest used
+under 5% of one vCPU and its network carried under a packet a second, which
+leaves room for background chatter such as NTP. It is put on standby after
+an unbroken run of idle minutes as long as its `standby_after`; one busy
+minute starts the count again. A paused instance is never put on standby: it
+was paused on purpose.
+
+Nothing wakes an instance on standby but a start: a connection to it, or to a
+port it publishes, does not. An instance that waits on work it fetches
+itself, polling a queue or a CI service, uses so little while it waits that
+it may well look idle, and should not be given `--standby-after`.
+
+`dicer update --standby-after` changes it, or turns it off with `0`, while
+the instance runs, and the change applies at once.
+
 ## How an instance ends
 
 An instance ends **cleanly** when its guest says so: the workload exits with
@@ -110,8 +135,8 @@ definition, disk and address.
 ## Changing and deleting
 
 - `dicer update` changes the definition of a stopped instance; it takes
-  effect at the next start. The restart policy alone can be changed while it
-  runs, and applies the next time it ends.
+  effect at the next start. The restart policy and `--standby-after` alone
+  can be changed while it runs, and apply at once.
 - `dicer resize` changes a running instance's vCPUs and memory, within the
   `--max-vcpus` and `--max-memory` it was started with. See
   [Resizing a running instance](../../guides/running-workloads#resizing-a-running-instance).

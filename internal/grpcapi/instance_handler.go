@@ -113,6 +113,7 @@ func (h *instanceHandler) newInstance(req *dicerdv1.CreateInstanceRequest) (type
 		DiskIOPS:               req.GetDiskIops(),
 		UploadBytesPerSecond:   req.GetUploadBytesPerSecond(),
 		DownloadBytesPerSecond: req.GetDownloadBytesPerSecond(),
+		StandbyAfter:           req.GetStandbyAfter().AsDuration(),
 		NetworkName:            req.GetNetworkName(),
 		StaticIP:               req.GetStaticIp(),
 		Ports:                  ports,
@@ -241,6 +242,9 @@ func applySettings(instance *types.InstanceSpec, req *dicerdv1.UpdateInstanceReq
 	setIf(&instance.DiskIOPS, req.DiskIops)
 	setIf(&instance.UploadBytesPerSecond, req.UploadBytesPerSecond)
 	setIf(&instance.DownloadBytesPerSecond, req.DownloadBytesPerSecond)
+	if d := req.GetStandbyAfter(); d != nil {
+		instance.StandbyAfter = d.AsDuration()
+	}
 	setIf(&instance.StaticIP, req.StaticIp)
 	setIf(&instance.Hostname, req.Hostname)
 	setIf(&instance.RemoveOnExit, req.RemoveOnExit)
