@@ -23,17 +23,16 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// The fakes below are why Definitions and Addresses are interfaces declared in
-// this package: the lifecycle can be tested without a filesystem, without the
-// storage implementation, and -- since filestore imports vm -- without an
-// import cycle.
+// The fakes below are why Definitions and Networks are interfaces declared in
+// this package: the lifecycle can be tested without a filesystem or the
+// storage implementation.
 
 // fakeDefinitions is an in-memory Definitions.
 //
 // The manager writes to it from the goroutines that supervise a guest -- an
 // instance started with --rm is deleted by the one that notices the VMM
 // exit -- while the test that is waiting reads it. So every method takes the
-// mutex, as the real store's own locking does.
+// mutex, as filestore.Manager's own locking does.
 type fakeDefinitions struct {
 	mu        sync.Mutex
 	instances map[string]types.InstanceSpec
@@ -53,28 +52,28 @@ func newFakeDefinitions(dir string) *fakeDefinitions {
 	}
 }
 
-func (f *fakeDefinitions) GetInstance(nameOrID string) (types.InstanceSpec, error) {
+func (f *fakeDefinitions) Instance(nameOrID string) (types.InstanceSpec, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return f.getInstance(nameOrID)
+	return f.instance(nameOrID)
 }
 
-// getInstance is GetInstance without the lock, for the methods that already
+// instance is Instance without the lock, for the methods that already
 // hold it.
-func (f *fakeDefinitions) getInstance(nameOrID string) (types.InstanceSpec, error) {
-	if inst, ok := f.instances[nameOrID]; ok {
-		return inst, nil
+func (f *fakeDefinitions) instance(nameOrID string) (types.InstanceSpec, error) {
+	if instance, ok := f.instances[nameOrID]; ok {
+		return instance, nil
 	}
-	for _, inst := range f.instances {
-		if inst.ID == nameOrID {
-			return inst, nil
+	for _, instance := range f.instances {
+		if instance.ID == nameOrID {
+			return instance, nil
 		}
 	}
 	return types.InstanceSpec{}, fmt.Errorf("%q: %w", nameOrID, errdefs.ErrNotFound)
 }
 
-func (f *fakeDefinitions) ListInstances() ([]types.InstanceSpec, error) {
+func (f *fakeDefinitions) Instances() []types.InstanceSpec {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -83,7 +82,7 @@ func (f *fakeDefinitions) ListInstances() ([]types.InstanceSpec, error) {
 	for _, n := range names {
 		out = append(out, f.instances[n])
 	}
-	return out, nil
+	return out
 }
 
 func (f *fakeDefinitions) MatchingInstances(match func(types.InstanceSpec) bool) []types.InstanceSpec {
@@ -91,33 +90,33 @@ func (f *fakeDefinitions) MatchingInstances(match func(types.InstanceSpec) bool)
 	defer f.mu.Unlock()
 
 	var out []types.InstanceSpec
-	for _, inst := range f.instances {
-		if match(inst) {
-			out = append(out, inst)
+	for _, instance := range f.instances {
+		if match(instance) {
+			out = append(out, instance)
 		}
 	}
 	return out
 }
 
-func (f *fakeDefinitions) CreateInstance(inst types.InstanceSpec) error {
+func (f *fakeDefinitions) CreateInstance(instance types.InstanceSpec) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if _, ok := f.instances[inst.Name]; ok {
-		return errdefs.Exists("instance %q already exists", inst.Name)
+	if _, ok := f.instances[instance.Name]; ok {
+		return errdefs.Exists("instance %q already exists", instance.Name)
 	}
-	f.instances[inst.Name] = inst
+	f.instances[instance.Name] = instance
 	return nil
 }
 
-func (f *fakeDefinitions) UpdateInstance(inst types.InstanceSpec) error {
+func (f *fakeDefinitions) UpdateInstance(instance types.InstanceSpec) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if _, err := f.getInstance(inst.ID); err != nil {
+	if _, err := f.instance(instance.ID); err != nil {
 		return err
 	}
-	f.instances[inst.Name] = inst
+	f.instances[instance.Name] = instance
 	return nil
 }
 
@@ -125,7 +124,7 @@ func (f *fakeDefinitions) RenameInstance(nameOrID string, renamed types.Instance
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	current, err := f.getInstance(nameOrID)
+	current, err := f.instance(nameOrID)
 	if err != nil {
 		return err
 	}
@@ -143,11 +142,11 @@ func (f *fakeDefinitions) DeleteInstance(nameOrID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	inst, err := f.getInstance(nameOrID)
+	instance, err := f.instance(nameOrID)
 	if err != nil {
 		return err
 	}
-	delete(f.instances, inst.Name)
+	delete(f.instances, instance.Name)
 	return nil
 }
 
@@ -155,7 +154,7 @@ func (f *fakeDefinitions) InstanceDir(name string) string {
 	return filepath.Join(f.dir, "instances", name)
 }
 
-func (f *fakeDefinitions) GetNetwork(nameOrID string) (types.Network, error) {
+func (f *fakeDefinitions) Network(nameOrID string) (types.Network, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -165,7 +164,7 @@ func (f *fakeDefinitions) GetNetwork(nameOrID string) (types.Network, error) {
 	return types.Network{}, fmt.Errorf("%q: %w", nameOrID, errdefs.ErrNotFound)
 }
 
-func (f *fakeDefinitions) ListNetworks() ([]types.Network, error) {
+func (f *fakeDefinitions) Networks() []types.Network {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -174,10 +173,10 @@ func (f *fakeDefinitions) ListNetworks() ([]types.Network, error) {
 	for _, n := range names {
 		out = append(out, f.networks[n])
 	}
-	return out, nil
+	return out
 }
 
-func (f *fakeDefinitions) GetKernel(nameOrID string) (types.Kernel, error) {
+func (f *fakeDefinitions) Kernel(nameOrID string) (types.Kernel, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -187,7 +186,7 @@ func (f *fakeDefinitions) GetKernel(nameOrID string) (types.Kernel, error) {
 	return types.Kernel{}, fmt.Errorf("%q: %w", nameOrID, errdefs.ErrNotFound)
 }
 
-func (f *fakeDefinitions) GetVolume(nameOrID string) (types.Volume, error) {
+func (f *fakeDefinitions) Volume(nameOrID string) (types.Volume, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -225,23 +224,23 @@ func (f *fakeNetworks) Allocate(n types.Network, instanceID, staticIP string) (t
 		ip = fmt.Sprintf("10.0.0.%d", f.next+1)
 	}
 
-	alloc := types.NetworkAllocation{
+	allocation := types.NetworkAllocation{
 		NetworkID:  n.ID,
 		InstanceID: instanceID,
 		IP:         ip,
 		MAC:        fmt.Sprintf("02:00:00:00:00:%02x", f.next),
 	}
-	f.byNetwork[n.Name] = append(f.byNetwork[n.Name], alloc)
-	return alloc, nil
+	f.byNetwork[n.Name] = append(f.byNetwork[n.Name], allocation)
+	return allocation, nil
 }
 
-func (f *fakeNetworks) Get(networkName, instanceID string) (types.NetworkAllocation, error) {
+func (f *fakeNetworks) Allocation(networkName, instanceID string) (types.NetworkAllocation, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	for _, alloc := range f.byNetwork[networkName] {
-		if alloc.InstanceID == instanceID {
-			return alloc, nil
+	for _, allocation := range f.byNetwork[networkName] {
+		if allocation.InstanceID == instanceID {
+			return allocation, nil
 		}
 	}
 	return types.NetworkAllocation{}, fmt.Errorf("%q: %w", instanceID, errdefs.ErrNotFound)
@@ -251,9 +250,9 @@ func (f *fakeNetworks) InstanceAt(networkName, ip string) (string, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	for _, alloc := range f.byNetwork[networkName] {
-		if alloc.IP == ip {
-			return alloc.InstanceID, true
+	for _, allocation := range f.byNetwork[networkName] {
+		if allocation.IP == ip {
+			return allocation.InstanceID, true
 		}
 	}
 	return "", false
@@ -264,9 +263,9 @@ func (f *fakeNetworks) Release(networkName, instanceID string) error {
 	defer f.mu.Unlock()
 
 	kept := f.byNetwork[networkName][:0]
-	for _, alloc := range f.byNetwork[networkName] {
-		if alloc.InstanceID != instanceID {
-			kept = append(kept, alloc)
+	for _, allocation := range f.byNetwork[networkName] {
+		if allocation.InstanceID != instanceID {
+			kept = append(kept, allocation)
 		}
 	}
 	f.byNetwork[networkName] = kept
@@ -288,9 +287,9 @@ func (f *fakeNetworks) Reconcile(networks []string, live map[string]struct{}) (i
 	var released int
 	for _, n := range networks {
 		kept := make([]types.NetworkAllocation, 0, len(f.byNetwork[n]))
-		for _, alloc := range f.byNetwork[n] {
-			if _, ok := live[alloc.InstanceID]; ok {
-				kept = append(kept, alloc)
+		for _, allocation := range f.byNetwork[n] {
+			if _, ok := live[allocation.InstanceID]; ok {
+				kept = append(kept, allocation)
 				continue
 			}
 			released++
@@ -323,8 +322,8 @@ type publishedPorts struct {
 	ports []types.PortMapping
 }
 
-func (f *fakeHostNetwork) SetupBridge(_ context.Context, n *types.Network) error {
-	f.setUpBridges = append(f.setUpBridges, n.Bridge)
+func (f *fakeHostNetwork) SetupBridge(_ context.Context, nw *types.Network) error {
+	f.setUpBridges = append(f.setUpBridges, nw.Bridge)
 	return nil
 }
 
@@ -339,7 +338,7 @@ func (f *fakeHostNetwork) RemoveTAP(_ context.Context, _ *types.Network, instanc
 }
 
 func (f *fakeHostNetwork) PublishPorts(
-	_ context.Context, _ *types.Network, alloc *types.NetworkAllocation, ports []types.PortMapping,
+	_ context.Context, _ *types.Network, allocation *types.NetworkAllocation, ports []types.PortMapping,
 ) error {
 	if f.publishErr != nil {
 		return f.publishErr
@@ -347,7 +346,7 @@ func (f *fakeHostNetwork) PublishPorts(
 	if f.published == nil {
 		f.published = make(map[string]publishedPorts)
 	}
-	f.published[alloc.InstanceID] = publishedPorts{ip: alloc.IP, ports: ports}
+	f.published[allocation.InstanceID] = publishedPorts{ip: allocation.IP, ports: ports}
 	return nil
 }
 
@@ -359,11 +358,11 @@ func (f *fakeHostNetwork) UnpublishPorts(ctx context.Context, instanceID string)
 	delete(f.published, instanceID)
 }
 
-func (f *fakeHostNetwork) TeardownBridge(ctx context.Context, n *types.Network) {
+func (f *fakeHostNetwork) TeardownBridge(ctx context.Context, nw *types.Network) {
 	if ctx.Err() != nil {
 		f.cancelledTeardowns.Add(1)
 	}
-	f.tornDownBridges = append(f.tornDownBridges, n.Bridge)
+	f.tornDownBridges = append(f.tornDownBridges, nw.Bridge)
 }
 
 // fakeImages hands out a fixed image, standing in for the image store.
@@ -375,7 +374,7 @@ type fakeImages struct {
 	held *types.Image
 }
 
-func (f *fakeImages) Get(ref string) (*types.Image, error) {
+func (f *fakeImages) Image(ref string) (*types.Image, error) {
 	if f.held == nil {
 		return nil, errdefs.NotFound("no image %q", ref)
 	}
@@ -383,10 +382,10 @@ func (f *fakeImages) Get(ref string) (*types.Image, error) {
 }
 
 func (f *fakeImages) Ensure(_ context.Context, ref string, policy types.PullPolicy) (*types.Image, error) {
-	if f.held != nil && policy != types.PullAlways {
+	if f.held != nil && policy != types.PullPolicyAlways {
 		return f.held, nil
 	}
-	if policy == types.PullNever {
+	if policy == types.PullPolicyNever {
 		return nil, errdefs.NotFound("no image %q", ref)
 	}
 
@@ -401,7 +400,7 @@ func (f *fakeImages) Ensure(_ context.Context, ref string, policy types.PullPoli
 
 // fakeHypervisor records the control operations asked of a running guest.
 type fakeHypervisor struct {
-	caps hypervisor.Capabilities
+	capabilities hypervisor.Capabilities
 
 	paused, resumed int
 	snapshotDirs    []string
@@ -412,10 +411,10 @@ type fakeHypervisor struct {
 }
 
 func newFakeHypervisor() *fakeHypervisor {
-	return &fakeHypervisor{caps: hypervisor.Capabilities{SupportsSnapshot: true, SupportsPause: true}}
+	return &fakeHypervisor{capabilities: hypervisor.Capabilities{SupportsSnapshot: true, SupportsPause: true}}
 }
 
-func (f *fakeHypervisor) Capabilities() hypervisor.Capabilities { return f.caps }
+func (f *fakeHypervisor) Capabilities() hypervisor.Capabilities { return f.capabilities }
 
 func (f *fakeHypervisor) PauseVM(context.Context) error {
 	f.paused++
@@ -450,8 +449,8 @@ func (f *fakeHypervisor) Shutdown(context.Context) error {
 	return nil
 }
 
-func (f *fakeHypervisor) GetVMInfo(context.Context) (*hypervisor.VirtualMachineInfo, error) {
-	return &hypervisor.VirtualMachineInfo{State: hypervisor.VirtualMachineStateRunning}, nil
+func (f *fakeHypervisor) VMInfo(context.Context) (*hypervisor.VMInfo, error) {
+	return &hypervisor.VMInfo{State: hypervisor.VMStateRunning}, nil
 }
 
 func (f *fakeHypervisor) ResizeVMMemory(context.Context, int64) error { return nil }
@@ -480,12 +479,12 @@ type fakeStarter struct {
 	vmms []*process.Process
 }
 
-func (f *fakeStarter) Version() string         { return f.version }
-func (f *fakeStarter) DefaultBootArgs() string { return "console=ttyS0" }
-func (f *fakeStarter) PowerOffEndsVM() bool    { return true }
+func (f *fakeStarter) Version() string           { return f.version }
+func (f *fakeStarter) DefaultKernelArgs() string { return "console=ttyS0" }
+func (f *fakeStarter) PowerOffEndsVM() bool      { return true }
 
 func (f *fakeStarter) StartVM(
-	context.Context, string, hypervisor.VirtualMachine,
+	context.Context, string, hypervisor.VMSpec,
 ) (*process.Process, hypervisor.Hypervisor, error) {
 	if f.startErr != nil {
 		return nil, nil, f.startErr
@@ -572,22 +571,22 @@ func (f fakeVolumes) Path(id string) string {
 	return filepath.Join(f.dir, id, "disk.raw")
 }
 
-// recordedOp is one call to the Metrics recorder.
-type recordedOp struct {
+// recordedOperation is one call to the Metrics recorder.
+type recordedOperation struct {
 	operation string
 	failed    bool
 }
 
 // fakeMetrics is a Metrics that remembers what it was told.
 type fakeMetrics struct {
-	ops      []recordedOp
-	restarts int
+	operations []recordedOperation
+	restarts   int
 }
 
 func (f *fakeMetrics) RecordInstanceRestart() { f.restarts++ }
 
 func (f *fakeMetrics) RecordInstanceOperation(operation string, err error, _ time.Duration) {
-	f.ops = append(f.ops, recordedOp{operation: operation, failed: err != nil})
+	f.operations = append(f.operations, recordedOperation{operation: operation, failed: err != nil})
 }
 
 // fakeProbe answers health check probes as a test says, and counts them.
@@ -625,20 +624,20 @@ func (f *fakeProbe) count() int {
 	return f.probes
 }
 
-// fakeEvents remembers the events it is given.
-type fakeEvents struct {
+// fakeRecorder remembers the events it is given.
+type fakeRecorder struct {
 	mu     sync.Mutex
 	events []events.Event
 }
 
-func (f *fakeEvents) Record(e events.Event) {
+func (f *fakeRecorder) Record(e events.Event) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.events = append(f.events, e)
 }
 
 // undescribed returns the events recorded without a description.
-func (f *fakeEvents) undescribed() []events.Event {
+func (f *fakeRecorder) undescribed() []events.Event {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -652,7 +651,7 @@ func (f *fakeEvents) undescribed() []events.Event {
 }
 
 // actions returns the actions recorded so far, in order.
-func (f *fakeEvents) actions() []events.Action {
+func (f *fakeRecorder) actions() []events.Action {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -664,7 +663,7 @@ func (f *fakeEvents) actions() []events.Action {
 }
 
 // last returns the last event with action, and whether there is one.
-func (f *fakeEvents) last(action events.Action) (events.Event, bool) {
+func (f *fakeRecorder) last(action events.Action) (events.Event, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 

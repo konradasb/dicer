@@ -64,32 +64,32 @@ type GCRemoval struct {
 	Reason GCReason
 }
 
-// expired returns the images of images not in use and unused for longer than
-// the policy allows at now.
-func (p GCPolicy) expired(images []*types.Image, inUse map[string]struct{}, now time.Time) []*types.Image {
+// expiredImages returns those of images not in use and unused for longer
+// than the policy allows at now.
+func (p GCPolicy) expiredImages(images []*types.Image, inUse map[string]struct{}, now time.Time) []*types.Image {
 	if p.MaxUnusedAge <= 0 {
 		return nil
 	}
 
 	var out []*types.Image
-	for _, img := range collectable(images, inUse, now) {
-		if now.Sub(img.LastUsedAt) > p.MaxUnusedAge {
-			out = append(out, img)
+	for _, image := range collectableImages(images, inUse, now) {
+		if now.Sub(image.LastUsedAt) > p.MaxUnusedAge {
+			out = append(out, image)
 		}
 	}
 	return out
 }
 
-// collectable returns the images of images garbage collection may remove at
-// now -- not in use, nor used within gcGracePeriod -- least recently used
+// collectableImages returns those of images garbage collection may remove
+// at now -- not in use, nor used within gcGracePeriod -- least recently used
 // first.
-func collectable(images []*types.Image, inUse map[string]struct{}, now time.Time) []*types.Image {
+func collectableImages(images []*types.Image, inUse map[string]struct{}, now time.Time) []*types.Image {
 	var out []*types.Image
-	for _, img := range images {
-		if _, used := inUse[img.Digest]; used || now.Sub(img.LastUsedAt) < gcGracePeriod {
+	for _, image := range images {
+		if _, used := inUse[image.Digest]; used || now.Sub(image.LastUsedAt) < gcGracePeriod {
 			continue
 		}
-		out = append(out, img)
+		out = append(out, image)
 	}
 
 	slices.SortFunc(out, func(a, b *types.Image) int {
@@ -109,14 +109,14 @@ func (m *Manager) CollectGarbage(p GCPolicy, inUse map[string]struct{}, now time
 		m.markUsed(digest, now)
 	}
 
-	if err := m.collect(p, p.expired(m.index.list(), inUse, now), GCReasonUnused, &result); err != nil {
+	if err := m.collect(p, p.expiredImages(m.index.list(), inUse, now), GCReasonUnused, &result); err != nil {
 		return result, err
 	}
 
 	if p.MaxSize <= 0 {
 		return result, nil
 	}
-	for _, img := range collectable(m.index.list(), inUse, now) {
+	for _, image := range collectableImages(m.index.list(), inUse, now) {
 		size, err := m.storeSize()
 		if err != nil {
 			return result, err
@@ -124,7 +124,7 @@ func (m *Manager) CollectGarbage(p GCPolicy, inUse map[string]struct{}, now time
 		if size <= p.MaxSize {
 			break
 		}
-		if err := m.collect(p, []*types.Image{img}, GCReasonSize, &result); err != nil {
+		if err := m.collect(p, []*types.Image{image}, GCReasonSize, &result); err != nil {
 			return result, err
 		}
 	}
@@ -139,26 +139,26 @@ func (m *Manager) collect(p GCPolicy, images []*types.Image, reason GCReason, re
 	}
 
 	removed, err := m.remove(images)
-	for _, img := range removed.Images {
-		result.Removed = append(result.Removed, GCRemoval{Image: &img, Reason: reason})
-		m.metrics.RecordImageCollected(string(reason))
-		m.record(&img, events.ActionCollected, gcMessage(p, &img, reason), map[string]string{"reason": string(reason)})
+	for _, image := range removed.Images {
+		result.Removed = append(result.Removed, GCRemoval{Image: &image, Reason: reason})
+		m.metrics.RecordImageGCCollected(string(reason))
+		m.record(&image, events.ActionCollected, gcMessage(p, &image, reason), map[string]string{"reason": string(reason)})
 	}
 	result.ReclaimedBytes += removed.ReclaimedBytes
 	m.metrics.RecordImageGCReclaimed(removed.ReclaimedBytes)
 	return err
 }
 
-// gcMessage says why garbage collection under p removed img.
-func gcMessage(p GCPolicy, img *types.Image, reason GCReason) string {
-	removed := fmt.Sprintf("Garbage-collected image %s (%s)", img.Name, reference.ShortDigest(img.Digest))
-	lastUsed := img.LastUsedAt.Local().Format(time.DateTime)
+// gcMessage says why garbage collection under p removed image.
+func gcMessage(p GCPolicy, image *types.Image, reason GCReason) string {
+	removed := fmt.Sprintf("Garbage-collected image %s (%s)", image.Name, reference.ShortDigest(image.Digest))
+	lastUsed := image.LastUsedAt.Local().Format(time.DateTime)
 	if reason == GCReasonSize {
 		return fmt.Sprintf("%s: image store over gc_max_size %s, and it was the least recently used (last used %s); %s boot disk removed",
-			removed, humanize.Bytes(p.MaxSize), lastUsed, humanize.Bytes(img.SizeBytes))
+			removed, humanize.Bytes(p.MaxSize), lastUsed, humanize.Bytes(image.SizeBytes))
 	}
 	return fmt.Sprintf("%s: unused since %s, longer than gc_max_unused_age %s; %s boot disk removed",
-		removed, lastUsed, age(p.MaxUnusedAge), humanize.Bytes(img.SizeBytes))
+		removed, lastUsed, age(p.MaxUnusedAge), humanize.Bytes(image.SizeBytes))
 }
 
 // age is a duration as the configuration gives it: in days if it is whole
@@ -178,11 +178,11 @@ func age(d time.Duration) string {
 
 // markUsed records that the image with digest was in use at at.
 func (m *Manager) markUsed(digest string, at time.Time) {
-	img, ok := m.index.markUsed(digest, at)
+	image, ok := m.index.markUsed(digest, at)
 	if !ok {
 		return
 	}
-	if err := m.saveMetadata(digestHex(digest), img); err != nil {
+	if err := m.saveMetadata(digestHex(digest), image); err != nil {
 		m.logger.Warn("failed to save metadata", "digest", digest, "error", err)
 	}
 }
@@ -194,8 +194,8 @@ func (m *Manager) storeSize() (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("measure layer cache: %w", err)
 	}
-	for _, img := range m.index.list() {
-		total += img.SizeBytes
+	for _, image := range m.index.list() {
+		total += image.SizeBytes
 	}
 	return total, nil
 }
@@ -213,7 +213,7 @@ func (m *Manager) RunGC(
 	defer ticker.Stop()
 
 	for {
-		m.gcPass(ctx, p, inUse)
+		m.runGCPass(ctx, p, inUse)
 
 		select {
 		case <-ctx.Done():
@@ -223,8 +223,8 @@ func (m *Manager) RunGC(
 	}
 }
 
-// gcPass is one pass of RunGC.
-func (m *Manager) gcPass(ctx context.Context, p GCPolicy, inUse func() (map[string]struct{}, error)) {
+// runGCPass runs one pass of RunGC, logging what it did.
+func (m *Manager) runGCPass(ctx context.Context, p GCPolicy, inUse func() (map[string]struct{}, error)) {
 	keep, err := inUse()
 	if err != nil {
 		m.logger.WarnContext(ctx, "image garbage collection skipped: cannot tell which images are in use",
@@ -235,11 +235,11 @@ func (m *Manager) gcPass(ctx context.Context, p GCPolicy, inUse func() (map[stri
 	result, err := m.CollectGarbage(p, keep, time.Now())
 	for _, r := range result.Removed {
 		m.logger.InfoContext(ctx, "image collected", "ref", r.Image.Name, "digest", r.Image.Digest,
-			"reason", r.Reason, "last_used", r.Image.LastUsedAt)
+			"reason", r.Reason, "last_used_at", r.Image.LastUsedAt)
 	}
 	if len(result.Removed) > 0 {
 		m.logger.InfoContext(ctx, "image garbage collection reclaimed space",
-			"images", len(result.Removed), "bytes", result.ReclaimedBytes)
+			"images", len(result.Removed), "reclaimed_bytes", result.ReclaimedBytes)
 	}
 	if err != nil {
 		m.logger.WarnContext(ctx, "image garbage collection failed", "error", err)

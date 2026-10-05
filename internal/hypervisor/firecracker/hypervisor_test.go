@@ -47,7 +47,7 @@ type request struct {
 // successful configuration call.
 type fakeFirecracker struct {
 	mu       sync.Mutex
-	requests []request
+	received []request
 }
 
 func newFakeFirecracker(t *testing.T, handler func(w http.ResponseWriter, r *http.Request, body string)) (*Hypervisor, *fakeFirecracker) {
@@ -62,14 +62,14 @@ func newFakeFirecracker(t *testing.T, handler func(w http.ResponseWriter, r *htt
 		t.Fatal(err)
 	}
 
-	srv := &http.Server{
+	server := &http.Server{
 		ReadHeaderTimeout: time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			data, _ := io.ReadAll(r.Body)
 			body := string(data)
 
 			fake.mu.Lock()
-			fake.requests = append(fake.requests, request{method: r.Method, path: r.URL.Path, body: body})
+			fake.received = append(fake.received, request{method: r.Method, path: r.URL.Path, body: body})
 			fake.mu.Unlock()
 
 			if handler != nil {
@@ -79,28 +79,29 @@ func newFakeFirecracker(t *testing.T, handler func(w http.ResponseWriter, r *htt
 			w.WriteHeader(http.StatusNoContent)
 		}),
 	}
-	go func() { _ = srv.Serve(listener) }()
-	t.Cleanup(func() { _ = srv.Close() })
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() { _ = server.Close() })
 
 	return NewHypervisor(socketPath), fake
 }
 
-func (f *fakeFirecracker) recorded() []request {
+// requests returns the requests received so far, oldest first.
+func (f *fakeFirecracker) requests() []request {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]request(nil), f.requests...)
+	return append([]request(nil), f.received...)
 }
 
-// find returns the body of the first request to method and path.
-func (f *fakeFirecracker) find(t *testing.T, method, path string) string {
+// requestBody returns the body of the first request to method and path.
+func (f *fakeFirecracker) requestBody(t *testing.T, method, path string) string {
 	t.Helper()
 
-	for _, r := range f.recorded() {
+	for _, r := range f.requests() {
 		if r.method == method && r.path == path {
 			return r.body
 		}
 	}
-	t.Fatalf("no %s %s in %+v", method, path, f.recorded())
+	t.Fatalf("no %s %s in %+v", method, path, f.requests())
 	return ""
 }
 
@@ -118,7 +119,7 @@ func TestSetupApplyOrder(t *testing.T) {
 	}
 
 	var got []string
-	for _, r := range fake.recorded() {
+	for _, r := range fake.requests() {
 		if r.method != http.MethodPut {
 			t.Errorf("%s %s: configuration must use PUT", r.method, r.path)
 		}
@@ -136,7 +137,7 @@ func TestSetupApplyOrder(t *testing.T) {
 	}
 
 	var boot bootSource
-	if err := json.Unmarshal([]byte(fake.find(t, http.MethodPut, "/boot-source")), &boot); err != nil {
+	if err := json.Unmarshal([]byte(fake.requestBody(t, http.MethodPut, "/boot-source")), &boot); err != nil {
 		t.Fatal(err)
 	}
 	if boot.KernelImagePath == "" || boot.InitrdPath == "" {
@@ -144,11 +145,11 @@ func TestSetupApplyOrder(t *testing.T) {
 	}
 }
 
-func TestGetVMInfo(t *testing.T) {
-	states := map[string]hypervisor.VirtualMachineState{
-		instanceNotStarted: hypervisor.VirtualMachineStateStopped,
-		instanceRunning:    hypervisor.VirtualMachineStateRunning,
-		instancePaused:     hypervisor.VirtualMachineStatePaused,
+func TestVMInfo(t *testing.T) {
+	states := map[string]hypervisor.VMState{
+		instanceNotStarted: hypervisor.VMStateStopped,
+		instanceRunning:    hypervisor.VMStateRunning,
+		instancePaused:     hypervisor.VMStatePaused,
 	}
 
 	for reported, want := range states {
@@ -156,7 +157,7 @@ func TestGetVMInfo(t *testing.T) {
 			hv, _ := newFakeFirecracker(t, func(w http.ResponseWriter, r *http.Request, _ string) {
 				switch r.URL.Path {
 				case "/":
-					_ = json.NewEncoder(w).Encode(instanceInfo{State: reported, VMMVersion: "1.17.0"})
+					_ = json.NewEncoder(w).Encode(instanceInfo{State: reported})
 				case "/vm/config":
 					_ = json.NewEncoder(w).Encode(vmConfig{MachineConfig: machineConfig{MemSizeMiB: 512}})
 				default:
@@ -164,9 +165,9 @@ func TestGetVMInfo(t *testing.T) {
 				}
 			})
 
-			info, err := hv.GetVMInfo(t.Context())
+			info, err := hv.VMInfo(t.Context())
 			if err != nil {
-				t.Fatalf("GetVMInfo: %v", err)
+				t.Fatalf("VMInfo: %v", err)
 			}
 			if info.State != want {
 				t.Errorf("state = %q, want %q", info.State, want)
@@ -178,7 +179,7 @@ func TestGetVMInfo(t *testing.T) {
 	}
 }
 
-func TestGetVMInfoCountsHotpluggedMemory(t *testing.T) {
+func TestVMInfoCountsHotpluggedMemory(t *testing.T) {
 	hv, _ := newFakeFirecracker(t, func(w http.ResponseWriter, r *http.Request, _ string) {
 		switch r.URL.Path {
 		case "/":
@@ -189,13 +190,13 @@ func TestGetVMInfoCountsHotpluggedMemory(t *testing.T) {
 				MemoryHotplug: &memoryHotplugConfig{TotalSizeMiB: 512},
 			})
 		case "/hotplug/memory":
-			_ = json.NewEncoder(w).Encode(memoryHotplugStatus{TotalSizeMiB: 512, PluggedSizeMiB: 128})
+			_ = json.NewEncoder(w).Encode(memoryHotplugStatus{PluggedSizeMiB: 128})
 		}
 	})
 
-	info, err := hv.GetVMInfo(t.Context())
+	info, err := hv.VMInfo(t.Context())
 	if err != nil {
-		t.Fatalf("GetVMInfo: %v", err)
+		t.Fatalf("VMInfo: %v", err)
 	}
 	if info.MemoryBytes == nil || *info.MemoryBytes != 640*mib {
 		t.Errorf("memory = %v, want 640 MiB (512 booted plus 128 plugged)", info.MemoryBytes)
@@ -212,7 +213,7 @@ func TestPauseAndResume(t *testing.T) {
 		t.Fatalf("ResumeVM: %v", err)
 	}
 
-	got := fake.recorded()
+	got := fake.requests()
 	if len(got) != 2 {
 		t.Fatalf("got %d requests, want 2", len(got))
 	}
@@ -240,7 +241,7 @@ func TestSnapshotVM(t *testing.T) {
 	}
 
 	var create snapshotCreate
-	if err := json.Unmarshal([]byte(fake.find(t, http.MethodPut, "/snapshot/create")), &create); err != nil {
+	if err := json.Unmarshal([]byte(fake.requestBody(t, http.MethodPut, "/snapshot/create")), &create); err != nil {
 		t.Fatal(err)
 	}
 	if create.SnapshotType != "Full" ||
@@ -267,7 +268,7 @@ func TestResizeVMMemory(t *testing.T) {
 	}
 
 	var update memoryHotplugUpdate
-	if err := json.Unmarshal([]byte(fake.find(t, http.MethodPatch, "/hotplug/memory")), &update); err != nil {
+	if err := json.Unmarshal([]byte(fake.requestBody(t, http.MethodPatch, "/hotplug/memory")), &update); err != nil {
 		t.Fatal(err)
 	}
 	// 768 MiB total is the 512 MiB it booted with plus 256 plugged.
@@ -316,7 +317,7 @@ func TestUnsupportedOperations(t *testing.T) {
 func TestAPIErrorCarriesFaultMessage(t *testing.T) {
 	hv, _ := newFakeFirecracker(t, func(w http.ResponseWriter, _ *http.Request, _ string) {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(apiError{FaultMessage: "cannot pause a VM that is not running"})
+		_ = json.NewEncoder(w).Encode(faultResponse{FaultMessage: "cannot pause a VM that is not running"})
 	})
 
 	err := hv.PauseVM(t.Context())
@@ -329,7 +330,7 @@ func TestCapabilities(t *testing.T) {
 	caps := NewHypervisor("/nonexistent.sock").Capabilities()
 
 	if !caps.SupportsPause || !caps.SupportsVsock || !caps.SupportsSnapshot ||
-		!caps.SupportsHotplugMemory || !caps.SupportsDiskIOLimit {
+		!caps.SupportsHotplugMemory || !caps.SupportsDiskRateLimit {
 		t.Errorf("capabilities = %+v, want the operations Firecracker supports", caps)
 	}
 	if caps.SupportsHotplugCPU || caps.SupportsCPUAffinity || caps.SupportsGPUPassthrough {

@@ -155,7 +155,7 @@ type server struct {
 	wg     sync.WaitGroup
 }
 
-// listen starts a server on addr.
+// listen starts a server for nw on addr.
 func listen(
 	ctx context.Context, addr string, nw network, resolver Resolver, metrics Metrics, logger *slog.Logger,
 ) (*server, error) {
@@ -178,7 +178,7 @@ func listen(
 		network:     nw,
 		resolver:    resolver,
 		metrics:     metrics,
-		logger:      logger,
+		logger:      logger.With("network", nw.name),
 		udp:         udp,
 		tcp:         tcp,
 		inFlight:    make(chan struct{}, maxInFlight),
@@ -201,6 +201,7 @@ func (s *server) close() {
 	s.wg.Wait()
 }
 
+// serveUDP answers the queries that come over UDP, until the server closes.
 func (s *server) serveUDP(ctx context.Context) {
 	buf := make([]byte, maxMessage)
 	for {
@@ -230,6 +231,8 @@ func (s *server) serveUDP(ctx context.Context) {
 	}
 }
 
+// serveTCP serves the connections that come over TCP, until the server
+// closes.
 func (s *server) serveTCP(ctx context.Context) {
 	for {
 		conn, err := s.tcp.Accept()
@@ -309,7 +312,7 @@ func (s *server) answer(
 	s.metrics.RecordDNSForward(s.network.name, time.Since(started))
 	if err != nil {
 		s.metrics.RecordDNSQuery(s.network.name, QueryFailed)
-		s.logger.Debug("forward DNS query", "network", s.network.name, "name", q.Name.String(), "error", err)
+		s.logger.DebugContext(ctx, "forward DNS query", "name", q.Name.String(), "error", err)
 		return reply(header, questions, dnsmessage.RCodeServerFailure, nil)
 	}
 	s.metrics.RecordDNSQuery(s.network.name, QueryForwarded)
@@ -408,6 +411,7 @@ func reverseAddr(name string) (netip.Addr, bool) {
 	return netip.AddrFrom4(ip), true
 }
 
+// aRecord returns the A record that name is at addr.
 func aRecord(name dnsmessage.Name, addr netip.Addr) dnsmessage.Resource {
 	return dnsmessage.Resource{
 		Header: dnsmessage.ResourceHeader{Name: name, Type: dnsmessage.TypeA, Class: dnsmessage.ClassINET, TTL: ttl},
@@ -415,6 +419,7 @@ func aRecord(name dnsmessage.Name, addr netip.Addr) dnsmessage.Resource {
 	}
 }
 
+// ptrRecord returns the PTR record that name, a reverse lookup, is target.
 func ptrRecord(name dnsmessage.Name, target string) dnsmessage.Resource {
 	return dnsmessage.Resource{
 		Header: dnsmessage.ResourceHeader{Name: name, Type: dnsmessage.TypePTR, Class: dnsmessage.ClassINET, TTL: ttl},

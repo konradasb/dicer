@@ -10,10 +10,10 @@ import (
 	"testing"
 )
 
-// TestTopListsTheGuestsProcesses checks that dicer top shows the processes
+// TestInstanceTopListsTheGuestsProcesses checks that dicer top shows the processes
 // in a real guest, with the PIDs dicer exec sees: the unit tests read a fake
 // /proc, and only a real guest shows whose /proc the agent reads.
-func TestTopListsTheGuestsProcesses(t *testing.T) {
+func TestInstanceTopListsTheGuestsProcesses(t *testing.T) {
 	name := instanceName(t)
 	env.createInstance(t, name, "--", "sleep", "3600")
 	env.startInstance(t, name)

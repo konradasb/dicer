@@ -22,22 +22,22 @@ func checkBoot(log *slog.Logger, cfg *guest.Config) {
 		return
 	}
 	if err := waitForDevice(cfg.StatusDevice); err != nil {
-		log.Warn("status disk not found, the host will not learn how the guest ends", "err", err)
+		log.Warn("status disk not found, the host will not learn how the guest ends", "error", err)
 		return
 	}
 
-	st, err := guest.ReadStatus(cfg.StatusDevice)
+	status, err := guest.ReadStatus(cfg.StatusDevice)
 	if err != nil {
-		log.Warn("cannot read status disk", "err", err)
+		log.Warn("cannot read status disk", "error", err)
 		return
 	}
 
-	st.Boots++
-	if err := guest.WriteStatus(cfg.StatusDevice, st); err != nil {
-		log.Warn("cannot write status disk", "err", err)
+	status.Boots++
+	if err := guest.WriteStatus(cfg.StatusDevice, status); err != nil {
+		log.Warn("cannot write status disk", "error", err)
 	}
 
-	if st.Boots > 1 {
+	if status.Boots > 1 {
 		log.Error("the guest reset without reporting its end; halting")
 		halt(log, cfg.Halt)
 	}
@@ -50,7 +50,7 @@ func reportExit(log *slog.Logger, cfg *guest.Config, code int) {
 		return
 	}
 	if err := guest.WriteStatus(cfg.StatusDevice, guest.Status{Boots: 1, ExitCode: &code}); err != nil {
-		log.Error("cannot report the exit code to the host", "err", err)
+		log.Error("cannot report the exit code to the host", "error", err)
 	}
 }
 
@@ -67,6 +67,6 @@ func halt(log *slog.Logger, how guest.Halt) {
 
 	// Reboot returns only if it failed. Exiting PID 1 panics the kernel,
 	// which the boot arguments turn into a reset: the machine still ends.
-	log.Error("halt failed", "halt", how, "err", err)
+	log.Error("halt failed", "halt", how, "error", err)
 	syscall.Exit(1)
 }

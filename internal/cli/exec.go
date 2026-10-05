@@ -71,7 +71,7 @@ func wantTTY(force, never, stdinTTY, stdoutTTY bool) bool {
 }
 
 func runInstanceExecCommand(cmd *cobra.Command, args []string) error {
-	start, err := execStart(cmd, args)
+	start, err := buildExecStart(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -114,9 +114,9 @@ func runInstanceExecCommand(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// execStart describes the command args name, from the command line's flags
-// and this terminal.
-func execStart(cmd *cobra.Command, args []string) (*dicerdv1.ExecInstanceStart, error) {
+// buildExecStart describes the command args name, from the command line's
+// flags and this terminal.
+func buildExecStart(cmd *cobra.Command, args []string) (*dicerdv1.ExecInstanceStart, error) {
 	command := trimDash(args[1:])
 	if len(command) == 0 {
 		command = []string{"/bin/sh"}

@@ -17,9 +17,9 @@ import (
 func TestDriversCoverEverySupportedType(t *testing.T) {
 	d := drivers()
 
-	for _, hvType := range types.HypervisorTypes() {
-		if _, ok := d[hvType]; !ok {
-			t.Errorf("no driver for supported hypervisor %q", hvType)
+	for _, hypervisorType := range types.HypervisorTypes() {
+		if _, ok := d[hypervisorType]; !ok {
+			t.Errorf("no driver for supported hypervisor %q", hypervisorType)
 		}
 	}
 	if len(d) != len(types.HypervisorTypes()) {

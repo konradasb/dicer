@@ -38,7 +38,7 @@ func (s *instanceStatsStream) Send(resp *dicerdv1.GetInstanceStatsResponse) erro
 func newInstanceStatsServer(t *testing.T) *Server {
 	t.Helper()
 
-	s, definitions := newResourceServer(t)
+	s, definitions := newTestServer(t)
 	if err := definitions.CreateInstance(types.InstanceSpec{ID: "i-1", Name: "web"}); err != nil {
 		t.Fatal(err)
 	}

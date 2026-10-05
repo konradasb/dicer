@@ -50,11 +50,11 @@ func runAttached(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) error 
 	// Defined first and started after, so that the console is followed from
 	// its first line: a job --rm deletes as it ends leaves none to read later.
 	req.Start = false
-	inst, err := client.CreateInstance(cmd.Context(), req)
+	instance, err := client.CreateInstance(cmd.Context(), req)
 	if err != nil {
 		return err
 	}
-	name := inst.GetName()
+	name := instance.GetName()
 
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
@@ -86,7 +86,7 @@ func runAttached(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) error 
 	}
 	exited := make(chan result, 1)
 	go func() {
-		code, err := waitForExit(ctx, client, name, inst.GetId())
+		code, err := waitForExit(ctx, client, name, instance.GetId())
 		exited <- result{code, err}
 	}()
 

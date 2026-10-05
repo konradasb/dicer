@@ -16,8 +16,9 @@ func newInstanceLogsCommand() *cobra.Command {
 		Long: "Shows the guest's serial console: the kernel's boot messages, dicer-init's,\n" +
 			"and whatever the workload writes to the console. It is kept with the\n" +
 			"instance, so it can be read after a stop to explain one.\n\n" +
-			"Use --source hypervisor for the VMM's own log, which explains a guest that\n" +
-			"never got as far as booting. That one is discarded when the instance stops.",
+			"Use --source hypervisor for the hypervisor's own log, which explains a guest\n" +
+			"that never got as far as booting. That one is discarded when the instance\n" +
+			"stops.",
 		Example: "  dicer logs -f web\n" +
 			"  dicer logs -n 50 web\n" +
 			"  dicer logs --source hypervisor web",
@@ -31,7 +32,7 @@ func newInstanceLogsCommand() *cobra.Command {
 	cmd.Flags().Int32P("tail", "n", 0, "Show only the last lines (default: all)")
 	cmd.Flags().String("source", "guest", "Which log to read: guest or hypervisor")
 	_ = cmd.RegisterFlagCompletionFunc("source", fixedCompletions(
-		"guest\tThe guest's serial console", "hypervisor\tThe VMM's own log"))
+		"guest\tThe guest's serial console", "hypervisor\tThe hypervisor's own log"))
 
 	return cmd
 }

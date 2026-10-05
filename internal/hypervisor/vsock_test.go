@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/konradasb/dicer/internal/types"
 )
 
 // fakeVsockProxy accepts one connection and answers the CONNECT handshake
@@ -19,7 +17,7 @@ import (
 func fakeVsockProxy(t *testing.T, reply, greeting string) (string, <-chan string) {
 	t.Helper()
 
-	path := filepath.Join(t.TempDir(), "vsock.sock")
+	path := filepath.Join(t.TempDir(), "sock") // short: macOS caps a socket path at 104 bytes
 	var lc net.ListenConfig
 	l, err := lc.Listen(t.Context(), "unix", path)
 	if err != nil {
@@ -43,9 +41,11 @@ func fakeVsockProxy(t *testing.T, reply, greeting string) (string, <-chan string
 	return path, requests
 }
 
-func TestDialVsock(t *testing.T) {
-	// The greeting arrives in the same write as the handshake reply, so it
-	// is only seen if the dialer's buffered bytes are handed on.
+// TestDialVsockKeepsEarlyData checks that what the guest sends with the
+// handshake's reply is read from the connection: the greeting arrives in the
+// same write as the reply, so it is only seen if the dialer's buffered bytes
+// are handed on.
+func TestDialVsockKeepsEarlyData(t *testing.T) {
 	path, requests := fakeVsockProxy(t, "OK 1073741824\n", "hello")
 
 	conn, err := DialVsock(t.Context(), path, 2222)
@@ -64,22 +64,11 @@ func TestDialVsock(t *testing.T) {
 	}
 }
 
-func TestDialVsockRejected(t *testing.T) {
+func TestDialVsockReportsRefusal(t *testing.T) {
 	path, _ := fakeVsockProxy(t, "FAILURE\n", "")
 
 	_, err := DialVsock(t.Context(), path, 2222)
 	if err == nil || !strings.Contains(err.Error(), "FAILURE") {
 		t.Errorf("DialVsock = %v, want the proxy's refusal", err)
-	}
-}
-
-func TestTypeValid(t *testing.T) {
-	for _, typ := range types.HypervisorTypes() {
-		if !typ.Valid() {
-			t.Errorf("%s is listed but not valid", typ)
-		}
-	}
-	if types.HypervisorType("qemu").Valid() {
-		t.Error("an unsupported type is valid")
 	}
 }

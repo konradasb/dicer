@@ -3,30 +3,34 @@
 
 package guest
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestStatusRoundTrip(t *testing.T) {
 	code := 137
-	for _, st := range []Status{
-		{},
-		{Boots: 1},
-		{Boots: 1, ExitCode: &code},
-	} {
-		data := st.Encode()
-		if len(data) != StatusSize {
-			t.Fatalf("Encode(%+v) is %d bytes, want %d", st, len(data), StatusSize)
-		}
+	tests := []struct {
+		name   string
+		status Status
+	}{
+		{name: "never booted", status: Status{}},
+		{name: "booted", status: Status{Boots: 1}},
+		{name: "exited", status: Status{Boots: 1, ExitCode: &code}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := tt.status.Encode()
+			if len(data) != StatusSize {
+				t.Fatalf("Encode is %d bytes, want %d", len(data), StatusSize)
+			}
 
-		got, err := DecodeStatus(data)
-		if err != nil {
-			t.Fatalf("DecodeStatus(Encode(%+v)): %v", st, err)
-		}
-		if got.Boots != st.Boots || (got.ExitCode == nil) != (st.ExitCode == nil) ||
-			(got.ExitCode != nil && *got.ExitCode != *st.ExitCode) {
-			t.Errorf("DecodeStatus(Encode(%+v)) = %+v", st, got)
-		}
+			got, err := DecodeStatus(data)
+			if err != nil {
+				t.Fatalf("DecodeStatus(Encode()): %v", err)
+			}
+			if got.Boots != tt.status.Boots || (got.ExitCode == nil) != (tt.status.ExitCode == nil) ||
+				(got.ExitCode != nil && *got.ExitCode != *tt.status.ExitCode) {
+				t.Errorf("DecodeStatus(Encode(%+v)) = %+v", tt.status, got)
+			}
+		})
 	}
 }
 

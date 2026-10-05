@@ -71,9 +71,7 @@ type memoryHotplugUpdate struct {
 }
 
 type memoryHotplugStatus struct {
-	TotalSizeMiB     int `json:"total_size_mib"`
-	PluggedSizeMiB   int `json:"plugged_size_mib"`
-	RequestedSizeMiB int `json:"requested_size_mib"`
+	PluggedSizeMiB int `json:"plugged_size_mib"`
 }
 
 type serialDevice struct {
@@ -102,10 +100,7 @@ const (
 )
 
 type instanceInfo struct {
-	ID         string `json:"id"`
-	State      string `json:"state"`
-	VMMVersion string `json:"vmm_version"`
-	AppName    string `json:"app_name"`
+	State string `json:"state"`
 }
 
 // The states GET / reports.
@@ -138,26 +133,32 @@ type memoryBackend struct {
 	BackendPath string `json:"backend_path"`
 }
 
-// apiError is the body Firecracker returns with a failed request.
-type apiError struct {
+// faultResponse is the body Firecracker returns with a failed request.
+type faultResponse struct {
 	FaultMessage string `json:"fault_message"`
 }
 
+// apiTimeout bounds each request to the VMM's API.
+const apiTimeout = 30 * time.Second
+
 // client speaks the Firecracker API over its Unix socket.
 type client struct {
-	http *http.Client
+	httpClient *http.Client
 }
 
+// newClient returns a client for the VMM serving its API on socketPath. It
+// does not connect until the first request.
 func newClient(socketPath string) *client {
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", socketPath)
+	return &client{httpClient: &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", socketPath)
+			},
+			DisableKeepAlives: true,
 		},
-		DisableKeepAlives: true,
-	}
-
-	return &client{http: &http.Client{Transport: transport, Timeout: 30 * time.Second}}
+		Timeout: apiTimeout,
+	}}
 }
 
 func (c *client) put(ctx context.Context, path string, body any) error {
@@ -173,7 +174,8 @@ func (c *client) get(ctx context.Context, path string, out any) error {
 }
 
 // do sends a request and decodes a successful response into out, if given.
-// A failure carries Firecracker's own explanation of it.
+// A response with a failure status is an error carrying Firecracker's own
+// explanation of it.
 func (c *client) do(ctx context.Context, method, path string, body, out any) error {
 	var reqBody io.Reader
 	if body != nil {
@@ -194,17 +196,17 @@ func (c *client) do(ctx context.Context, method, path string, body, out any) err
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.http.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", method, path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= http.StatusBadRequest {
-		var apiErr apiError
+		var fault faultResponse
 		data, _ := io.ReadAll(resp.Body)
-		if json.Unmarshal(data, &apiErr) == nil && apiErr.FaultMessage != "" {
-			return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, apiErr.FaultMessage)
+		if json.Unmarshal(data, &fault) == nil && fault.FaultMessage != "" {
+			return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, fault.FaultMessage)
 		}
 		return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, bytes.TrimSpace(data))
 	}

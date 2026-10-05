@@ -25,16 +25,16 @@ const guestSyncTimeout = 10 * time.Second
 
 // Agent connects to a running instance's guest agent over vsock. The returned
 // function closes the connection.
-func (m *Manager) Agent(inst types.InstanceSpec) (diceragentv1.AgentServiceClient, func(), error) {
-	rt, err := m.Runtime(inst)
+func (m *Manager) Agent(instance types.InstanceSpec) (diceragentv1.AgentServiceClient, func(), error) {
+	status, err := m.Status(instance)
 	if err != nil {
 		return nil, nil, err
 	}
-	if rt.State != types.StateRunning {
-		return nil, nil, errdefs.InvalidState("instance %q is %s, not running", inst.Name, rt.State.Lower())
+	if status.State != types.InstanceStateRunning {
+		return nil, nil, errdefs.InvalidState("instance %q is %s, not running", instance.Name, status.State.Lowercase())
 	}
 
-	return dialAgent(rt.VsockPath)
+	return dialAgent(status.VsockPath)
 }
 
 // dialAgent connects to the guest agent behind vsockPath.
@@ -54,15 +54,15 @@ func dialAgent(vsockPath string) (diceragentv1.AgentServiceClient, func(), error
 
 // syncGuest asks a running guest to flush its filesystems before its VMM is
 // ended. It is best effort.
-func (m *Manager) syncGuest(ctx context.Context, inst types.InstanceSpec, rt types.InstanceStatus) {
-	if rt.State != types.StateRunning || rt.VsockPath == "" {
+func (m *Manager) syncGuest(ctx context.Context, instance types.InstanceSpec, status types.InstanceStatus) {
+	if status.State != types.InstanceStateRunning || status.VsockPath == "" {
 		return
 	}
 
-	agent, closeAgent, err := dialAgent(rt.VsockPath)
+	agent, closeAgent, err := dialAgent(status.VsockPath)
 	if err != nil {
 		m.logger.WarnContext(ctx, "cannot reach guest agent to flush the guest's disks",
-			"instance", inst.Name, "error", err)
+			"instance", instance.Name, "error", err)
 		return
 	}
 	defer closeAgent()
@@ -72,7 +72,7 @@ func (m *Manager) syncGuest(ctx context.Context, inst types.InstanceSpec, rt typ
 
 	if _, err := agent.Sync(ctx, &diceragentv1.SyncRequest{}); err != nil {
 		m.logger.WarnContext(ctx, "guest did not flush its disks before stopping",
-			"instance", inst.Name, "error", err)
+			"instance", instance.Name, "error", err)
 	}
 }
 

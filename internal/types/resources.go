@@ -80,23 +80,23 @@ type Usage struct {
 	// Capacity is what instances may be given, and how that was arrived at.
 	Capacity Capacity `json:"capacity"`
 
-	// Allocated is what the instances listed in Holders hold between them.
+	// Allocated is what the instances listed in Instances hold between them.
 	Allocated Resources `json:"allocated"`
 
-	// Holders are the instances holding resources, in name order.
-	Holders []Holder `json:"holders"`
-}
-
-// Holder is an instance holding some of the host's resources.
-type Holder struct {
-	Name      string        `json:"name"`
-	State     InstanceState `json:"state"`
-	Resources Resources     `json:"resources"`
+	// Instances are the instances holding resources, in name order.
+	Instances []InstanceResources `json:"instances"`
 }
 
 // Available returns what is left for further instances.
 func (u Usage) Available() Resources {
 	return u.Capacity.Allocatable().Sub(u.Allocated)
+}
+
+// InstanceResources is what one instance holds of the host.
+type InstanceResources struct {
+	Name      string        `json:"name"`
+	State     InstanceState `json:"state"`
+	Resources Resources     `json:"resources"`
 }
 
 // DiskUsage is the size of a filesystem and how much of it is free.

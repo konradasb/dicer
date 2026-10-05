@@ -12,7 +12,7 @@ import (
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/filestore"
-	"github.com/konradasb/dicer/internal/image"
+	imagepkg "github.com/konradasb/dicer/internal/image"
 	"github.com/konradasb/dicer/internal/types"
 	"github.com/konradasb/dicer/internal/vm"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
@@ -22,7 +22,7 @@ import (
 type imageHandler struct {
 	definitions *filestore.Manager
 	instances   *vm.Manager
-	images      *image.Manager
+	images      *imagepkg.Manager
 }
 
 // PullImage pulls an image, streaming progress and finally the image.
@@ -43,17 +43,18 @@ func (h *imageHandler) PullImage(
 		})
 	}
 
-	img, err := h.images.Pull(stream.Context(), req.GetRef(), onProgress)
+	image, err := h.images.Pull(stream.Context(), req.GetRef(), onProgress)
 	if err != nil {
-		return imageStatus(err)
+		return imageError(err)
 	}
 
 	return stream.Send(&dicerdv1.PullImageProgress{
 		Stage: dicerdv1.PullStage_PULL_STAGE_UNSPECIFIED,
-		Image: imageToProto(img),
+		Image: imageToProto(image),
 	})
 }
 
+// ListImages lists the images this host holds.
 func (h *imageHandler) ListImages(
 	_ context.Context, _ *dicerdv1.ListImagesRequest,
 ) (*dicerdv1.ListImagesResponse, error) {
@@ -62,8 +63,8 @@ func (h *imageHandler) ListImages(
 	resp := &dicerdv1.ListImagesResponse{
 		Images: make([]*dicerdv1.Image, 0, len(images)),
 	}
-	for _, img := range images {
-		resp.Images = append(resp.Images, imageToProto(img))
+	for _, image := range images {
+		resp.Images = append(resp.Images, imageToProto(image))
 	}
 
 	return resp, nil
@@ -73,45 +74,41 @@ func (h *imageHandler) ListImages(
 func (h *imageHandler) GetImage(
 	_ context.Context, req *dicerdv1.GetImageRequest,
 ) (*dicerdv1.Image, error) {
-	img, err := h.images.Get(req.GetRef())
+	image, err := h.images.Image(req.GetRef())
 	if err != nil {
-		return nil, imageStatus(err)
+		return nil, imageError(err)
 	}
 
-	return imageToProto(img), nil
+	return imageToProto(image), nil
 }
 
 // DeleteImage removes an image, refusing one that is in use.
 func (h *imageHandler) DeleteImage(
 	_ context.Context, req *dicerdv1.DeleteImageRequest,
 ) (*emptypb.Empty, error) {
-	img, err := h.images.Get(req.GetRef())
+	image, err := h.images.Image(req.GetRef())
 	if err != nil {
-		return nil, imageStatus(err)
+		return nil, imageError(err)
 	}
 
 	if !req.GetForce() {
-		users, err := h.instancesUsing(img.Digest)
-		if err != nil {
-			return nil, err
-		}
-		if len(users) > 0 {
+		if users := h.instancesUsing(image.Digest); len(users) > 0 {
 			return nil, errdefs.InvalidState(
 				"image %q is in use by instance %q", req.GetRef(), users[0])
 		}
 
-		needed, err := h.instances.ImagesInUse()
+		inUse, err := h.instances.ImagesInUse()
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := needed[img.Digest]; ok {
+		if _, ok := inUse[image.Digest]; ok {
 			return nil, errdefs.InvalidState(
 				"image %q is the root disk of a running instance, or of a snapshot", req.GetRef())
 		}
 	}
 
 	if err := h.images.Delete(req.GetRef()); err != nil {
-		return nil, imageStatus(err)
+		return nil, imageError(err)
 	}
 
 	return &emptypb.Empty{}, nil
@@ -121,7 +118,7 @@ func (h *imageHandler) DeleteImage(
 func (h *imageHandler) PruneImages(
 	_ context.Context, _ *dicerdv1.PruneImagesRequest,
 ) (*dicerdv1.PruneImagesResponse, error) {
-	keep, err := h.imagesInUse()
+	keep, err := h.instances.ImagesInUse()
 	if err != nil {
 		return nil, err
 	}
@@ -135,44 +132,30 @@ func (h *imageHandler) PruneImages(
 		Images:         make([]*dicerdv1.Image, 0, len(result.Images)),
 		ReclaimedBytes: result.ReclaimedBytes,
 	}
-	for _, img := range result.Images {
-		resp.Images = append(resp.Images, imageToProto(&img))
+	for _, image := range result.Images {
+		resp.Images = append(resp.Images, imageToProto(&image))
 	}
 
 	return resp, nil
 }
 
-// imagesInUse is the set of image digests a prune keeps. See
-// vm.Manager.ImagesInUse.
-func (h *imageHandler) imagesInUse() (map[string]struct{}, error) {
-	keep, err := h.instances.ImagesInUse()
-	if err != nil {
-		return nil, err
-	}
-	return keep, nil
-}
-
-// instancesUsing names the instances defined to boot from an image.
-func (h *imageHandler) instancesUsing(digest string) ([]string, error) {
-	instances, err := h.definitions.ListInstances()
-	if err != nil {
-		return nil, err
-	}
-
+// instancesUsing names the instances defined to boot from the image with
+// the given digest, sorted.
+func (h *imageHandler) instancesUsing(digest string) []string {
 	var users []string
-	for _, inst := range instances {
-		img, err := h.images.Get(inst.ImageRef)
-		if err == nil && img.Digest == digest {
-			users = append(users, inst.Name)
+	for _, instance := range h.definitions.Instances() {
+		image, err := h.images.Image(instance.ImageRef)
+		if err == nil && image.Digest == digest {
+			users = append(users, instance.Name)
 		}
 	}
-
-	return users, nil
+	return users
 }
 
-// imageStatus converts image errors to statuses.
-func imageStatus(err error) error {
-	if errors.Is(err, image.ErrInvalidReference) {
+// imageError returns err, an image reference that cannot be parsed made an
+// invalid argument.
+func imageError(err error) error {
+	if errors.Is(err, imagepkg.ErrInvalidReference) {
 		return errdefs.InvalidArgument("%v", err)
 	}
 	return err

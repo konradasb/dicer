@@ -42,7 +42,7 @@ var (
 )
 
 // NotFound returns an error in the ErrNotFound class, formatted as
-// fmt.Errorf would.
+// fmt.Errorf would. The other constructors format theirs the same way.
 func NotFound(format string, args ...any) error {
 	return classify(ErrNotFound, format, args...)
 }
@@ -78,6 +78,7 @@ type classified struct {
 	err   error
 }
 
+// classify returns an error in class, formatted as fmt.Errorf would.
 func classify(class error, format string, args ...any) error {
 	return &classified{class: class, err: fmt.Errorf(format, args...)}
 }

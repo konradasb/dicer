@@ -25,19 +25,20 @@ import (
 func newTestManager(t *testing.T, fetch fetchFunc) *Manager {
 	t.Helper()
 
-	c, err := NewManager(Config{
+	m, err := NewManager(Config{
 		DataDir: t.TempDir(),
 		Logger:  slog.New(slog.DiscardHandler),
 	})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
-	c.fetchFunc = fetch
+	m.fetchFunc = fetch
 
-	return c
+	return m
 }
 
-// writeFetcher returns a fetch func that writes fixed contents and counts calls.
+// writeFetcher returns a fetchFunc that writes fixed contents and counts
+// calls.
 func writeFetcher(contents string, calls *int) fetchFunc {
 	return func(_ context.Context, _, dst string) (int64, error) {
 		*calls++
@@ -70,15 +71,15 @@ func sha256Of(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// TestPathFetchesOnceAndThenCaches is the behaviour the Store exists for:
+// TestPathFetchesOnceAndThenCaches is the behaviour the Manager exists for:
 // Path is called on every instance start, so it must not hit the network
 // every time.
 func TestPathFetchesOnceAndThenCaches(t *testing.T) {
 	var calls int
-	c := newTestManager(t, writeFetcher("vmlinux", &calls))
+	m := newTestManager(t, writeFetcher("vmlinux", &calls))
 	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux"}
 
-	first, err := c.Path(context.Background(), k)
+	first, err := m.Path(context.Background(), k)
 	if err != nil {
 		t.Fatalf("first Path: %v", err)
 	}
@@ -86,7 +87,7 @@ func TestPathFetchesOnceAndThenCaches(t *testing.T) {
 		t.Fatalf("fetches after first call = %d, want 1", calls)
 	}
 
-	second, err := c.Path(context.Background(), k)
+	second, err := m.Path(context.Background(), k)
 	if err != nil {
 		t.Fatalf("second Path: %v", err)
 	}
@@ -98,17 +99,17 @@ func TestPathFetchesOnceAndThenCaches(t *testing.T) {
 	}
 }
 
-func TestPathVerifiesChecksum(t *testing.T) {
+func TestPathFailsOnChecksumMismatch(t *testing.T) {
 	var calls int
-	c := newTestManager(t, writeFetcher("wrong contents", &calls))
+	m := newTestManager(t, writeFetcher("wrong contents", &calls))
 	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("vmlinux")}
 
-	if _, err := c.Path(context.Background(), k); err == nil {
+	if _, err := m.Path(context.Background(), k); err == nil {
 		t.Fatal("Path should fail when the download does not match the expected checksum")
 	}
 
 	// A failed fetch must leave nothing behind for the next call to adopt.
-	if _, err := os.Stat(c.kernelPath(k.ID)); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(m.binaryPath(k.ID)); !errors.Is(err, fs.ErrNotExist) {
 		t.Error("failed download left a file on disk")
 	}
 }
@@ -117,10 +118,10 @@ func TestPathVerifiesChecksum(t *testing.T) {
 // its checksum -- a truncated download must not be served forever.
 func TestPathRefetchesCorruptedCache(t *testing.T) {
 	var calls int
-	c := newTestManager(t, writeFetcher("vmlinux", &calls))
+	m := newTestManager(t, writeFetcher("vmlinux", &calls))
 	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("vmlinux")}
 
-	path, err := c.Path(context.Background(), k)
+	path, err := m.Path(context.Background(), k)
 	if err != nil {
 		t.Fatalf("Path: %v", err)
 	}
@@ -132,7 +133,7 @@ func TestPathRefetchesCorruptedCache(t *testing.T) {
 		t.Fatalf("corrupt the cached file: %v", err)
 	}
 
-	if _, err := c.Path(context.Background(), k); err != nil {
+	if _, err := m.Path(context.Background(), k); err != nil {
 		t.Fatalf("Path after corruption: %v", err)
 	}
 	if calls != 2 {
@@ -140,13 +141,13 @@ func TestPathRefetchesCorruptedCache(t *testing.T) {
 	}
 }
 
-func TestPathWithoutURL(t *testing.T) {
-	c := newTestManager(t, func(context.Context, string, string) (int64, error) {
+func TestPathWithoutURLFails(t *testing.T) {
+	m := newTestManager(t, func(context.Context, string, string) (int64, error) {
 		t.Fatal("should not fetch without a URL")
 		return 0, nil
 	})
 
-	if _, err := c.Path(context.Background(), types.Kernel{ID: "k1", Name: "test"}); err == nil {
+	if _, err := m.Path(context.Background(), types.Kernel{ID: "k1", Name: "test"}); err == nil {
 		t.Error("Path should fail for a kernel with no URL and nothing cached")
 	}
 }
@@ -155,11 +156,11 @@ func TestPathWithoutURL(t *testing.T) {
 // there is nothing to verify, so an existing copy is trusted.
 func TestPathWithoutChecksumUsesCache(t *testing.T) {
 	var calls int
-	c := newTestManager(t, writeFetcher("vmlinux", &calls))
+	m := newTestManager(t, writeFetcher("vmlinux", &calls))
 	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux"}
 
 	for range 3 {
-		if _, err := c.Path(context.Background(), k); err != nil {
+		if _, err := m.Path(context.Background(), k); err != nil {
 			t.Fatalf("Path: %v", err)
 		}
 	}
@@ -170,20 +171,20 @@ func TestPathWithoutChecksumUsesCache(t *testing.T) {
 
 // TestFetchesAreRecorded covers what the fetch metrics see: each fetch once,
 // failed or not, with the bytes it fetched, and nothing for a cached kernel.
-func TestFetchesAreRecorded(t *testing.T) {
+func TestFetchMetricsAreRecorded(t *testing.T) {
 	var calls int
-	c := newTestManager(t, writeFetcher("vmlinux", &calls))
+	m := newTestManager(t, writeFetcher("vmlinux", &calls))
 	metrics := &fakeMetrics{}
-	c.metrics = metrics
+	m.metrics = metrics
 
 	bad := types.Kernel{ID: "k1", Name: "bad", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("other")}
-	if _, err := c.Path(t.Context(), bad); err == nil {
+	if _, err := m.Path(t.Context(), bad); err == nil {
 		t.Fatal("Path should fail when the download does not match the expected checksum")
 	}
 
 	good := types.Kernel{ID: "k2", Name: "good", URL: "https://example.invalid/vmlinux"}
 	for range 2 {
-		if _, err := c.Path(t.Context(), good); err != nil {
+		if _, err := m.Path(t.Context(), good); err != nil {
 			t.Fatalf("Path: %v", err)
 		}
 	}
@@ -199,30 +200,30 @@ func TestFetchesAreRecorded(t *testing.T) {
 	}
 }
 
-// recordedEvents keeps the events recorded.
-type recordedEvents struct {
+// fakeRecorder keeps every event recorded.
+type fakeRecorder struct {
 	events []events.Event
 }
 
-func (r *recordedEvents) Record(e events.Event) { r.events = append(r.events, e) }
+func (f *fakeRecorder) Record(e events.Event) { f.events = append(f.events, e) }
 
 // TestFetchedIsRecorded covers the fetched event: one for a kernel fetched
 // and verified, saying so, and none for a fetch that failed or a kernel
 // already on disk.
-func TestFetchedIsRecorded(t *testing.T) {
+func TestFetchedEventIsRecorded(t *testing.T) {
 	var calls int
-	c := newTestManager(t, writeFetcher("vmlinux", &calls))
-	recorded := &recordedEvents{}
-	c.events = recorded
+	m := newTestManager(t, writeFetcher("vmlinux", &calls))
+	recorded := &fakeRecorder{}
+	m.events = recorded
 
 	bad := types.Kernel{ID: "k1", Name: "bad", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("other")}
-	if _, err := c.Path(t.Context(), bad); err == nil {
+	if _, err := m.Path(t.Context(), bad); err == nil {
 		t.Fatal("Path should fail when the download does not match the expected checksum")
 	}
 
 	good := types.Kernel{ID: "k2", Name: "good", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("vmlinux")}
 	for range 2 {
-		if _, err := c.Path(t.Context(), good); err != nil {
+		if _, err := m.Path(t.Context(), good); err != nil {
 			t.Fatalf("Path: %v", err)
 		}
 	}
@@ -243,33 +244,33 @@ func TestFetchedIsRecorded(t *testing.T) {
 	}
 }
 
-func TestDiskBytes(t *testing.T) {
+func TestDiskBytesIsSizeOfFetchedBinary(t *testing.T) {
 	var calls int
-	c := newTestManager(t, writeFetcher("vmlinux", &calls))
+	m := newTestManager(t, writeFetcher("vmlinux", &calls))
 	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux"}
 
-	if got := c.DiskBytes(k.ID); got != 0 {
+	if got := m.DiskBytes(k.ID); got != 0 {
 		t.Errorf("DiskBytes before download = %d, want 0", got)
 	}
-	if _, err := c.Path(t.Context(), k); err != nil {
+	if _, err := m.Path(t.Context(), k); err != nil {
 		t.Fatalf("Path: %v", err)
 	}
-	if got := c.DiskBytes(k.ID); got != 7 {
+	if got := m.DiskBytes(k.ID); got != 7 {
 		t.Errorf("DiskBytes after download = %d, want 7", got)
 	}
 }
 
-func TestDelete(t *testing.T) {
+func TestDeleteRemovesKernelDirectory(t *testing.T) {
 	var calls int
-	c := newTestManager(t, writeFetcher("vmlinux", &calls))
+	m := newTestManager(t, writeFetcher("vmlinux", &calls))
 	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux"}
 
-	path, err := c.Path(context.Background(), k)
+	path, err := m.Path(context.Background(), k)
 	if err != nil {
 		t.Fatalf("Path: %v", err)
 	}
 
-	if err := c.Delete(k.ID); err != nil {
+	if err := m.Delete(k.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if _, err := os.Stat(filepath.Dir(path)); !errors.Is(err, fs.ErrNotExist) {
@@ -277,7 +278,7 @@ func TestDelete(t *testing.T) {
 	}
 
 	// Deleting again is not an error.
-	if err := c.Delete(k.ID); err != nil {
+	if err := m.Delete(k.ID); err != nil {
 		t.Errorf("second Delete: %v", err)
 	}
 }
@@ -288,7 +289,7 @@ func TestDelete(t *testing.T) {
 func TestConcurrentPathsShareOneDownload(t *testing.T) {
 	var calls atomic.Int32
 	release := make(chan struct{})
-	c := newTestManager(t, func(_ context.Context, _, dst string) (int64, error) {
+	m := newTestManager(t, func(_ context.Context, _, dst string) (int64, error) {
 		calls.Add(1)
 		<-release
 		return writeFile(dst, "vmlinux")
@@ -298,7 +299,7 @@ func TestConcurrentPathsShareOneDownload(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Go(func() {
-			path, err := c.Path(t.Context(), k)
+			path, err := m.Path(t.Context(), k)
 			if err != nil {
 				t.Errorf("Path: %v", err)
 				return
@@ -311,7 +312,7 @@ func TestConcurrentPathsShareOneDownload(t *testing.T) {
 
 	// Give every caller the chance to find the download in progress.
 	time.Sleep(50 * time.Millisecond)
-	if _, err := os.Stat(c.kernelPath(k.ID)); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(m.binaryPath(k.ID)); !errors.Is(err, fs.ErrNotExist) {
 		t.Error("the kernel is in place before its download finished")
 	}
 	close(release)

@@ -31,17 +31,17 @@ type volumeCollector struct {
 func (m *Metrics) newVolumeCollector(source func() VolumeSummary) *volumeCollector {
 	return &volumeCollector{
 		source: source,
-		count: m.desc(Description{
+		count: m.descriptor(Description{
 			Name:  "dicer_volumes",
 			Help:  "Volumes defined on this host.",
 			Group: GroupVolumes,
 		}),
-		size: m.desc(Description{
+		size: m.descriptor(Description{
 			Name:  "dicer_volume_size_bytes",
 			Help:  "Total size of those volumes, as their guests see it.",
 			Group: GroupVolumes,
 		}),
-		disk: m.desc(Description{
+		disk: m.descriptor(Description{
 			Name: "dicer_volume_disk_bytes",
 			Help: "Disk those volumes take up on this host.",
 			Doc: "Volumes are sparse files that take up disk as guests write to them, so it is less " +
@@ -60,7 +60,7 @@ func (c *volumeCollector) Describe(ch chan<- *prometheus.Desc) {
 func (c *volumeCollector) Collect(ch chan<- prometheus.Metric) {
 	summary := c.source()
 
-	ch <- gauge(c.count, float64(summary.Count))
-	ch <- gauge(c.size, float64(summary.SizeBytes))
-	ch <- gauge(c.disk, float64(summary.DiskBytes))
+	ch <- gaugeReading(c.count, float64(summary.Count))
+	ch <- gaugeReading(c.size, float64(summary.SizeBytes))
+	ch <- gaugeReading(c.disk, float64(summary.DiskBytes))
 }

@@ -12,11 +12,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// fakeRows is a Printable of two instances.
 type fakeRows struct{}
 
-func (fakeRows) Cols() []string { return []string{"Name", "State", "IP"} }
+func (fakeRows) Columns() []string { return []string{"Name", "State", "IP"} }
 
-func (fakeRows) KV() []map[string]any {
+func (fakeRows) Rows() []map[string]any {
 	return []map[string]any{
 		{"Name": "web", "State": "Running", "IP": "10.0.0.5"},
 		{"Name": "db", "State": "Stopped", "IP": "-"},
@@ -55,9 +56,7 @@ func TestPrintJSON(t *testing.T) {
 	}
 }
 
-// TestPrintSelectedColumns checks that a column selection is validated
-// against Cols.
-func TestPrintSelectedColumns(t *testing.T) {
+func TestPrintShowsOnlySelectedColumns(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Print(fakeRows{}, &buf, Options{Format: "json", Columns: []string{"Name"}}); err != nil {
 		t.Fatalf("Print: %v", err)
@@ -75,7 +74,7 @@ func TestPrintSelectedColumns(t *testing.T) {
 	}
 }
 
-func TestPrintUnknownColumn(t *testing.T) {
+func TestPrintRejectsUnknownColumn(t *testing.T) {
 	var buf bytes.Buffer
 	err := Print(fakeRows{}, &buf, Options{Format: "table", Columns: []string{"Nope"}})
 	if err == nil {
@@ -89,14 +88,14 @@ func TestPrintUnknownColumn(t *testing.T) {
 	}
 }
 
-func TestPrintUnknownFormat(t *testing.T) {
+func TestPrintRejectsUnknownFormat(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Print(fakeRows{}, &buf, Options{Format: "xml"}); err == nil {
 		t.Error("expected an error for an unsupported format")
 	}
 }
 
-func TestPrintFormatAliases(t *testing.T) {
+func TestPrintAcceptsFormatAliases(t *testing.T) {
 	for _, format := range []string{"table", "text", "TABLE", "JSON", "yaml", "yml"} {
 		var buf bytes.Buffer
 		if err := Print(fakeRows{}, &buf, Options{Format: format}); err != nil {
@@ -123,7 +122,7 @@ func TestPrintYAML(t *testing.T) {
 	}
 }
 
-func TestPrintTemplate(t *testing.T) {
+func TestPrintTemplateRunsOncePerRow(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Print(fakeRows{}, &buf, Options{Format: "{{.Name}}={{.State | lower}}"}); err != nil {
 		t.Fatalf("Print: %v", err)
@@ -134,14 +133,14 @@ func TestPrintTemplate(t *testing.T) {
 	}
 }
 
-func TestPrintTemplateInvalid(t *testing.T) {
+func TestPrintRejectsMalformedTemplate(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Print(fakeRows{}, &buf, Options{Format: "{{.Name"}); err == nil {
 		t.Error("expected an error for a malformed template")
 	}
 }
 
-func TestPrintColumnsIgnoreCase(t *testing.T) {
+func TestPrintMatchesColumnsIgnoringCase(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Print(fakeRows{}, &buf, Options{Format: "json", Columns: []string{"name", "ip"}}); err != nil {
 		t.Fatalf("Print: %v", err)
@@ -166,5 +165,48 @@ func TestPrintTemplateAlignsTabs(t *testing.T) {
 
 	if got, want := buf.String(), "web  10.0.0.5\ndb   -\n"; got != want {
 		t.Errorf("output = %q, want %q", got, want)
+	}
+}
+
+func TestPrintStructuredWritesJSONOrYAML(t *testing.T) {
+	v := map[string]any{"host": map[string]any{"name": "compute-1"}}
+
+	for _, format := range []string{"json", "yaml"} {
+		var buf bytes.Buffer
+		if err := PrintStructured(v, &buf, format); err != nil {
+			t.Fatalf("PrintStructured(%s): %v", format, err)
+		}
+
+		var got map[string]map[string]string
+		if err := yaml.Unmarshal(buf.Bytes(), &got); err != nil || got["host"]["name"] != "compute-1" {
+			t.Errorf("PrintStructured(%s) wrote %q (%v)", format, buf.String(), err)
+		}
+	}
+
+	for _, format := range []string{"table", "{{.Name}}", "xml"} {
+		if err := PrintStructured(v, &bytes.Buffer{}, format); err == nil {
+			t.Errorf("PrintStructured(%s) succeeded, want only JSON and YAML", format)
+		}
+	}
+}
+
+func TestFormatPredicates(t *testing.T) {
+	for _, tt := range []struct {
+		format            string
+		table, structured bool
+	}{
+		{"table", true, false},
+		{"TEXT", true, false},
+		{"json", false, true},
+		{"yml", false, true},
+		{"{{.Name}}", false, false},
+		{"xml", false, false},
+	} {
+		if got := IsTable(tt.format); got != tt.table {
+			t.Errorf("IsTable(%q) = %v, want %v", tt.format, got, tt.table)
+		}
+		if got := IsStructured(tt.format); got != tt.structured {
+			t.Errorf("IsStructured(%q) = %v, want %v", tt.format, got, tt.structured)
+		}
 	}
 }

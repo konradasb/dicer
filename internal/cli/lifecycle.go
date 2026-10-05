@@ -4,17 +4,12 @@
 package cli
 
 import (
-	"context"
 	"fmt"
-	"io"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 
 	"github.com/konradasb/dicer"
-	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -42,26 +37,12 @@ func eachName(
 	for _, name := range names {
 		if err := run(name); err != nil {
 			failed = true
-			cmd.PrintErrf("Error: %s\n", err)
+			cmd.PrintErrf("Error: %s\n", errorMessage(err))
 		}
 	}
 	if failed {
 		return &exitError{code: 1}
 	}
-	return nil
-}
-
-// runTask runs a slow call, showing a spinner while it lasts, and says how
-// it went: "Instance web started in 1.4s (172.20.0.7)".
-func runTask[T any](cmd *cobra.Command, doing string, call func() (T, error), done func(T, string) string) error {
-	t := startTask(cmd, doing)
-	result, err := call()
-	if err != nil {
-		t.end()
-		return err
-	}
-
-	t.succeed("%s", done(result, humanize.Duration(t.elapsed())))
 	return nil
 }
 
@@ -75,9 +56,9 @@ func newInstanceStartCommand() *cobra.Command {
 			return eachName(cmd, args, instancesIn(), func(client *dicer.Client, name string) error {
 				return runTask(cmd, "Starting "+name, func() (*dicerdv1.Instance, error) {
 					return client.StartInstance(cmd.Context(), &dicerdv1.StartInstanceRequest{Name: name})
-				}, func(inst *dicerdv1.Instance, took string) string {
+				}, func(instance *dicerdv1.Instance, took string) string {
 					return fmt.Sprintf("Instance %s started in %s (%s)",
-						inst.GetName(), took, orDash(inst.GetIp()))
+						instance.GetName(), took, orDash(instance.GetIp()))
 				})
 			})
 		},
@@ -94,8 +75,8 @@ func newInstanceStopCommand() *cobra.Command {
 			return eachName(cmd, args, instancesIn(), func(client *dicer.Client, name string) error {
 				return runTask(cmd, "Stopping "+name, func() (*dicerdv1.Instance, error) {
 					return client.StopInstance(cmd.Context(), &dicerdv1.StopInstanceRequest{Name: name})
-				}, func(inst *dicerdv1.Instance, took string) string {
-					return fmt.Sprintf("Instance %s stopped in %s", inst.GetName(), took)
+				}, func(instance *dicerdv1.Instance, took string) string {
+					return fmt.Sprintf("Instance %s stopped in %s", instance.GetName(), took)
 				})
 			})
 		},
@@ -114,12 +95,12 @@ func newInstanceRestartCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return eachName(cmd, args, instancesIn(), func(client *dicer.Client, name string) error {
 				return runTask(cmd, "Restarting "+name, func() (*dicerdv1.Instance, error) {
-					inst, err := client.GetInstance(cmd.Context(), &dicerdv1.GetInstanceRequest{Name: name})
+					instance, err := client.GetInstance(cmd.Context(), &dicerdv1.GetInstanceRequest{Name: name})
 					if err != nil {
 						return nil, err
 					}
 
-					switch inst.GetState() {
+					switch instance.GetState() {
 					case stateRunning, statePaused, stateStarting:
 						if _, err := client.StopInstance(cmd.Context(), &dicerdv1.StopInstanceRequest{Name: name}); err != nil {
 							return nil, err
@@ -127,9 +108,9 @@ func newInstanceRestartCommand() *cobra.Command {
 					}
 
 					return client.StartInstance(cmd.Context(), &dicerdv1.StartInstanceRequest{Name: name})
-				}, func(inst *dicerdv1.Instance, took string) string {
+				}, func(instance *dicerdv1.Instance, took string) string {
 					return fmt.Sprintf("Instance %s restarted in %s (%s)",
-						inst.GetName(), took, orDash(inst.GetIp()))
+						instance.GetName(), took, orDash(instance.GetIp()))
 				})
 			})
 		},
@@ -144,12 +125,12 @@ func newInstancePauseCommand() *cobra.Command {
 		ValidArgsFunction: complete(0, instancesIn(stateRunning)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return eachName(cmd, args, instancesIn(), func(client *dicer.Client, name string) error {
-				inst, err := client.PauseInstance(cmd.Context(), &dicerdv1.PauseInstanceRequest{Name: name})
+				instance, err := client.PauseInstance(cmd.Context(), &dicerdv1.PauseInstanceRequest{Name: name})
 				if err != nil {
 					return err
 				}
 
-				succeeded(cmd, "Instance %s paused", inst.GetName())
+				succeeded(cmd, "Instance %s paused", instance.GetName())
 
 				return nil
 			})
@@ -166,12 +147,12 @@ func newInstanceResumeCommand() *cobra.Command {
 		ValidArgsFunction: complete(0, instancesIn(statePaused)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return eachName(cmd, args, instancesIn(), func(client *dicer.Client, name string) error {
-				inst, err := client.ResumeInstance(cmd.Context(), &dicerdv1.ResumeInstanceRequest{Name: name})
+				instance, err := client.ResumeInstance(cmd.Context(), &dicerdv1.ResumeInstanceRequest{Name: name})
 				if err != nil {
 					return err
 				}
 
-				succeeded(cmd, "Instance %s resumed", inst.GetName())
+				succeeded(cmd, "Instance %s resumed", instance.GetName())
 
 				return nil
 			})
@@ -210,128 +191,4 @@ func newInstanceDeleteCommand() *cobra.Command {
 	addDeleteAllFlags(cmd, "instances")
 
 	return cmd
-}
-
-func newInstanceListCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "list",
-		Short:   "List instances",
-		Args:    noArgs,
-		Aliases: []string{"ls", "ps"},
-		Example: "  dicer ps\n" +
-			"  dicer ps --filter state=running --filter label=team=web\n" +
-			"  dicer ps -c name,state,ip\n" +
-			"  dicer ps --format '{{.Name}}\\t{{.IP}}'\n" +
-			"  dicer stop $(dicer ps -q --filter state=running)\n" +
-			"  dicer ps --watch",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			specs, _ := cmd.Flags().GetStringArray("filter")
-			filters, err := parseInstanceFilters(specs)
-			if err != nil {
-				return usagef(cmd, "%s", err)
-			}
-
-			client, cleanup, err := newClient(cmd)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
-
-			list := func(ctx context.Context, w io.Writer) error {
-				resp, err := client.ListInstances(ctx, &dicerdv1.ListInstancesRequest{})
-				if err != nil {
-					return err
-				}
-				instances := resp.GetInstances()
-
-				return renderTo(cmd, w, &printableInstance{Instances: filters.apply(instances)})
-			}
-
-			if watch, _ := cmd.Flags().GetBool("watch"); watch {
-				interval, _ := cmd.Flags().GetDuration("interval")
-				return watchList(cmd, interval, list)
-			}
-
-			return list(cmd.Context(), cmd.OutOrStdout())
-		},
-	}
-
-	addOutputFlags(cmd, true)
-	cmd.Flags().Bool("wide", false, "Show every column, not just name, image, status, address and ports")
-	cmd.Flags().BoolP("watch", "w", false, "Keep the list on screen, redrawn as it changes, until Ctrl+C")
-	cmd.Flags().Duration("interval", 2*time.Second, "How often --watch redraws")
-	cmd.MarkFlagsMutuallyExclusive("wide", "columns")
-	cmd.Flags().StringArrayP("filter", "f", nil, "Show only instances that match, as KEY=VALUE (repeatable); "+
-		"keys are "+strings.Join(instanceFilterKeys, ", "))
-	_ = cmd.RegisterFlagCompletionFunc("filter", completeInstanceFilters)
-	// Accepted for docker compatibility; every instance is listed anyway.
-	cmd.Flags().BoolP("all", "a", false, "Accepted for Docker compatibility; every instance is always listed")
-	_ = cmd.Flags().MarkHidden("all")
-
-	return cmd
-}
-
-func newInstanceShowCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "show NAME...",
-		Short: "Show everything about one or more instances",
-		Long: "Shows an instance's whole definition and state. With --format json or\n" +
-			"yaml, prints the daemon's full record of it, raw sizes and all, for\n" +
-			"scripts: an array of one object per instance.",
-		Example: "  dicer inspect web\n" +
-			"  dicer inspect web --format json | jq -r '.[0].ip'\n" +
-			"  dicer inspect web --format '{{.IP}}'",
-		Args:              oneOrMore("instance name"),
-		Aliases:           []string{"get", "inspect"},
-		ValidArgsFunction: complete(0, instancesIn()),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			client, cleanup, err := newClient(cmd)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
-
-			instances := make([]*dicerdv1.Instance, 0, len(args))
-			for _, name := range args {
-				inst, err := client.GetInstance(cmd.Context(), &dicerdv1.GetInstanceRequest{Name: name})
-				if err != nil {
-					return suggest(cmd.Context(), client, instancesIn(), name, err)
-				}
-				instances = append(instances, inst)
-			}
-
-			return renderInstances(cmd, client, instances)
-		},
-	}
-
-	addOutputFlags(cmd, false)
-	cmd.Flags().StringSliceP("columns", "c", nil,
-		"Show a table of just these columns instead, comma-separated and in any case")
-
-	return cmd
-}
-
-// renderInstances shows instances in detail, as full records for JSON or
-// YAML, or as 'dicer ps' rows for columns or a template.
-func renderInstances(cmd *cobra.Command, client *dicer.Client, instances []*dicerdv1.Instance) error {
-	format, _ := cmd.Flags().GetString("format")
-	columns, _ := cmd.Flags().GetStringSlice("columns")
-
-	switch {
-	case len(columns) > 0 || strings.Contains(format, "{{"):
-		return render(cmd, &printableInstance{Instances: instances})
-	case strings.EqualFold(format, "table") || strings.EqualFold(format, "text"):
-		recent := make(map[string][]*dicerdv1.Event, len(instances))
-		for _, inst := range instances {
-			events, err := recentEvents(cmd.Context(), client, inst.GetId())
-			if err != nil {
-				return err
-			}
-			recent[inst.GetId()] = events
-		}
-
-		return writeInstanceDetails(cmd.OutOrStdout(), instances, recent)
-	default:
-		return writeRecords(cmd.OutOrStdout(), format, instances)
-	}
 }

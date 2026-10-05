@@ -39,18 +39,18 @@ func TestAgainstRealFirecracker(t *testing.T) {
 	}
 
 	socketPath := filepath.Join(dir, "api.sock")
-	vmm, hv, cu, err := starter.start(t.Context(), socketPath, nil)
+	vmm, hv, cu, err := starter.start(t.Context(), socketPath)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	defer cu.Clean()
 	t.Cleanup(vmm.Terminate)
 
-	info, err := hv.GetVMInfo(t.Context())
+	info, err := hv.VMInfo(t.Context())
 	if err != nil {
-		t.Fatalf("GetVMInfo: %v", err)
+		t.Fatalf("VMInfo: %v", err)
 	}
-	if info.State != "Stopped" {
+	if info.State != hypervisor.VMStateStopped {
 		t.Errorf("state = %q, want Stopped before the guest is booted", info.State)
 	}
 
@@ -60,7 +60,7 @@ func TestAgainstRealFirecracker(t *testing.T) {
 	spec.Boot.KernelPath = touch(t, dir, "vmlinux")
 	spec.Boot.InitrdPath = touch(t, dir, "initrd")
 	spec.Disks = []hypervisor.DiskConfig{{Path: touch(t, dir, "rootfs.img"), ReadOnly: true}}
-	spec.NICs = nil // a TAP device would have to exist on the host
+	spec.NetworkInterfaces = nil // a TAP device would have to exist on the host
 	spec.Vsock = nil
 	spec.Console.Path = filepath.Join(dir, "serial.log")
 
@@ -80,7 +80,7 @@ func TestAgainstRealFirecracker(t *testing.T) {
 	if cfg.MachineConfig.VCPUCount != spec.CPU.Count {
 		t.Errorf("vcpu_count = %d, want %d", cfg.MachineConfig.VCPUCount, spec.CPU.Count)
 	}
-	if want := ceilDiv(spec.Memory.SizeBytes, mib); cfg.MachineConfig.MemSizeMiB != want {
+	if want := divideRoundingUp(spec.Memory.SizeBytes, mib); cfg.MachineConfig.MemSizeMiB != want {
 		t.Errorf("mem_size_mib = %d, want %d", cfg.MachineConfig.MemSizeMiB, want)
 	}
 

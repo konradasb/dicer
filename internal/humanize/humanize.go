@@ -1,7 +1,7 @@
 // Copyright 2026 Dicer Authors
 // SPDX-License-Identifier: MIT
 
-// Package humanize writes sizes, durations and counts for people, so that
+// Package humanize writes sizes, numbers, durations and counts for people, so that
 // every one Dicer prints reads the same: in a table, a message or an event.
 package humanize
 
@@ -18,7 +18,7 @@ var sizeUnits = []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}
 // most one decimal place: "512 B", "1.5 GiB".
 func Bytes(n int64) string {
 	value, unit := scale(n, n)
-	return number(value) + " " + unit
+	return Number(value) + " " + unit
 }
 
 // BytesOf writes part of total in total's unit, so that the two read as one:
@@ -26,24 +26,25 @@ func Bytes(n int64) string {
 func BytesOf(part, total int64) string {
 	value, unit := scale(total, total)
 	partValue, _ := scale(part, total)
-	return number(partValue) + " of " + number(value) + " " + unit
+	return Number(partValue) + " of " + Number(value) + " " + unit
 }
 
 // scale returns n in the largest unit that leaves reference at least 1, and
 // that unit.
 func scale(n, reference int64) (float64, string) {
-	value, ref := float64(n), float64(reference)
+	value := float64(n)
 	i := 0
-	for ref >= 1024 && i < len(sizeUnits)-1 {
+	for reference >= 1024 && i < len(sizeUnits)-1 {
 		value /= 1024
-		ref /= 1024
+		reference /= 1024
 		i++
 	}
 	return value, sizeUnits[i]
 }
 
-// number writes f to at most one decimal place, dropping a trailing ".0".
-func number(f float64) string {
+// Number writes f to at most one decimal place, dropping a trailing ".0":
+// "30.3", "1", "4".
+func Number(f float64) string {
 	return strconv.FormatFloat(math.Round(f*10)/10, 'f', -1, 64)
 }
 

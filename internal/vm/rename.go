@@ -14,23 +14,23 @@ import (
 
 // Rename changes a Stopped or Failed instance's name and returns the renamed
 // instance. Its persistent directory moves; everything keyed by ID stays.
-func (m *Manager) Rename(ctx context.Context, inst types.InstanceSpec, newName string) (_ types.InstanceSpec, err error) {
-	lock := m.lock(inst.ID)
+func (m *Manager) Rename(ctx context.Context, instance types.InstanceSpec, newName string) (_ types.InstanceSpec, err error) {
+	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
 
-	current, err := m.definitions.GetInstance(inst.ID)
+	current, err := m.definitions.Instance(instance.ID)
 	if err != nil {
 		return types.InstanceSpec{}, err
 	}
 
-	rt, err := m.Runtime(current)
+	status, err := m.Status(current)
 	if err != nil {
 		return types.InstanceSpec{}, err
 	}
-	if !renameable(rt.State) {
+	if !renameable(status.State) {
 		return types.InstanceSpec{}, errdefs.InvalidState(
-			"instance %q is %s; rename it once it has stopped", current.Name, rt.State.Lower())
+			"instance %q is %s; rename it once it has stopped", current.Name, status.State.Lowercase())
 	}
 
 	if newName == current.Name {
@@ -53,5 +53,5 @@ func (m *Manager) Rename(ctx context.Context, inst types.InstanceSpec, newName s
 
 // renameable reports whether an instance in the state can be renamed.
 func renameable(state types.InstanceState) bool {
-	return state == types.StateStopped || state == types.StateFailed
+	return state == types.InstanceStateStopped || state == types.InstanceStateFailed
 }

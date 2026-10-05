@@ -4,31 +4,30 @@
 package registry
 
 import (
-	"context"
+	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/konradasb/dicer/internal/image/reference"
 )
 
-func TestNewClient(t *testing.T) {
-	tmpDir := t.TempDir()
+// testImage is a small, stable image the network tests pull.
+const testImage = "alpine:3.18"
 
-	client, err := NewClient(tmpDir)
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
+func TestNewClientMakesTheLayerCacheDirectory(t *testing.T) {
+	dataDir := t.TempDir()
+
+	if _, err := NewClient(dataDir); err != nil {
+		t.Fatalf("NewClient: %v", err)
 	}
-
-	if client == nil {
-		t.Fatal("NewClient() returned nil")
-	}
-
-	// Verify cache dir was created
-	if _, err := os.Stat(tmpDir); err != nil {
-		t.Errorf("cache dir not created: %v", err)
+	if _, err := os.Stat(filepath.Join(dataDir, "oci-cache")); err != nil {
+		t.Errorf("the layer cache directory: %v", err)
 	}
 }
 
-func TestNewClient_InvalidCacheDir(t *testing.T) {
+func TestNewClientFailsWhereNoDirectoryCanBeMade(t *testing.T) {
 	// A directory cannot be created beneath a regular file, whoever the test
 	// runs as -- unlike a path under /nonexistent, which root can create.
 	file := filepath.Join(t.TempDir(), "file")
@@ -37,325 +36,163 @@ func TestNewClient_InvalidCacheDir(t *testing.T) {
 	}
 
 	if _, err := NewClient(filepath.Join(file, "data")); err == nil {
-		t.Error("NewClient() should fail with invalid cache dir")
+		t.Error("NewClient succeeded beneath a regular file, want an error")
 	}
 }
 
-func TestClient_Resolve(t *testing.T) {
-	// This is an integration test that requires network access
+// newTestClient returns a client with a fresh layer cache, and the digest
+// testImage currently points to. It needs the network.
+func newTestClient(t *testing.T) (*Client, string) {
+	t.Helper()
+
 	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
+		t.Skip("skipping a test that needs the network in short mode")
 	}
 
-	tmpDir := t.TempDir()
-	client, err := NewClient(tmpDir)
+	c, err := NewClient(t.TempDir())
 	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
+		t.Fatalf("NewClient: %v", err)
 	}
-
-	ctx := context.Background()
-
-	// Test with a small, stable image
-	digest, err := client.inspectManifest(ctx, "alpine:3.18")
+	ref, err := reference.Parse(testImage)
 	if err != nil {
-		t.Fatalf("inspectManifest() error = %v", err)
+		t.Fatal(err)
+	}
+	digest, err := c.Resolve(t.Context(), ref)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
 	}
 
-	if digest == "" {
-		t.Error("inspectManifest() returned empty digest")
-	}
+	return c, digest
+}
 
-	// Verify digest format
-	if len(digest) < 10 || digest[:7] != "sha256:" {
-		t.Errorf("digest format invalid: %s", digest)
+func TestResolveReturnsAManifestDigest(t *testing.T) {
+	_, digest := newTestClient(t)
+
+	if !strings.HasPrefix(digest, "sha256:") || len(digest) <= len("sha256:") {
+		t.Errorf("Resolve = %q, want a sha256 digest", digest)
 	}
 }
 
-func TestClient_PullAndExport(t *testing.T) {
-	// This is an integration test that requires network access and takes time
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
+func TestPullAndExportUnpacksTheImage(t *testing.T) {
+	c, digest := newTestClient(t)
+	exportDir := filepath.Join(t.TempDir(), "export")
 
-	tmpDir := t.TempDir()
-	cacheDir := filepath.Join(tmpDir, "cache")
-	exportDir := filepath.Join(tmpDir, "export")
-
-	client, err := NewClient(cacheDir)
+	metadata, err := c.PullAndExport(t.Context(), testImage, digest, exportDir, nil)
 	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
+		t.Fatalf("PullAndExport: %v", err)
+	}
+	if metadata == nil {
+		t.Fatal("PullAndExport returned no metadata")
 	}
 
-	ctx := context.Background()
-
-	// First resolve the digest
-	digest, err := client.inspectManifest(ctx, "alpine:3.18")
-	if err != nil {
-		t.Fatalf("inspectManifest() error = %v", err)
-	}
-
-	// Pull and export
-	result, err := client.PullAndExport(ctx, "alpine:3.18", digest, exportDir, nil)
-	if err != nil {
-		t.Fatalf("PullAndExport() error = %v", err)
-	}
-
-	if result == nil {
-		t.Fatal("PullAndExport() returned nil result")
-	}
-
-	if result.Digest != digest {
-		t.Errorf("result.Digest = %v, want %v", result.Digest, digest)
-	}
-
-	if result.Metadata == nil {
-		t.Fatal("result.Metadata is nil")
-	}
-
-	// Verify export directory exists and has content
 	entries, err := os.ReadDir(exportDir)
 	if err != nil {
-		t.Fatalf("ReadDir() error = %v", err)
+		t.Fatal(err)
 	}
-
 	if len(entries) == 0 {
-		t.Error("export directory is empty")
-	}
-
-	t.Logf("Exported %d entries", len(entries))
-	t.Logf("Metadata: Entrypoint=%v, Cmd=%v, WorkingDir=%s",
-		result.Metadata.Entrypoint, result.Metadata.Cmd, result.Metadata.WorkingDir)
-}
-
-func TestClient_PullAndExport_Cached(t *testing.T) {
-	// Test that second pull uses cache
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	tmpDir := t.TempDir()
-	cacheDir := filepath.Join(tmpDir, "cache")
-	exportDir1 := filepath.Join(tmpDir, "export1")
-	exportDir2 := filepath.Join(tmpDir, "export2")
-
-	client, err := NewClient(cacheDir)
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
-
-	ctx := context.Background()
-	digest, err := client.inspectManifest(ctx, "alpine:3.18")
-	if err != nil {
-		t.Fatalf("inspectManifest() error = %v", err)
-	}
-
-	// First pull
-	_, err = client.PullAndExport(ctx, "alpine:3.18", digest, exportDir1, nil)
-	if err != nil {
-		t.Fatalf("first PullAndExport() error = %v", err)
-	}
-
-	// Second pull (should use cache)
-	_, err = client.PullAndExport(ctx, "alpine:3.18", digest, exportDir2, nil)
-	if err != nil {
-		t.Fatalf("second PullAndExport() error = %v", err)
-	}
-
-	// Both exports should have content
-	entries1, _ := os.ReadDir(exportDir1)
-	entries2, _ := os.ReadDir(exportDir2)
-
-	if len(entries1) == 0 || len(entries2) == 0 {
-		t.Error("export directories should not be empty")
+		t.Error("the export directory is empty")
 	}
 }
 
-func TestClient_PullAndExport_EmptyDigest(t *testing.T) {
-	tmpDir := t.TempDir()
-	client, _ := NewClient(tmpDir)
+// TestPullAndExportUnpacksACachedImageAgain checks that an image already in
+// the layer cache is unpacked again for a second pull.
+func TestPullAndExportUnpacksACachedImageAgain(t *testing.T) {
+	c, digest := newTestClient(t)
 
-	ctx := context.Background()
-	_, err := client.PullAndExport(ctx, "alpine:latest", "", tmpDir, nil)
-	if err == nil {
-		t.Error("PullAndExport() should fail with empty digest")
+	for _, dir := range []string{"first", "second"} {
+		exportDir := filepath.Join(t.TempDir(), dir)
+		if _, err := c.PullAndExport(t.Context(), testImage, digest, exportDir, nil); err != nil {
+			t.Fatalf("%s PullAndExport: %v", dir, err)
+		}
+		if entries, err := os.ReadDir(exportDir); err != nil || len(entries) == 0 {
+			t.Errorf("the %s export directory is empty: %v", dir, err)
+		}
 	}
 }
 
-func TestClient_PullAndExport_EmptyExportDir(t *testing.T) {
-	tmpDir := t.TempDir()
-	client, _ := NewClient(tmpDir)
+func TestPullAndExportRejectsMissingArguments(t *testing.T) {
+	const digest = "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
 
-	ctx := context.Background()
-	_, err := client.PullAndExport(ctx, "alpine:latest", "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", "", nil)
-	if err == nil {
-		t.Error("PullAndExport() should fail with empty export dir")
+	tests := []struct {
+		name      string
+		digest    string
+		exportDir string
+	}{
+		{"no digest", "", t.TempDir()},
+		{"no export directory", digest, ""},
+	}
+
+	c, err := NewClient(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := c.PullAndExport(t.Context(), "alpine:latest", tt.digest, tt.exportDir, nil); err == nil {
+				t.Error("PullAndExport succeeded, want an error")
+			}
+		})
 	}
 }
 
-func TestClient_Metadata(t *testing.T) {
-	// This requires a cached image
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	tmpDir := t.TempDir()
-	cacheDir := filepath.Join(tmpDir, "cache")
-	exportDir := filepath.Join(tmpDir, "export")
-
-	client, err := NewClient(cacheDir)
-	if err != nil {
-		t.Fatalf("NewClient() error = %v", err)
-	}
-
-	ctx := context.Background()
-
-	// First pull an image
-	digest, err := client.inspectManifest(ctx, "alpine:3.18")
-	if err != nil {
-		t.Fatalf("inspectManifest() error = %v", err)
-	}
-
-	_, err = client.PullAndExport(ctx, "alpine:3.18", digest, exportDir, nil)
-	if err != nil {
-		t.Fatalf("PullAndExport() error = %v", err)
-	}
-
-	// Now test metadata
-	layoutTag, _ := digestToLayoutTag(digest)
-	meta, err := client.metadata(layoutTag)
-	if err != nil {
-		t.Fatalf("metadata() error = %v", err)
-	}
-
-	if meta == nil {
-		t.Fatal("metadata() returned nil")
-	}
-
-	// Alpine should have /bin/sh as entrypoint or cmd
-	t.Logf("Metadata: Entrypoint=%v, Cmd=%v, Env=%v, WorkingDir=%s",
-		meta.Entrypoint, meta.Cmd, meta.Env, meta.WorkingDir)
-}
-
-func TestDigestToLayoutTag(t *testing.T) {
+func TestDigestHex(t *testing.T) {
 	tests := []struct {
 		name    string
 		digest  string
 		want    string
 		wantErr bool
 	}{
-		{
-			name:   "valid sha256",
-			digest: "sha256:abc123",
-			want:   "abc123",
-		},
-		{
-			name:   "valid sha512",
-			digest: "sha512:def456",
-			want:   "def456",
-		},
-		{
-			name:    "missing colon",
-			digest:  "sha256abc123",
-			wantErr: true,
-		},
-		{
-			name:    "empty after colon",
-			digest:  "sha256:",
-			wantErr: true,
-		},
-		{
-			name:    "empty string",
-			digest:  "",
-			wantErr: true,
-		},
+		{name: "sha256", digest: "sha256:abc123", want: "abc123"},
+		{name: "sha512", digest: "sha512:def456", want: "def456"},
+		{name: "no colon", digest: "sha256abc123", wantErr: true},
+		{name: "nothing after the colon", digest: "sha256:", wantErr: true},
+		{name: "empty", digest: "", wantErr: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := digestToLayoutTag(tt.digest)
+			got, err := digestHex(tt.digest)
 			if tt.wantErr {
 				if err == nil {
-					t.Error("digestToLayoutTag() should return error")
+					t.Errorf("digestHex(%q) = %q, want an error", tt.digest, got)
 				}
 				return
 			}
-
 			if err != nil {
-				t.Fatalf("digestToLayoutTag() error = %v", err)
+				t.Fatalf("digestHex(%q): %v", tt.digest, err)
 			}
-
 			if got != tt.want {
-				t.Errorf("digestToLayoutTag() = %v, want %v", got, tt.want)
+				t.Errorf("digestHex(%q) = %q, want %q", tt.digest, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestParseEnvVars(t *testing.T) {
+func TestParseEnvSplitsAtTheFirstEquals(t *testing.T) {
 	tests := []struct {
-		name    string
-		envList []string
-		want    map[string]string
+		name string
+		list []string
+		want map[string]string
 	}{
+		{"empty", []string{}, map[string]string{}},
+		{"one variable", []string{"PATH=/usr/bin"}, map[string]string{"PATH": "/usr/bin"}},
 		{
-			name:    "empty",
-			envList: []string{},
-			want:    map[string]string{},
+			"several variables",
+			[]string{"PATH=/usr/bin:/bin", "HOME=/root", "USER=root"},
+			map[string]string{"PATH": "/usr/bin:/bin", "HOME": "/root", "USER": "root"},
 		},
 		{
-			name: "single var",
-			envList: []string{
-				"PATH=/usr/bin",
-			},
-			want: map[string]string{
-				"PATH": "/usr/bin",
-			},
+			"value with equals",
+			[]string{`DOCKER_CONFIG={"auths":{}}`},
+			map[string]string{"DOCKER_CONFIG": `{"auths":{}}`},
 		},
-		{
-			name: "multiple vars",
-			envList: []string{
-				"PATH=/usr/bin:/bin",
-				"HOME=/root",
-				"USER=root",
-			},
-			want: map[string]string{
-				"PATH": "/usr/bin:/bin",
-				"HOME": "/root",
-				"USER": "root",
-			},
-		},
-		{
-			name: "value with equals",
-			envList: []string{
-				"DOCKER_CONFIG={\"auths\":{}}",
-			},
-			want: map[string]string{
-				"DOCKER_CONFIG": "{\"auths\":{}}",
-			},
-		},
-		{
-			name: "empty value",
-			envList: []string{
-				"EMPTY=",
-			},
-			want: map[string]string{
-				"EMPTY": "",
-			},
-		},
+		{"empty value", []string{"EMPTY="}, map[string]string{"EMPTY": ""}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseEnvVars(tt.envList)
-
-			if len(got) != len(tt.want) {
-				t.Errorf("len(parseEnvVars()) = %d, want %d", len(got), len(tt.want))
-			}
-
-			for k, v := range tt.want {
-				if got[k] != v {
-					t.Errorf("parseEnvVars()[%s] = %v, want %v", k, got[k], v)
-				}
+			if got := parseEnv(tt.list); !maps.Equal(got, tt.want) {
+				t.Errorf("parseEnv(%q) = %v, want %v", tt.list, got, tt.want)
 			}
 		})
 	}

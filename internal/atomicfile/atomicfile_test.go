@@ -63,9 +63,9 @@ func TestWriteReplacesAtomically(t *testing.T) {
 	}
 }
 
-// TestWriteLeavesNoTempFiles guards the rename path: a temporary file left
+// TestWriteLeavesNoTemporaryFiles guards the rename path: a temporary file left
 // behind would be picked up by a directory scan as a bogus entry.
-func TestWriteLeavesNoTempFiles(t *testing.T) {
+func TestWriteLeavesNoTemporaryFiles(t *testing.T) {
 	dir := t.TempDir()
 
 	for _, name := range []string{"a.yaml", "b.yaml"} {
@@ -96,15 +96,10 @@ func TestWriteFailsOnMissingDirectory(t *testing.T) {
 	}
 }
 
-// TestWriteKeepsPreviousOnFailure checks that a failed write does not destroy
-// what was already there.
-func TestWriteKeepsPreviousOnFailure(t *testing.T) {
+// TestFailedWriteKeepsWhatWasThere checks a write that fails after creating
+// its temporary file leaves the target as it was, and no temporary file.
+func TestFailedWriteKeepsWhatWasThere(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-
-	if err := Write(path, []byte("original"), 0o600); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
 
 	// A directory cannot be renamed over by a file, so this write fails late,
 	// after the temporary file has been created.
@@ -116,16 +111,19 @@ func TestWriteKeepsPreviousOnFailure(t *testing.T) {
 		t.Fatal("expected an error writing over a directory")
 	}
 
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read back: %v", err)
+	if info, err := os.Stat(blocked); err != nil || !info.IsDir() {
+		t.Errorf("the directory written over was disturbed: %v", err)
 	}
-	if string(got) != "original" {
-		t.Errorf("unrelated file was disturbed: %q", got)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("a failed write left %v", entries)
 	}
 }
 
-func TestWriteEmptyContents(t *testing.T) {
+func TestWriteOfNothingMakesAnEmptyFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "empty")
 
 	if err := Write(path, nil, 0o600); err != nil {

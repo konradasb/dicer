@@ -29,7 +29,7 @@ func Extract(dstPath string, version Version) (string, error) {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dstPath), 0o750); err != nil {
-		return "", fmt.Errorf("create binaries dir: %w", err)
+		return "", fmt.Errorf("create binary directory: %w", err)
 	}
 
 	if err := atomicfile.Write(dstPath, data, 0o755); err != nil {

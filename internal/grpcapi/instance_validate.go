@@ -47,11 +47,11 @@ func validateResources(vcpus int32, memoryBytes, diskBytes int64) error {
 }
 
 // checkRemoveOnExit rejects remove-on-exit combined with a restart policy.
-func checkRemoveOnExit(inst types.InstanceSpec) error {
-	if inst.RemoveOnExit && inst.Restart.Restarts() {
+func checkRemoveOnExit(instance types.InstanceSpec) error {
+	if instance.RemoveOnExit && instance.Restart.Restarts() {
 		return errdefs.InvalidArgument(
 			"an instance cannot be deleted when it stops and restarted when it stops: "+
-				"the restart policy is %s, so drop it or drop the request to delete it", inst.Restart)
+				"the restart policy is %s, so drop it or drop the request to delete it", instance.Restart)
 	}
 
 	return nil
@@ -60,7 +60,7 @@ func checkRemoveOnExit(inst types.InstanceSpec) error {
 // checkCanStart rejects a definition that could never start: a missing
 // kernel or network, or more resources than the host allows.
 func (h *instanceHandler) checkCanStart(req *dicerdv1.CreateInstanceRequest) error {
-	if _, err := h.definitions.GetKernel(req.GetKernelName()); err != nil {
+	if _, err := h.definitions.Kernel(req.GetKernelName()); err != nil {
 		return errdefs.InvalidArgument("%v", err)
 	}
 	if err := h.checkStaticIP(req.GetNetworkName(), req.GetStaticIp()); err != nil {
@@ -74,7 +74,7 @@ func (h *instanceHandler) checkCanStart(req *dicerdv1.CreateInstanceRequest) err
 // checkStaticIP checks that a network exists and that ip, if set, is an
 // assignable address on it.
 func (h *instanceHandler) checkStaticIP(networkName, ip string) error {
-	nw, err := h.definitions.GetNetwork(networkName)
+	n, err := h.definitions.Network(networkName)
 	if err != nil {
 		return errdefs.InvalidArgument("%v", err)
 	}
@@ -82,15 +82,15 @@ func (h *instanceHandler) checkStaticIP(networkName, ip string) error {
 		return nil
 	}
 
-	ipNet, err := network.ParseSubnet(nw.Subnet)
+	subnet, err := network.ParseSubnet(n.Subnet)
 	if err != nil {
 		return err
 	}
 	parsed := net.ParseIP(ip)
-	if parsed == nil || !network.Assignable(ipNet, parsed) || parsed.Equal(net.ParseIP(nw.Gateway)) {
+	if parsed == nil || !network.Assignable(subnet, parsed) || parsed.Equal(net.ParseIP(n.Gateway)) {
 		return errdefs.InvalidArgument(
 			"static IP %q is not an address network %q can assign: its subnet is %s, and its gateway %s",
-			ip, nw.Name, nw.Subnet, nw.Gateway)
+			ip, n.Name, n.Subnet, n.Gateway)
 	}
 	return nil
 }
@@ -118,18 +118,18 @@ func (h *instanceHandler) mounts(in []*dicerdv1.Mount) ([]types.Mount, error) {
 
 	mounts, err := types.ValidateMounts(mounts)
 	if err != nil {
-		return nil, errdefs.InvalidArgument("%v", err)
+		return nil, err
 	}
 
 	volumes := 0
 	for _, m := range mounts {
 		switch m.Type {
-		case types.MountVolume:
+		case types.MountTypeVolume:
 			volumes++
-			if _, err := h.definitions.GetVolume(m.Source); err != nil {
+			if _, err := h.definitions.Volume(m.Source); err != nil {
 				return nil, errdefs.InvalidArgument("%v", err)
 			}
-		case types.MountFile:
+		case types.MountTypeFile:
 			if err := checkHostFile(m.Source); err != nil {
 				return nil, errdefs.InvalidArgument("mount on %s: %v", m.Target, err)
 			}

@@ -24,25 +24,25 @@ type namedRemote struct {
 	current bool
 }
 
-func (p *printableRemote) Cols() []string {
+func (p *printableRemote) Columns() []string {
 	return []string{"Name", "Address", "TLS", "Current"}
 }
 
-func (p *printableRemote) KV() []map[string]any {
-	kv := make([]map[string]any, 0, len(p.Remotes))
+func (p *printableRemote) Rows() []map[string]any {
+	rows := make([]map[string]any, 0, len(p.Remotes))
 	for _, r := range p.Remotes {
 		current := ""
 		if r.current {
 			current = "*"
 		}
-		kv = append(kv, map[string]any{
+		rows = append(rows, map[string]any{
 			"Name":    r.name,
 			"Address": r.remote.Address,
 			"TLS":     tlsSummary(r.remote.TLS),
 			"Current": current,
 		})
 	}
-	return kv
+	return rows
 }
 
 // tlsSummary says in a word what a remote establishes about the daemon and
@@ -107,28 +107,20 @@ func newRemoteCreateCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, address := args[0], args[1]
 
-			dir, err := remote.Dir()
-			if err != nil {
-				return err
-			}
-			cfg, err := remote.Load(dir)
-			if err != nil {
-				return err
-			}
-			if _, err := cfg.Get(name); err == nil {
-				return fmt.Errorf("remote %q already exists", name)
-			}
+			err := updateRemoteConfig(func(cfg *remote.Config) error {
+				if _, err := cfg.Remote(name); err == nil {
+					return fmt.Errorf("remote %q already exists", name)
+				}
 
-			r, err := remote.Parse(address)
-			if err != nil {
-				return err
-			}
-			r.TLS = tlsFlags.remoteTLS()
+				r, err := remote.Parse(address)
+				if err != nil {
+					return err
+				}
+				r.TLS = tlsFlags.remoteTLS()
 
-			if err := cfg.Create(name, r); err != nil {
-				return err
-			}
-			if err := cfg.Save(dir); err != nil {
+				return cfg.Create(name, r)
+			})
+			if err != nil {
 				return err
 			}
 
@@ -174,16 +166,16 @@ func (f *remoteTLSFlags) remoteTLS() *remote.TLS {
 	}
 
 	return &remote.TLS{
-		CertFile:   abs(f.cert),
-		KeyFile:    abs(f.key),
-		CAFile:     abs(f.ca),
+		CertFile:   absolutePath(f.cert),
+		KeyFile:    absolutePath(f.key),
+		CAFile:     absolutePath(f.ca),
 		ServerName: f.serverName,
 	}
 }
 
-// abs resolves a path against the working directory, since a remote is read
-// back from somewhere else entirely.
-func abs(path string) string {
+// absolutePath resolves a path against the working directory, since a remote
+// is read back from somewhere else entirely.
+func absolutePath(path string) string {
 	if path == "" {
 		return ""
 	}
@@ -203,11 +195,7 @@ func newRemoteListCommand() *cobra.Command {
 		Args:    noArgs,
 		Aliases: []string{"ls"},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			dir, err := remote.Dir()
-			if err != nil {
-				return err
-			}
-			cfg, err := remote.Load(dir)
+			cfg, err := loadRemoteConfig()
 			if err != nil {
 				return err
 			}
@@ -215,7 +203,7 @@ func newRemoteListCommand() *cobra.Command {
 			current := cfg.CurrentName()
 			p := &printableRemote{}
 			for _, name := range cfg.Names() {
-				r, _ := cfg.Get(name)
+				r, _ := cfg.Remote(name)
 				p.Remotes = append(p.Remotes, namedRemote{name: name, remote: r, current: name == current})
 			}
 
@@ -243,7 +231,7 @@ func newRemoteDeleteCommand() *cobra.Command {
 		Aliases:           []string{"rm", "remove"},
 		ValidArgsFunction: completeRemotes,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return updateRemotes(func(cfg *remote.Config) error {
+			return updateRemoteConfig(func(cfg *remote.Config) error {
 				names := args
 				if all, _ := cmd.Flags().GetBool("all"); all {
 					names = slices.DeleteFunc(cfg.Names(), func(n string) bool { return n == remote.Local })
@@ -276,7 +264,7 @@ func newRemoteUseCommand() *cobra.Command {
 		Args:              one("a remote name"),
 		ValidArgsFunction: completeRemotes,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return updateRemotes(func(cfg *remote.Config) error {
+			return updateRemoteConfig(func(cfg *remote.Config) error {
 				if err := cfg.Use(args[0]); err != nil {
 					return err
 				}
@@ -287,9 +275,19 @@ func newRemoteUseCommand() *cobra.Command {
 	}
 }
 
-// updateRemotes loads the remotes, changes them and saves them.
-func updateRemotes(change func(*remote.Config) error) error {
-	dir, err := remote.Dir()
+// loadRemoteConfig loads the remotes this client knows.
+func loadRemoteConfig() (*remote.Config, error) {
+	dir, err := remote.ConfigDir()
+	if err != nil {
+		return nil, err
+	}
+	return remote.Load(dir)
+}
+
+// updateRemoteConfig loads the remotes, changes them and saves them. Nothing
+// is saved if change fails.
+func updateRemoteConfig(change func(*remote.Config) error) error {
+	dir, err := remote.ConfigDir()
 	if err != nil {
 		return err
 	}

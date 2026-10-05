@@ -4,10 +4,9 @@
 package cli
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"io"
-	"io/fs"
 	"strings"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/konradasb/dicer"
+	"github.com/konradasb/dicer/internal/cli/printer"
 	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
@@ -25,58 +25,58 @@ type printableInstance struct {
 	Instances []*dicerdv1.Instance
 }
 
-func (p *printableInstance) Cols() []string {
+func (p *printableInstance) Columns() []string {
 	return []string{
 		"Name", "Image", "State", "Status", "VCPU", "Memory", "Disk", "Network", "IP", "Ports", "Created",
 	}
 }
 
-// DefaultCols are what a table shows unless asked for more: enough to
+// DefaultColumns are what a table shows unless asked for more: enough to
 // see what is running and how to reach it, in a terminal's width.
-func (p *printableInstance) DefaultCols() []string {
+func (p *printableInstance) DefaultColumns() []string {
 	return []string{"Name", "Image", "Status", "IP", "Ports"}
 }
 
-func (p *printableInstance) KV() []map[string]any {
-	kv := make([]map[string]any, 0, len(p.Instances))
-	for _, inst := range p.Instances {
-		state := stateName(inst.GetState())
-		if e := inst.GetStateError(); e != "" {
+func (p *printableInstance) Rows() []map[string]any {
+	rows := make([]map[string]any, 0, len(p.Instances))
+	for _, instance := range p.Instances {
+		state := stateName(instance.GetState())
+		if e := instance.GetStateError(); e != "" {
 			state += " (" + firstLine(e) + ")"
 		}
 
-		kv = append(kv, map[string]any{
-			"Name":    inst.GetName(),
-			"Image":   inst.GetImageRef(),
+		rows = append(rows, map[string]any{
+			"Name":    instance.GetName(),
+			"Image":   instance.GetImageRef(),
 			"State":   state,
-			"Status":  instanceStatus(inst),
-			"VCPU":    inst.GetVcpus(),
-			"Memory":  humanize.Bytes(inst.GetMemoryBytes()),
-			"Disk":    humanize.Bytes(inst.GetDiskBytes()),
-			"Network": inst.GetNetworkName(),
-			"IP":      orDash(inst.GetIp()),
-			"Ports":   orDash(formatPorts(inst.GetPorts())),
-			"Created": age(timeOf(inst.GetCreateTime())),
+			"Status":  instanceStatus(instance),
+			"VCPU":    instance.GetVcpus(),
+			"Memory":  humanize.Bytes(instance.GetMemoryBytes()),
+			"Disk":    humanize.Bytes(instance.GetDiskBytes()),
+			"Network": instance.GetNetworkName(),
+			"IP":      orDash(instance.GetIp()),
+			"Ports":   orDash(formatPorts(instance.GetPorts())),
+			"Created": age(timeOf(instance.GetCreateTime())),
 		})
 	}
-	return kv
+	return rows
 }
 
 // instanceStatus describes an instance's state as docker ps does, with how
 // long it has been up or since it ended, and its health if it is checked:
 // "Up 3 minutes (healthy)", "Exited (1) 2 minutes ago", "Restarting (3) in 8
 // seconds", "Failed: no such kernel".
-func instanceStatus(inst *dicerdv1.Instance) string {
-	switch state := inst.GetState(); state {
+func instanceStatus(instance *dicerdv1.Instance) string {
+	switch state := instance.GetState(); state {
 	case stateRunning:
-		if started := timeOf(inst.GetStartTime()); !started.IsZero() {
-			return "Up " + units.HumanDuration(time.Since(started)) + healthSuffix(inst)
+		if started := timeOf(instance.GetStartTime()); !started.IsZero() {
+			return "Up " + units.HumanDuration(time.Since(started)) + healthSuffix(instance)
 		}
 
-		return "Up" + healthSuffix(inst)
+		return "Up" + healthSuffix(instance)
 	case stateRestarting:
-		out := fmt.Sprintf("Restarting (%d)", inst.GetRestartCount())
-		if next := timeOf(inst.GetNextRestartTime()); !next.IsZero() && time.Until(next) >= time.Second {
+		out := fmt.Sprintf("Restarting (%d)", instance.GetRestartCount())
+		if next := timeOf(instance.GetNextRestartTime()); !next.IsZero() && time.Until(next) >= time.Second {
 			out += " in " + units.HumanDuration(time.Until(next))
 		}
 
@@ -84,10 +84,10 @@ func instanceStatus(inst *dicerdv1.Instance) string {
 	case stateStopped, stateFailed:
 		// An instance whose workload exited says so, and when, as a
 		// container would.
-		if finished := timeOf(inst.GetFinishTime()); inst.ExitCode != nil && !finished.IsZero() {
-			return fmt.Sprintf("Exited (%d) %s", inst.GetExitCode(), age(finished))
+		if finished := timeOf(instance.GetFinishTime()); instance.ExitCode != nil && !finished.IsZero() {
+			return fmt.Sprintf("Exited (%d) %s", instance.GetExitCode(), age(finished))
 		}
-		if e := inst.GetStateError(); e != "" && state == stateFailed {
+		if e := instance.GetStateError(); e != "" && state == stateFailed {
 			return "Failed: " + firstLine(e)
 		}
 
@@ -266,12 +266,12 @@ func newInstanceUpdateCommand() *cobra.Command {
 			}
 			defer cleanup()
 
-			inst, err := client.UpdateInstance(cmd.Context(), req)
+			instance, err := client.UpdateInstance(cmd.Context(), req)
 			if err != nil {
 				return suggest(cmd.Context(), client, instancesIn(), req.GetName(), err)
 			}
 
-			succeeded(cmd, "Instance %s updated", inst.GetName())
+			succeeded(cmd, "Instance %s updated", instance.GetName())
 
 			return nil
 		},
@@ -300,19 +300,19 @@ func createInstance(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) err
 	}
 
 	if !req.GetStart() {
-		inst, err := client.CreateInstance(cmd.Context(), req)
+		instance, err := client.CreateInstance(cmd.Context(), req)
 		if err != nil {
 			return err
 		}
-		succeeded(cmd, "Instance %s created. Start it with: dicer start %s", inst.GetName(), inst.GetName())
+		succeeded(cmd, "Instance %s created. Start it with: dicer start %s", instance.GetName(), instance.GetName())
 
 		return nil
 	}
 
 	err = runTask(cmd, "Starting "+req.GetName(), func() (*dicerdv1.Instance, error) {
 		return client.CreateInstance(cmd.Context(), req)
-	}, func(inst *dicerdv1.Instance, took string) string {
-		return fmt.Sprintf("Instance %s started in %s (%s)", inst.GetName(), took, orDash(inst.GetIp()))
+	}, func(instance *dicerdv1.Instance, took string) string {
+		return fmt.Sprintf("Instance %s started in %s (%s)", instance.GetName(), took, orDash(instance.GetIp()))
 	})
 	if err != nil {
 		return err
@@ -375,7 +375,7 @@ func pullShowingProgress(cmd *cobra.Command, client *dicer.Client, ref string) e
 	defer reporter.done()
 
 	start := time.Now()
-	img, err := pullImage(cmd.Context(), client, ref, reporter.report)
+	image, err := pullImage(cmd.Context(), client, ref, reporter.report)
 	if err != nil {
 		return err
 	}
@@ -383,17 +383,133 @@ func pullShowingProgress(cmd *cobra.Command, client *dicer.Client, ref string) e
 
 	if reporter.fetched {
 		succeeded(cmd, "Image %s pulled in %s (%s)",
-			img.GetName(), humanize.Duration(time.Since(start)), humanize.Bytes(img.GetSizeBytes()))
+			image.GetName(), humanize.Duration(time.Since(start)), humanize.Bytes(image.GetSizeBytes()))
 	}
 
 	return nil
 }
 
-// osCause strips the operation and path from a file error.
-func osCause(err error) error {
-	var pathErr *fs.PathError
-	if errors.As(err, &pathErr) {
-		return pathErr.Err
+func newInstanceListCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "list",
+		Short:   "List instances",
+		Args:    noArgs,
+		Aliases: []string{"ls", "ps"},
+		Example: "  dicer ps\n" +
+			"  dicer ps --filter state=running --filter label=team=web\n" +
+			"  dicer ps -c name,state,ip\n" +
+			"  dicer ps --format '{{.Name}}\\t{{.IP}}'\n" +
+			"  dicer stop $(dicer ps -q --filter state=running)\n" +
+			"  dicer ps --watch",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			specs, _ := cmd.Flags().GetStringArray("filter")
+			filters, err := parseInstanceFilters(specs)
+			if err != nil {
+				return usagef(cmd, "%s", err)
+			}
+
+			client, cleanup, err := newClient(cmd)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+
+			list := func(ctx context.Context, w io.Writer) error {
+				resp, err := client.ListInstances(ctx, &dicerdv1.ListInstancesRequest{})
+				if err != nil {
+					return err
+				}
+				instances := resp.GetInstances()
+
+				return renderTo(cmd, w, &printableInstance{Instances: filters.apply(instances)})
+			}
+
+			if watch, _ := cmd.Flags().GetBool("watch"); watch {
+				interval, _ := cmd.Flags().GetDuration("interval")
+				return watchList(cmd, interval, list)
+			}
+
+			return list(cmd.Context(), cmd.OutOrStdout())
+		},
 	}
-	return err
+
+	addOutputFlags(cmd, true)
+	cmd.Flags().Bool("wide", false, "Show every column, not just name, image, status, address and ports")
+	cmd.Flags().BoolP("watch", "w", false, "Keep the list on screen, redrawn as it changes, until Ctrl+C")
+	cmd.Flags().Duration("interval", 2*time.Second, "How often --watch redraws")
+	cmd.MarkFlagsMutuallyExclusive("wide", "columns")
+	cmd.Flags().StringArrayP("filter", "f", nil, "Show only instances that match, as KEY=VALUE (repeatable); "+
+		"keys are "+strings.Join(instanceFilterKeys, ", "))
+	_ = cmd.RegisterFlagCompletionFunc("filter", completeInstanceFilters)
+	// Accepted for docker compatibility; every instance is listed anyway.
+	cmd.Flags().BoolP("all", "a", false, "Accepted for Docker compatibility; every instance is always listed")
+	_ = cmd.Flags().MarkHidden("all")
+
+	return cmd
+}
+
+func newInstanceShowCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show NAME...",
+		Short: "Show everything about one or more instances",
+		Long: "Shows an instance's whole definition and state. With --format json or\n" +
+			"yaml, prints the daemon's full record of it, raw sizes and all, for\n" +
+			"scripts: an array of one object per instance.",
+		Example: "  dicer inspect web\n" +
+			"  dicer inspect web --format json | jq -r '.[0].ip'\n" +
+			"  dicer inspect web --format '{{.IP}}'",
+		Args:              oneOrMore("instance name"),
+		Aliases:           []string{"get", "inspect"},
+		ValidArgsFunction: complete(0, instancesIn()),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			client, cleanup, err := newClient(cmd)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+
+			instances := make([]*dicerdv1.Instance, 0, len(args))
+			for _, name := range args {
+				instance, err := client.GetInstance(cmd.Context(), &dicerdv1.GetInstanceRequest{Name: name})
+				if err != nil {
+					return suggest(cmd.Context(), client, instancesIn(), name, err)
+				}
+				instances = append(instances, instance)
+			}
+
+			return renderInstances(cmd, client, instances)
+		},
+	}
+
+	addOutputFlags(cmd, false)
+	cmd.Flags().StringSliceP("columns", "c", nil,
+		"Show a table of just these columns instead, comma-separated and in any case")
+
+	return cmd
+}
+
+// renderInstances shows instances in detail: as inspect lays them out for a
+// table, as full records for JSON or YAML, and as 'dicer ps' rows for
+// columns or a template.
+func renderInstances(cmd *cobra.Command, client *dicer.Client, instances []*dicerdv1.Instance) error {
+	format, _ := cmd.Flags().GetString("format")
+	columns, _ := cmd.Flags().GetStringSlice("columns")
+
+	switch {
+	case len(columns) == 0 && printer.IsTable(format):
+		recent := make(map[string][]*dicerdv1.Event, len(instances))
+		for _, instance := range instances {
+			events, err := recentEvents(cmd.Context(), client, instance.GetId())
+			if err != nil {
+				return err
+			}
+			recent[instance.GetId()] = events
+		}
+
+		return writeInstanceDetails(cmd.OutOrStdout(), instances, recent)
+	case len(columns) == 0 && printer.IsStructured(format):
+		return writeRecords(cmd.OutOrStdout(), format, instances)
+	default:
+		return render(cmd, &printableInstance{Instances: instances})
+	}
 }

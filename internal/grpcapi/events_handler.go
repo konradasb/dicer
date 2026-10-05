@@ -15,8 +15,9 @@ import (
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
-// eventBatch is how many events of the history are sent in one response.
-const eventBatch = 500
+// eventBatchSize is how many events of the history are sent in one
+// response.
+const eventBatchSize = 500
 
 // eventsHandler handles GetEvents.
 type eventsHandler struct {
@@ -50,8 +51,8 @@ func (h *eventsHandler) GetEvents(
 		return sendHistory(stream, h.events.List(filter, limit))
 	}
 
-	history, sub := h.events.Subscribe(filter, limit)
-	defer sub.Close()
+	history, subscription := h.events.Subscribe(filter, limit)
+	defer subscription.Close()
 
 	if err := sendHistory(stream, history); err != nil {
 		return err
@@ -60,9 +61,9 @@ func (h *eventsHandler) GetEvents(
 		select {
 		case <-stream.Context().Done():
 			return nil
-		case e, ok := <-sub.Events():
+		case e, ok := <-subscription.Events():
 			if !ok {
-				if err := sub.Err(); errors.Is(err, events.ErrFellBehind) {
+				if err := subscription.Err(); errors.Is(err, events.ErrFellBehind) {
 					return errdefs.ResourceExhausted("%v", err)
 				}
 				return nil
@@ -88,16 +89,16 @@ func eventNames(name string) []string {
 	return names
 }
 
-// sendHistory sends list in batches, the last marked caught up. An empty
+// sendHistory sends history in batches, the last marked caught up. An empty
 // history is sent as one empty batch.
-func sendHistory(stream grpc.ServerStreamingServer[dicerdv1.GetEventsResponse], list []events.Event) error {
+func sendHistory(stream grpc.ServerStreamingServer[dicerdv1.GetEventsResponse], history []events.Event) error {
 	for {
-		n := min(len(list), eventBatch)
+		n := min(len(history), eventBatchSize)
 		resp := &dicerdv1.GetEventsResponse{
 			Events:   make([]*dicerdv1.Event, 0, n),
-			CaughtUp: n == len(list),
+			CaughtUp: n == len(history),
 		}
-		for _, e := range list[:n] {
+		for _, e := range history[:n] {
 			resp.Events = append(resp.Events, eventToProto(e))
 		}
 		if err := stream.Send(resp); err != nil {
@@ -106,7 +107,7 @@ func sendHistory(stream grpc.ServerStreamingServer[dicerdv1.GetEventsResponse], 
 		if resp.GetCaughtUp() {
 			return nil
 		}
-		list = list[n:]
+		history = history[n:]
 	}
 }
 

@@ -9,31 +9,28 @@ import "github.com/konradasb/dicer/internal/types"
 // instances are defined to boot from, those active guests booted from, and
 // those snapshots need.
 func (m *Manager) ImagesInUse() (map[string]struct{}, error) {
-	instances, err := m.definitions.ListInstances()
-	if err != nil {
-		return nil, err
-	}
+	instances := m.definitions.Instances()
 
 	inUse := make(map[string]struct{})
-	for _, inst := range instances {
-		if img, err := m.images.Get(inst.ImageRef); err == nil {
-			inUse[img.Digest] = struct{}{}
+	for _, instance := range instances {
+		if image, err := m.images.Image(instance.ImageRef); err == nil {
+			inUse[image.Digest] = struct{}{}
 		}
 
-		rt, err := m.Runtime(inst)
+		status, err := m.Status(instance)
 		if err != nil {
 			return nil, err
 		}
-		if rt.ImageDigest != "" && (rt.State.HoldsResources() || rt.State == types.StateStopping) {
-			inUse[rt.ImageDigest] = struct{}{}
+		if status.ImageDigest != "" && (status.State.HoldsResources() || status.State == types.InstanceStateStopping) {
+			inUse[status.ImageDigest] = struct{}{}
 		}
 
-		snapshots, err := m.ListSnapshots(inst)
+		snapshots, err := m.Snapshots(instance)
 		if err != nil {
 			return nil, err
 		}
-		for _, snap := range snapshots {
-			inUse[snap.ImageDigest] = struct{}{}
+		for _, snapshot := range snapshots {
+			inUse[snapshot.ImageDigest] = struct{}{}
 		}
 	}
 

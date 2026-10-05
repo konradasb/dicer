@@ -42,43 +42,43 @@ func (e enum[T, P]) fromProto(p P) (T, error) {
 }
 
 var hypervisorTypes = enum[types.HypervisorType, dicerdv1.HypervisorType]{"hypervisor", map[types.HypervisorType]dicerdv1.HypervisorType{
-	types.HypervisorCloudHypervisor: dicerdv1.HypervisorType_HYPERVISOR_TYPE_CLOUD_HYPERVISOR,
-	types.HypervisorFirecracker:     dicerdv1.HypervisorType_HYPERVISOR_TYPE_FIRECRACKER,
+	types.HypervisorTypeCloudHypervisor: dicerdv1.HypervisorType_HYPERVISOR_TYPE_CLOUD_HYPERVISOR,
+	types.HypervisorTypeFirecracker:     dicerdv1.HypervisorType_HYPERVISOR_TYPE_FIRECRACKER,
 }}
 
 var instanceStates = enum[types.InstanceState, dicerdv1.InstanceState]{"instance state", map[types.InstanceState]dicerdv1.InstanceState{
-	types.StateStopped:    dicerdv1.InstanceState_INSTANCE_STATE_STOPPED,
-	types.StateStarting:   dicerdv1.InstanceState_INSTANCE_STATE_STARTING,
-	types.StateRunning:    dicerdv1.InstanceState_INSTANCE_STATE_RUNNING,
-	types.StatePaused:     dicerdv1.InstanceState_INSTANCE_STATE_PAUSED,
-	types.StateStopping:   dicerdv1.InstanceState_INSTANCE_STATE_STOPPING,
-	types.StateRestarting: dicerdv1.InstanceState_INSTANCE_STATE_RESTARTING,
-	types.StateFailed:     dicerdv1.InstanceState_INSTANCE_STATE_FAILED,
+	types.InstanceStateStopped:    dicerdv1.InstanceState_INSTANCE_STATE_STOPPED,
+	types.InstanceStateStarting:   dicerdv1.InstanceState_INSTANCE_STATE_STARTING,
+	types.InstanceStateRunning:    dicerdv1.InstanceState_INSTANCE_STATE_RUNNING,
+	types.InstanceStatePaused:     dicerdv1.InstanceState_INSTANCE_STATE_PAUSED,
+	types.InstanceStateStopping:   dicerdv1.InstanceState_INSTANCE_STATE_STOPPING,
+	types.InstanceStateRestarting: dicerdv1.InstanceState_INSTANCE_STATE_RESTARTING,
+	types.InstanceStateFailed:     dicerdv1.InstanceState_INSTANCE_STATE_FAILED,
 }}
 
 var pullPolicies = enum[types.PullPolicy, dicerdv1.PullPolicy]{"pull policy", map[types.PullPolicy]dicerdv1.PullPolicy{
-	types.PullMissing: dicerdv1.PullPolicy_PULL_POLICY_MISSING,
-	types.PullAlways:  dicerdv1.PullPolicy_PULL_POLICY_ALWAYS,
-	types.PullNever:   dicerdv1.PullPolicy_PULL_POLICY_NEVER,
+	types.PullPolicyMissing: dicerdv1.PullPolicy_PULL_POLICY_MISSING,
+	types.PullPolicyAlways:  dicerdv1.PullPolicy_PULL_POLICY_ALWAYS,
+	types.PullPolicyNever:   dicerdv1.PullPolicy_PULL_POLICY_NEVER,
 }}
 
 var initModes = enum[types.InitMode, dicerdv1.InitMode]{"init mode", map[types.InitMode]dicerdv1.InitMode{
-	types.ModeAuto:    dicerdv1.InitMode_INIT_MODE_AUTO,
-	types.ModeExec:    dicerdv1.InitMode_INIT_MODE_EXEC,
-	types.ModeSystemd: dicerdv1.InitMode_INIT_MODE_SYSTEMD,
+	types.InitModeAuto:    dicerdv1.InitMode_INIT_MODE_AUTO,
+	types.InitModeExec:    dicerdv1.InitMode_INIT_MODE_EXEC,
+	types.InitModeSystemd: dicerdv1.InitMode_INIT_MODE_SYSTEMD,
 }}
 
 var restartModes = enum[types.RestartMode, dicerdv1.RestartMode]{"restart policy", map[types.RestartMode]dicerdv1.RestartMode{
-	types.RestartNo:            dicerdv1.RestartMode_RESTART_MODE_NO,
-	types.RestartOnFailure:     dicerdv1.RestartMode_RESTART_MODE_ON_FAILURE,
-	types.RestartUnlessStopped: dicerdv1.RestartMode_RESTART_MODE_UNLESS_STOPPED,
-	types.RestartAlways:        dicerdv1.RestartMode_RESTART_MODE_ALWAYS,
+	types.RestartModeNo:            dicerdv1.RestartMode_RESTART_MODE_NO,
+	types.RestartModeOnFailure:     dicerdv1.RestartMode_RESTART_MODE_ON_FAILURE,
+	types.RestartModeUnlessStopped: dicerdv1.RestartMode_RESTART_MODE_UNLESS_STOPPED,
+	types.RestartModeAlways:        dicerdv1.RestartMode_RESTART_MODE_ALWAYS,
 }}
 
 var mountTypes = enum[types.MountType, dicerdv1.MountType]{"mount type", map[types.MountType]dicerdv1.MountType{
-	types.MountVolume: dicerdv1.MountType_MOUNT_TYPE_VOLUME,
-	types.MountFile:   dicerdv1.MountType_MOUNT_TYPE_FILE,
-	types.MountTmpfs:  dicerdv1.MountType_MOUNT_TYPE_TMPFS,
+	types.MountTypeVolume: dicerdv1.MountType_MOUNT_TYPE_VOLUME,
+	types.MountTypeFile:   dicerdv1.MountType_MOUNT_TYPE_FILE,
+	types.MountTypeTmpfs:  dicerdv1.MountType_MOUNT_TYPE_TMPFS,
 }}
 
 var protocols = enum[string, dicerdv1.Protocol]{"protocol", map[string]dicerdv1.Protocol{
@@ -87,14 +87,14 @@ var protocols = enum[string, dicerdv1.Protocol]{"protocol", map[string]dicerdv1.
 }}
 
 var healthStatuses = enum[types.HealthStatus, dicerdv1.HealthStatus]{"health status", map[types.HealthStatus]dicerdv1.HealthStatus{
-	types.HealthStarting:  dicerdv1.HealthStatus_HEALTH_STATUS_STARTING,
-	types.HealthHealthy:   dicerdv1.HealthStatus_HEALTH_STATUS_HEALTHY,
-	types.HealthUnhealthy: dicerdv1.HealthStatus_HEALTH_STATUS_UNHEALTHY,
+	types.HealthStatusStarting:  dicerdv1.HealthStatus_HEALTH_STATUS_STARTING,
+	types.HealthStatusHealthy:   dicerdv1.HealthStatus_HEALTH_STATUS_HEALTHY,
+	types.HealthStatusUnhealthy: dicerdv1.HealthStatus_HEALTH_STATUS_UNHEALTHY,
 }}
 
 var architectures = enum[string, dicerdv1.Architecture]{"architecture", map[string]dicerdv1.Architecture{
-	types.ArchX86_64:  dicerdv1.Architecture_ARCHITECTURE_X86_64,
-	types.ArchAArch64: dicerdv1.Architecture_ARCHITECTURE_AARCH64,
+	types.ArchitectureX86_64:  dicerdv1.Architecture_ARCHITECTURE_X86_64,
+	types.ArchitectureAArch64: dicerdv1.Architecture_ARCHITECTURE_AARCH64,
 }}
 
 var eventKinds = enum[events.Kind, dicerdv1.EventKind]{"event kind", map[events.Kind]dicerdv1.EventKind{
@@ -134,8 +134,8 @@ var logSources = enum[vm.LogSource, dicerdv1.LogSource]{"log source", map[vm.Log
 }}
 
 var pullStages = enum[types.PullStage, dicerdv1.PullStage]{"pull stage", map[types.PullStage]dicerdv1.PullStage{
-	types.StageResolving:   dicerdv1.PullStage_PULL_STAGE_RESOLVING,
-	types.StageDownloading: dicerdv1.PullStage_PULL_STAGE_DOWNLOADING,
-	types.StageUnpacking:   dicerdv1.PullStage_PULL_STAGE_UNPACKING,
-	types.StageConverting:  dicerdv1.PullStage_PULL_STAGE_CONVERTING,
+	types.PullStageResolving:   dicerdv1.PullStage_PULL_STAGE_RESOLVING,
+	types.PullStageDownloading: dicerdv1.PullStage_PULL_STAGE_DOWNLOADING,
+	types.PullStageUnpacking:   dicerdv1.PullStage_PULL_STAGE_UNPACKING,
+	types.PullStageConverting:  dicerdv1.PullStage_PULL_STAGE_CONVERTING,
 }}

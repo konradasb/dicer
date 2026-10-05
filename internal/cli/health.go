@@ -14,7 +14,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
@@ -38,15 +37,17 @@ type healthCheckFlags struct {
 	Disabled bool
 }
 
-// healthFlags are the flags that set a health check: docker run's, and
-// --health-http and --health-tcp for images with no shell to run a command.
-var healthFlags = []string{
+// healthCheckFlagNames are the flags that set a health check: docker run's,
+// and --health-http and --health-tcp for images with no shell to run a
+// command.
+var healthCheckFlagNames = []string{
 	"health-cmd", "health-http", "health-tcp",
 	"health-interval", "health-timeout", "health-start-period", "health-retries",
 	"no-healthcheck",
 }
 
-func addHealthFlags(flags *pflag.FlagSet) {
+// addHealthCheckFlags adds the flags healthCheckFlagNames lists.
+func addHealthCheckFlags(flags *pflag.FlagSet) {
 	flags.String("health-cmd", "", "Command to check health with, run by /bin/sh in the guest")
 	flags.String("health-http", "", "Check health with an HTTP GET in the guest, as PORT[/path]; 2xx or 3xx is healthy")
 	flags.Int("health-tcp", 0, "Check health by connecting to a TCP port in the guest")
@@ -61,7 +62,7 @@ func addHealthFlags(flags *pflag.FlagSet) {
 // none were given. It replaces any existing check whole.
 func healthCheckFromFlags(cmd *cobra.Command) (*dicerdv1.HealthCheck, error) {
 	flags := cmd.Flags()
-	if !slices.ContainsFunc(healthFlags, flags.Changed) {
+	if !slices.ContainsFunc(healthCheckFlagNames, flags.Changed) {
 		return nil, nil //nolint:nilnil // no health flag given is not an error
 	}
 
@@ -75,12 +76,12 @@ func healthCheckFromFlags(cmd *cobra.Command) (*dicerdv1.HealthCheck, error) {
 	f.Retries, _ = flags.GetInt32("health-retries")
 	f.Disabled, _ = flags.GetBool("no-healthcheck")
 
-	return f.check()
+	return f.healthCheck()
 }
 
-// check converts what was given into a health check, checking what the
+// healthCheck converts what was given into a health check, checking what the
 // daemon cannot: that it is said in one way. The daemon checks the rest.
-func (f healthCheckFlags) check() (*dicerdv1.HealthCheck, error) {
+func (f healthCheckFlags) healthCheck() (*dicerdv1.HealthCheck, error) {
 	probes := 0
 	for _, set := range []bool{f.Cmd != "", f.HTTP != "", f.TCP != 0} {
 		if set {
@@ -135,8 +136,8 @@ func parseHTTPTarget(s string) (uint32, string, error) {
 }
 
 // healthSuffix returns a status suffix like " (healthy)", or "".
-func healthSuffix(inst *dicerdv1.Instance) string {
-	switch status := inst.GetHealth().GetStatus(); status {
+func healthSuffix(instance *dicerdv1.Instance) string {
+	switch status := instance.GetHealth().GetStatus(); status {
 	case dicerdv1.HealthStatus_HEALTH_STATUS_UNSPECIFIED:
 		return ""
 	case healthStarting:
@@ -199,10 +200,10 @@ func healthCheckLines(c *dicerdv1.HealthCheck) []string {
 }
 
 // healthLines describes an instance's health and check for inspect.
-func healthLines(inst *dicerdv1.Instance, p palette) []string {
-	h := inst.GetHealth()
+func healthLines(instance *dicerdv1.Instance, p palette) []string {
+	h := instance.GetHealth()
 	if h == nil {
-		return healthCheckLines(inst.GetHealthCheck())
+		return healthCheckLines(instance.GetHealthCheck())
 	}
 
 	verdict := p.status(enumName(h.GetStatus()))
@@ -219,12 +220,4 @@ func healthLines(inst *dicerdv1.Instance, p palette) []string {
 	}
 
 	return append(out, healthCheckLines(h.GetCheck())...)
-}
-
-// duration returns d as the API takes it: unset for zero.
-func duration(d time.Duration) *durationpb.Duration {
-	if d == 0 {
-		return nil
-	}
-	return durationpb.New(d)
 }

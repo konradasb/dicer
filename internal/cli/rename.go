@@ -30,12 +30,12 @@ func newInstanceRenameCommand() *cobra.Command {
 			}
 			defer cleanup()
 
-			inst, err := client.RenameInstance(cmd.Context(), &dicerdv1.RenameInstanceRequest{Name: from, NewName: to})
+			instance, err := client.RenameInstance(cmd.Context(), &dicerdv1.RenameInstanceRequest{Name: from, NewName: to})
 			if err != nil {
 				return suggest(cmd.Context(), client, instancesIn(), from, err)
 			}
 
-			succeeded(cmd, "Instance %s renamed to %s", from, inst.GetName())
+			succeeded(cmd, "Instance %s renamed to %s", from, instance.GetName())
 
 			return nil
 		},

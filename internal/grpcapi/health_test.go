@@ -4,7 +4,6 @@
 package grpcapi
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -56,9 +55,10 @@ func TestHealthCheckFromProtoRejects(t *testing.T) {
 			Probe:    &dicerdv1.HealthCheck_Tcp{Tcp: &dicerdv1.HealthCheckTCP{Port: 1}},
 		},
 	} {
-		if _, err := healthCheckFromProto(p); !errors.Is(err, errdefs.ErrInvalidArgument) {
-			t.Errorf("%s: healthCheckFromProto = %v, want InvalidArgument", name, err)
-		}
+		t.Run(name, func(t *testing.T) {
+			_, err := healthCheckFromProto(p)
+			wantClass(t, err, errdefs.ErrInvalidArgument)
+		})
 	}
 
 	if c, err := healthCheckFromProto(nil); c != nil || err != nil {
@@ -71,14 +71,14 @@ func TestHealthToProto(t *testing.T) {
 	check := types.HealthCheck{TCP: &types.TCPProbe{Port: 5432}}.WithDefaults()
 
 	got := healthToProto(check, types.Health{
-		Status: types.HealthUnhealthy, FailingStreak: 3, LastCheck: at, LastOutput: "connection refused",
+		Status: types.HealthStatusUnhealthy, FailingStreak: 3, LastCheck: at, LastOutput: "connection refused",
 	})
 
 	if got.GetStatus() != dicerdv1.HealthStatus_HEALTH_STATUS_UNHEALTHY || got.GetFailingStreak() != 3 || got.GetLastOutput() != "connection refused" ||
 		!got.GetLastCheckTime().AsTime().Equal(at) {
 		t.Errorf("healthToProto = %v", got)
 	}
-	if got.GetCheck().GetTcp().GetPort() != 5432 || got.GetCheck().GetInterval().AsDuration() != types.DefaultHealthInterval {
+	if got.GetCheck().GetTcp().GetPort() != 5432 || got.GetCheck().GetInterval().AsDuration() != types.DefaultHealthCheckInterval {
 		t.Errorf("check = %v, want the one being run, defaults included", got.GetCheck())
 	}
 

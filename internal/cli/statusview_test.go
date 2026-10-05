@@ -76,13 +76,13 @@ func TestInstanceView(t *testing.T) {
 	code := func(c int32) *int32 { return &c }
 
 	tests := []struct {
-		name string
-		inst *dicerdv1.Instance
-		want []string
+		name     string
+		instance *dicerdv1.Instance
+		want     []string
 	}{
 		{
 			name: "running",
-			inst: &dicerdv1.Instance{
+			instance: &dicerdv1.Instance{
 				Id: "cjp4tifq1l2wvu9ny0b78xsb", Name: "grafana",
 				ImageRef: "docker.io/grafana/grafana:latest",
 				Vcpus:    1, MemoryBytes: 4 << 30, DiskBytes: 10 << 30,
@@ -112,7 +112,7 @@ func TestInstanceView(t *testing.T) {
 		},
 		{
 			name: "failed, with why",
-			inst: &dicerdv1.Instance{
+			instance: &dicerdv1.Instance{
 				Name: "job", ImageRef: "app",
 				State: stateFailed, ExitCode: code(1), FinishTime: ago(5 * time.Minute),
 				StateError: "gave up after 3 restarts: exit code 1",
@@ -125,7 +125,7 @@ func TestInstanceView(t *testing.T) {
 		},
 		{
 			name: "restarting",
-			inst: &dicerdv1.Instance{
+			instance: &dicerdv1.Instance{
 				Name: "worker", ImageRef: "app",
 				State: stateRestarting, RestartCount: 3,
 				NextRestartTime: timestamppb.New(time.Now().Add(time.Minute)),
@@ -133,16 +133,16 @@ func TestInstanceView(t *testing.T) {
 			want: []string{"● worker — app\n", "     Active: restarting (restart 3), in "},
 		},
 		{
-			name: "stopped",
-			inst: &dicerdv1.Instance{Name: "db", ImageRef: "postgres", State: stateStopped},
-			want: []string{"○ db — postgres\n", "     Active: stopped\n"},
+			name:     "stopped",
+			instance: &dicerdv1.Instance{Name: "db", ImageRef: "postgres", State: stateStopped},
+			want:     []string{"○ db — postgres\n", "     Active: stopped\n"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := instanceView(tt.inst, nil, palette{}).write(&buf); err != nil {
+			if err := instanceView(tt.instance, nil, palette{}).write(&buf); err != nil {
 				t.Fatal(err)
 			}
 			for _, want := range tt.want {

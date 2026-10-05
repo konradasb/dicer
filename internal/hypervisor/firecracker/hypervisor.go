@@ -29,7 +29,7 @@ type Hypervisor struct {
 var _ hypervisor.Hypervisor = (*Hypervisor)(nil)
 
 // NewHypervisor returns a Hypervisor for the VMM serving its API on
-// socketPath.
+// socketPath. It does not connect until the first request.
 func NewHypervisor(socketPath string) *Hypervisor {
 	return &Hypervisor{client: newClient(socketPath)}
 }
@@ -41,7 +41,7 @@ func (h *Hypervisor) Capabilities() hypervisor.Capabilities {
 		SupportsHotplugMemory: true,
 		SupportsPause:         true,
 		SupportsVsock:         true,
-		SupportsDiskIOLimit:   true,
+		SupportsDiskRateLimit: true,
 	}
 }
 
@@ -58,7 +58,10 @@ func (h *Hypervisor) ShutdownVM(ctx context.Context) error {
 	if runtime.GOARCH != "amd64" {
 		return fmt.Errorf("firecracker: Ctrl+Alt+Del on %s: %w", runtime.GOARCH, errors.ErrUnsupported)
 	}
-	return h.client.put(ctx, "/actions", instanceAction{ActionType: actionSendCtrlAltDel})
+	if err := h.client.put(ctx, "/actions", instanceAction{ActionType: actionSendCtrlAltDel}); err != nil {
+		return fmt.Errorf("send ctrl+alt+del: %w", err)
+	}
+	return nil
 }
 
 // Shutdown stops the VMM. Firecracker has no request that ends the process
@@ -68,32 +71,32 @@ func (h *Hypervisor) Shutdown(ctx context.Context) error {
 	return h.ShutdownVM(ctx)
 }
 
-// GetVMInfo reports the guest's state, and its memory including any
+// VMInfo reports the guest's state, and its memory including any
 // hotplugged.
-func (h *Hypervisor) GetVMInfo(ctx context.Context) (*hypervisor.VirtualMachineInfo, error) {
+func (h *Hypervisor) VMInfo(ctx context.Context) (*hypervisor.VMInfo, error) {
 	var info instanceInfo
 	if err := h.client.get(ctx, "/", &info); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get vm info: %w", err)
 	}
 
-	var state hypervisor.VirtualMachineState
+	var state hypervisor.VMState
 	switch info.State {
 	case instanceNotStarted:
-		state = hypervisor.VirtualMachineStateStopped
+		state = hypervisor.VMStateStopped
 	case instanceRunning:
-		state = hypervisor.VirtualMachineStateRunning
+		state = hypervisor.VMStateRunning
 	case instancePaused:
-		state = hypervisor.VirtualMachineStatePaused
+		state = hypervisor.VMStatePaused
 	default:
 		return nil, fmt.Errorf("firecracker: unknown instance state %q", info.State)
 	}
 
 	memory, err := h.memoryBytes(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get vm info: %w", err)
 	}
 
-	return &hypervisor.VirtualMachineInfo{State: state, MemoryBytes: &memory}, nil
+	return &hypervisor.VMInfo{State: state, MemoryBytes: &memory}, nil
 }
 
 // memoryBytes returns the guest's boot memory plus whatever is hotplugged.
@@ -117,12 +120,18 @@ func (h *Hypervisor) memoryBytes(ctx context.Context) (int64, error) {
 
 // PauseVM halts the guest's vCPUs.
 func (h *Hypervisor) PauseVM(ctx context.Context) error {
-	return h.client.patch(ctx, "/vm", vmState{State: vmPaused})
+	if err := h.client.patch(ctx, "/vm", vmState{State: vmPaused}); err != nil {
+		return fmt.Errorf("pause vm: %w", err)
+	}
+	return nil
 }
 
 // ResumeVM continues a paused guest.
 func (h *Hypervisor) ResumeVM(ctx context.Context) error {
-	return h.client.patch(ctx, "/vm", vmState{State: vmResumed})
+	if err := h.client.patch(ctx, "/vm", vmState{State: vmResumed}); err != nil {
+		return fmt.Errorf("resume vm: %w", err)
+	}
+	return nil
 }
 
 // SnapshotVM writes a full snapshot of a paused guest into the directory
@@ -132,11 +141,15 @@ func (h *Hypervisor) SnapshotVM(ctx context.Context, destPath string) error {
 		return fmt.Errorf("create snapshot directory: %w", err)
 	}
 
-	return h.client.put(ctx, "/snapshot/create", snapshotCreate{
+	err := h.client.put(ctx, "/snapshot/create", snapshotCreate{
 		SnapshotType: "Full",
 		SnapshotPath: filepath.Join(destPath, snapshotStateFile),
 		MemFilePath:  filepath.Join(destPath, snapshotMemoryFile),
 	})
+	if err != nil {
+		return fmt.Errorf("snapshot vm: %w", err)
+	}
+	return nil
 }
 
 // ResizeVMCPU is unsupported: Firecracker cannot hotplug vCPUs.
@@ -149,8 +162,10 @@ func (h *Hypervisor) ResizeVMCPU(context.Context, int) error {
 // hotpluggable region large enough to cover the difference from its boot
 // memory.
 func (h *Hypervisor) ResizeVMMemory(ctx context.Context, bytes int64) error {
-	_, err := h.requestMemory(ctx, bytes)
-	return err
+	if _, err := h.requestMemory(ctx, bytes); err != nil {
+		return fmt.Errorf("resize memory: %w", err)
+	}
+	return nil
 }
 
 // ResizeVMMemoryAndWait is ResizeVMMemory, then waits until the guest has
@@ -158,13 +173,14 @@ func (h *Hypervisor) ResizeVMMemory(ctx context.Context, bytes int64) error {
 func (h *Hypervisor) ResizeVMMemoryAndWait(ctx context.Context, bytes int64, timeout time.Duration) error {
 	requested, err := h.requestMemory(ctx, bytes)
 	if err != nil {
-		return err
+		return fmt.Errorf("resize memory: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	ticker := time.NewTicker(20 * time.Millisecond)
+	const pollInterval = 20 * time.Millisecond
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	for {
@@ -193,16 +209,15 @@ func (h *Hypervisor) requestMemory(ctx context.Context, bytes int64) (int, error
 		return 0, err
 	}
 	if cfg.MemoryHotplug == nil {
-		return 0, fmt.Errorf("firecracker: resize memory of a guest booted without hotpluggable memory: %w",
-			errors.ErrUnsupported)
+		return 0, fmt.Errorf("firecracker: guest booted without hotpluggable memory: %w", errors.ErrUnsupported)
 	}
 
-	base := int64(cfg.MachineConfig.MemSizeMiB) * mib
-	requested := ceilDiv(bytes-base, mib)
+	bootBytes := int64(cfg.MachineConfig.MemSizeMiB) * mib
+	requested := divideRoundingUp(bytes-bootBytes, mib)
 	if requested < 0 || requested > cfg.MemoryHotplug.TotalSizeMiB {
 		return 0, fmt.Errorf("firecracker: memory can be resized between %d MiB and %d MiB, not to %d MiB",
 			cfg.MachineConfig.MemSizeMiB, cfg.MachineConfig.MemSizeMiB+cfg.MemoryHotplug.TotalSizeMiB,
-			ceilDiv(bytes, mib))
+			divideRoundingUp(bytes, mib))
 	}
 
 	if err := h.client.patch(ctx, "/hotplug/memory", memoryHotplugUpdate{RequestedSizeMiB: requested}); err != nil {

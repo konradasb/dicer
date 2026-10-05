@@ -92,19 +92,19 @@ func addEntry(tw *tar.Writer, p, name string, info fs.FileInfo) error {
 		return nil
 	}
 
-	hdr, err := tar.FileInfoHeader(info, link)
+	header, err := tar.FileInfoHeader(info, link)
 	if err != nil {
 		return fmt.Errorf("%s: %w", p, err)
 	}
-	hdr.Name = name
+	header.Name = name
 	if info.IsDir() {
-		hdr.Name += "/"
+		header.Name += "/"
 	}
 	// Owners mean nothing on the other machine: whoever unpacks owns what
 	// is unpacked, as with cp.
-	hdr.Uid, hdr.Gid, hdr.Uname, hdr.Gname = 0, 0, "", ""
+	header.Uid, header.Gid, header.Uname, header.Gname = 0, 0, "", ""
 
-	if err := tw.WriteHeader(hdr); err != nil {
+	if err := tw.WriteHeader(header); err != nil {
 		return err
 	}
 	if !info.Mode().IsRegular() {
@@ -150,30 +150,33 @@ func Unpack(r io.Reader, dest string) (err error) {
 
 	// Set the mode and times of created directories last, deepest first,
 	// so writing their contents does not undo them.
-	var dirs []*tar.Header
+	type createdDir struct {
+		header *tar.Header
+		rel    string
+	}
+	var dirs []createdDir
 	defer func() {
 		for _, dir := range slices.Backward(dirs) {
-			rel, _ := rename(dir.Name, top, name)
-			if finishErr := finishDir(root, dir, rel); finishErr != nil && err == nil {
-				err = fmt.Errorf("%s: %w", rel, finishErr)
+			if finishErr := finishDir(root, dir.header, dir.rel); finishErr != nil && err == nil {
+				err = fmt.Errorf("%s: %w", dir.rel, finishErr)
 			}
 		}
 	}()
 
-	for hdr := first; ; {
-		rel, err := rename(hdr.Name, top, name)
+	for header := first; ; {
+		rel, err := entryPath(header.Name, top, name)
 		if err != nil {
 			return err
 		}
-		created, err := unpackEntry(root, tr, hdr, rel)
+		created, err := unpackEntry(root, tr, header, rel)
 		if err != nil {
 			return fmt.Errorf("%s: %w", rel, err)
 		}
-		if created && hdr.Typeflag == tar.TypeDir {
-			dirs = append(dirs, hdr)
+		if created && header.Typeflag == tar.TypeDir {
+			dirs = append(dirs, createdDir{header: header, rel: rel})
 		}
 
-		hdr, err = tr.Next()
+		header, err = tr.Next()
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
@@ -184,12 +187,12 @@ func Unpack(r io.Reader, dest string) (err error) {
 }
 
 // finishDir gives a directory its mode and times, once its contents are in.
-func finishDir(root *os.Root, hdr *tar.Header, rel string) error {
-	if err := root.Chmod(rel, hdr.FileInfo().Mode().Perm()); err != nil {
+func finishDir(root *os.Root, header *tar.Header, rel string) error {
+	if err := root.Chmod(rel, header.FileInfo().Mode().Perm()); err != nil {
 		return err
 	}
 
-	return root.Chtimes(rel, hdr.ModTime, hdr.ModTime)
+	return root.Chtimes(rel, header.ModTime, header.ModTime)
 }
 
 // placement decides where an archive's top-level entry lands: the directory
@@ -220,10 +223,11 @@ func topLevel(name string) string {
 	return top
 }
 
-// rename returns an entry's destination relative to the unpack directory,
-// with the top-level element replaced by to if set. It rejects entries outside
-// the top-level one and paths that are not plain relative paths.
-func rename(entry, top, to string) (string, error) {
+// entryPath returns an entry's destination relative to the unpack
+// directory, with the top-level element replaced by to if set. It rejects
+// entries outside the top-level one and paths that are not plain relative
+// paths.
+func entryPath(entry, top, to string) (string, error) {
 	clean := path.Clean(strings.TrimPrefix(entry, "./"))
 	if !filepath.IsLocal(clean) || topLevel(clean) != top {
 		return "", fmt.Errorf("archive entry %q is outside %q", entry, top)
@@ -237,10 +241,10 @@ func rename(entry, top, to string) (string, error) {
 
 // unpackEntry creates one entry in root at rel, and reports whether it did:
 // a directory that already exists is used as it is.
-func unpackEntry(root *os.Root, tr *tar.Reader, hdr *tar.Header, rel string) (bool, error) {
-	mode := hdr.FileInfo().Mode().Perm()
+func unpackEntry(root *os.Root, tr *tar.Reader, header *tar.Header, rel string) (bool, error) {
+	mode := header.FileInfo().Mode().Perm()
 
-	switch hdr.Typeflag {
+	switch header.Typeflag {
 	case tar.TypeDir:
 		return makeDir(root, rel)
 
@@ -248,7 +252,7 @@ func unpackEntry(root *os.Root, tr *tar.Reader, hdr *tar.Header, rel string) (bo
 		// Replaced rather than written through: if something already
 		// there is a symlink, the copy takes its place instead of writing
 		// wherever it points.
-		if err := removeIfNotDir(root, rel); err != nil {
+		if err := removeUnlessDir(root, rel); err != nil {
 			return false, err
 		}
 		f, err := root.OpenFile(rel, os.O_CREATE|os.O_WRONLY|os.O_EXCL, mode)
@@ -267,15 +271,15 @@ func unpackEntry(root *os.Root, tr *tar.Reader, hdr *tar.Header, rel string) (bo
 		if err := root.Chmod(rel, mode); err != nil {
 			return false, err
 		}
-		return true, root.Chtimes(rel, hdr.ModTime, hdr.ModTime)
+		return true, root.Chtimes(rel, header.ModTime, header.ModTime)
 
 	case tar.TypeSymlink:
-		if err := removeIfNotDir(root, rel); err != nil {
+		if err := removeUnlessDir(root, rel); err != nil {
 			return false, err
 		}
 		// A symlink may point anywhere; it is only a name. The root is
 		// what keeps anything later from being written through it.
-		return true, root.Symlink(hdr.Linkname, rel)
+		return true, root.Symlink(header.Linkname, rel)
 
 	default:
 		// Pack writes nothing else; a foreign archive's devices and hard
@@ -301,9 +305,10 @@ func makeDir(root *os.Root, rel string) (bool, error) {
 	return true, root.Mkdir(rel, 0o700)
 }
 
-// removeIfNotDir removes whatever is at rel so that something else can be
-// created there, unless it is a directory: a file is never copied over one.
-func removeIfNotDir(root *os.Root, rel string) error {
+// removeUnlessDir removes whatever is at rel so that something else can be
+// created there, unless it is a directory: a file is never copied over one,
+// and trying is an error.
+func removeUnlessDir(root *os.Root, rel string) error {
 	info, err := root.Lstat(rel)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil

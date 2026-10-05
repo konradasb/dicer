@@ -16,10 +16,12 @@ func TestExitStatus(t *testing.T) {
 		"kill -15 $$": 143,
 	}
 	for script, want := range tests {
-		cmd := exec.Command("sh", "-c", script) //nolint:noctx // a test process, bounded by the test
-		_ = cmd.Run()
-		if got := ExitStatus(cmd.ProcessState); got != want {
-			t.Errorf("%q: ExitStatus = %d, want %d", script, got, want)
-		}
+		t.Run(script, func(t *testing.T) {
+			cmd := exec.CommandContext(t.Context(), "sh", "-c", script)
+			_ = cmd.Run()
+			if got := ExitStatus(cmd.ProcessState); got != want {
+				t.Errorf("ExitStatus = %d, want %d", got, want)
+			}
+		})
 	}
 }

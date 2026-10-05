@@ -50,8 +50,8 @@ func awaitState(t *testing.T, d *fakeInstanceDaemon, name string, state dicerdv1
 
 	for range 1000 {
 		d.mu.Lock()
-		inst, ok := d.instances[name]
-		reached := ok && inst.GetState() == state
+		instance, ok := d.instances[name]
+		reached := ok && instance.GetState() == state
 		d.mu.Unlock()
 		if reached {
 			return
@@ -79,7 +79,7 @@ func TestRunAttachedWritesTheConsoleAndExitsWithTheStatus(t *testing.T) {
 	d := newFakeInstanceDaemon()
 	d.cached["alpine:3.21"] = true
 	d.console["job"] = "hello\n"
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	done := runInBackground(t, "run", "--name", "job", "alpine:3.21", "echo", "hello")
 	awaitState(t, d, "job", stateRunning)
@@ -109,7 +109,7 @@ func TestRunAttachedWithRmOnAJobThatEndsAtOnce(t *testing.T) {
 	d.onStart = func(name string) {
 		go d.stopsAndRemoves(name, 4)
 	}
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	r := awaitRun(t, runInBackground(t, "run", "--rm", "--name", "job", "alpine:3.21", "false"))
 	if got := exitCode(r.err); got != 4 {
@@ -124,7 +124,7 @@ func TestRunAttachedSucceedsWithTheJob(t *testing.T) {
 	d.onStart = func(name string) {
 		go d.stops(name, 0)
 	}
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	r := awaitRun(t, runInBackground(t, "run", "--name", "job", "alpine:3.21", "true"))
 	if r.err != nil {

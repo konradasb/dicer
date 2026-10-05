@@ -28,9 +28,9 @@ func newBlockingManager(t *testing.T) (m *Manager, started, cancelled chan struc
 	cancelled = make(chan struct{}, 1)
 	release = make(chan struct{})
 
-	mock := &mockRegistryClient{}
-	next := mock.PullAndExport
-	mock.pullAndExportFunc = func(ctx context.Context, imageRef, digest, exportDir string) (*registry.PullResult, error) {
+	fakeRegistry := &fakeRegistryClient{}
+	next := fakeRegistry.PullAndExport
+	fakeRegistry.pullAndExportFunc = func(ctx context.Context, imageRef, digest, exportDir string) (*registry.Metadata, error) {
 		started <- struct{}{}
 		select {
 		case <-release:
@@ -38,11 +38,11 @@ func newBlockingManager(t *testing.T) (m *Manager, started, cancelled chan struc
 			cancelled <- struct{}{}
 			return nil, ctx.Err()
 		}
-		mock.pullAndExportFunc = nil
+		fakeRegistry.pullAndExportFunc = nil
 		return next(ctx, imageRef, digest, exportDir, nil)
 	}
-	m.registry = mock
-	m.packer = &mockPacker{}
+	m.registry = fakeRegistry
+	m.packer = &fakePacker{}
 	return m, started, cancelled, release
 }
 
@@ -103,11 +103,11 @@ func TestProgressRelayStopsAtRemove(t *testing.T) {
 	var got []types.PullStage
 	id := r.add(func(p types.PullProgress) { got = append(got, p.Stage) })
 
-	r.send(types.PullProgress{Stage: types.StageDownloading})
+	r.report(types.PullProgress{Stage: types.PullStageDownloading})
 	r.remove(id)
-	r.send(types.PullProgress{Stage: types.StageConverting})
+	r.report(types.PullProgress{Stage: types.PullStageConverting})
 
-	if len(got) != 1 || got[0] != types.StageDownloading {
+	if len(got) != 1 || got[0] != types.PullStageDownloading {
 		t.Errorf("listener heard %v, want only what was sent before it was removed", got)
 	}
 }
@@ -118,12 +118,12 @@ func waitForWaiters(t *testing.T, m *Manager, n int) {
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		m.pullsMu.Lock()
+		m.mu.Lock()
 		waiting := 0
 		for _, p := range m.pulls {
 			waiting += p.waiters
 		}
-		m.pullsMu.Unlock()
+		m.mu.Unlock()
 		if waiting == n {
 			return
 		}

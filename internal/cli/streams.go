@@ -9,9 +9,6 @@ import (
 	"errors"
 	"io"
 	"sync"
-	"time"
-
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/konradasb/dicer"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
@@ -39,8 +36,8 @@ func pullImage(
 			return nil, err
 		}
 
-		if img := msg.GetImage(); img != nil {
-			pulled = img
+		if image := msg.GetImage(); image != nil {
+			pulled = image
 		}
 		if onProgress != nil {
 			onProgress(msg)
@@ -159,13 +156,14 @@ func receiveArchive(ctx context.Context, client *dicer.Client, name, path string
 	}
 }
 
-// execStream is a command running inside a guest. Send, resize and
+// execStream is a command running inside a guest. sendStdin, resize and
 // closeSend may be called from another goroutine than Recv, and are
 // serialised against each other, since gRPC forbids concurrent sends.
 type execStream struct {
 	dicerdv1.DaemonService_ExecInstanceClient
 
-	sendMu sync.Mutex
+	// mu serialises the stream's sends.
+	mu sync.Mutex
 }
 
 // startExec starts the command start describes.
@@ -204,31 +202,16 @@ func (s *execStream) resize(rows, cols uint16) error {
 
 // closeSend says there is no more input. Output goes on arriving.
 func (s *execStream) closeSend() error {
-	s.sendMu.Lock()
-	defer s.sendMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	return s.CloseSend()
 }
 
+// send sends one message, serialised against the others.
 func (s *execStream) send(req *dicerdv1.ExecInstanceRequest) error {
-	s.sendMu.Lock()
-	defer s.sendMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	return s.Send(req)
-}
-
-// timeOf returns the time ts holds: zero for an unset one.
-func timeOf(ts *timestamppb.Timestamp) time.Time {
-	if ts == nil {
-		return time.Time{}
-	}
-	return ts.AsTime()
-}
-
-// timestamp returns t as the API takes it: unset for the zero time.
-func timestamp(t time.Time) *timestamppb.Timestamp {
-	if t.IsZero() {
-		return nil
-	}
-	return timestamppb.New(t)
 }

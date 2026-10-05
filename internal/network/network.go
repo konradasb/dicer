@@ -11,7 +11,16 @@ import (
 	"github.com/konradasb/dicer/internal/errdefs"
 )
 
-// Bandwidth limits an instance's traffic. Zero means unlimited.
+// Defaults applied to a network that does not specify them.
+const (
+	// DefaultNameserver is the nameserver a network forwards to.
+	DefaultNameserver = "8.8.8.8"
+	// DefaultMTU is a network's MTU.
+	DefaultMTU = 1500
+)
+
+// Bandwidth limits an instance's traffic, in bytes per second. Zero means
+// unlimited.
 type Bandwidth struct {
 	UploadBps      int64
 	UploadBurstBps int64
@@ -47,10 +56,10 @@ func Assignable(ipNet *net.IPNet, ip net.IP) bool {
 	if ip4 == nil || !ipNet.Contains(ip4) {
 		return false
 	}
-	network := ipNet.IP.To4()
-	broadcast := make(net.IP, len(network))
-	for i := range network {
-		broadcast[i] = network[i] | ^ipNet.Mask[i]
+	networkIP := ipNet.IP.To4()
+	broadcastIP := make(net.IP, len(networkIP))
+	for i := range networkIP {
+		broadcastIP[i] = networkIP[i] | ^ipNet.Mask[i]
 	}
-	return !ip4.Equal(network) && !ip4.Equal(broadcast)
+	return !ip4.Equal(networkIP) && !ip4.Equal(broadcastIP)
 }

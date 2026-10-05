@@ -22,6 +22,7 @@ const (
 // DefaultVersion is the version used when no explicit version is requested.
 const DefaultVersion = V49
 
+// supportedVersions are the releases Dicer ships binaries for.
 var supportedVersions = []Version{V48, V49}
 
 // parseVersion runs a cloud-hypervisor binary to ask its version. The binary

@@ -6,5 +6,5 @@
 //
 // It is the daemon's alone. Clients see the API's messages in
 // proto/dicerd/v1, which internal/grpcapi converts these to and from; the
-// daemon's stores write these to disk as their tags say.
+// daemon's managers write these to disk as their tags say.
 package types

@@ -116,18 +116,18 @@ func TestKeepaliveLetsClientsPing(t *testing.T) {
 		t.Skip("waits for several keepalive pings, which gRPC sends 10s apart at the soonest")
 	}
 
-	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	counted := &countingListener{Listener: ln}
+	counted := &countingListener{Listener: listener}
 
 	s := grpc.NewServer(keepaliveOptions(defaultConfig().API.Keepalive)...)
 	dicerdv1.RegisterDaemonServiceServer(s, hostInfoServer{})
 	go func() { _ = s.Serve(counted) }()
 	t.Cleanup(s.Stop)
 
-	c, err := dicer.NewClient(dicer.WithAddress(ln.Addr().String()), dicer.WithKeepalive(10*time.Second, 5*time.Second))
+	c, err := dicer.NewClient(dicer.WithAddress(listener.Addr().String()), dicer.WithKeepalive(10*time.Second, 5*time.Second))
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
@@ -167,6 +167,7 @@ type countingListener struct {
 	accepted atomic.Int32
 }
 
+// Accept accepts a connection and counts it.
 func (l *countingListener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err == nil {

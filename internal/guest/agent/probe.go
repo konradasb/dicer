@@ -55,7 +55,7 @@ func (s *server) Probe(ctx context.Context, req *diceragentv1.ProbeRequest) (*di
 		output = joinOutput(output, err.Error())
 	}
 
-	return &diceragentv1.ProbeResponse{Healthy: err == nil, Output: guest.TruncateOutput(output)}, nil
+	return &diceragentv1.ProbeResponse{Healthy: err == nil, Output: guest.TruncateProbeOutput(output)}, nil
 }
 
 // probeExec runs a command, in the environment an exec gets. It passes if
@@ -63,7 +63,7 @@ func (s *server) Probe(ctx context.Context, req *diceragentv1.ProbeRequest) (*di
 func probeExec(ctx context.Context, command []string) (string, error) {
 	var out boundedBuffer
 	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-	cmd.Env = buildEnv(nil, false)
+	cmd.Env = execEnv(nil, false)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	// A command that leaves a child holding its output open must not hold
@@ -84,7 +84,7 @@ func probeHTTP(ctx context.Context, port uint32, path string) (string, error) {
 	if path == "" {
 		path = "/"
 	}
-	url := "http://" + net.JoinHostPort("127.0.0.1", strconv.FormatUint(uint64(port), 10)) + path
+	url := "http://" + loopbackAddress(port) + path
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -108,13 +108,19 @@ func probeHTTP(ctx context.Context, port uint32, path string) (string, error) {
 
 // probeTCP passes if a connection to port opens.
 func probeTCP(ctx context.Context, port uint32) (string, error) {
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", strconv.FormatUint(uint64(port), 10)))
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(ctx, "tcp", loopbackAddress(port))
 	if err != nil {
 		return "", err
 	}
 	_ = conn.Close()
 	return "connected", nil
+}
+
+// loopbackAddress returns the guest's own address for port: a probe checks
+// the service from inside the VM, not through the network.
+func loopbackAddress(port uint32) string {
+	return net.JoinHostPort("127.0.0.1", strconv.FormatUint(uint64(port), 10))
 }
 
 // boundedBuffer keeps the first guest.MaxProbeOutput bytes written to it, and
@@ -131,6 +137,7 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// String returns what the buffer kept.
 func (b *boundedBuffer) String() string { return string(b.buf) }
 
 // joinOutput puts why a probe failed after what it said, if it said

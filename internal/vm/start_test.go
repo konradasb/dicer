@@ -19,12 +19,12 @@ import (
 // its data must outlive a restart, so every start attaches the disk the
 // volume was created with rather than making a new one.
 func TestResolveMountsAttachesExistingDisk(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
-	vols := fakeVolumes{dir: t.TempDir()}
-	mgr.volumes = vols
+	manager, definitions, _ := newTestManager(t)
+	volumes := fakeVolumes{dir: t.TempDir()}
+	manager.volumes = volumes
 
 	definitions.volumes["data"] = types.Volume{ID: "vol-1", Name: "data"}
-	disk := vols.Path("vol-1")
+	disk := volumes.Path("vol-1")
 	if err := os.MkdirAll(filepath.Dir(disk), 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -32,10 +32,10 @@ func TestResolveMountsAttachesExistingDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	inst := seedInstance(t, definitions, "web")
-	inst.Mounts = []types.Mount{{Type: types.MountVolume, Source: "data", Target: "/data"}}
+	instance := seedInstance(t, definitions, "web")
+	instance.Mounts = []types.Mount{{Type: types.MountTypeVolume, Source: "data", Target: "/data"}}
 
-	mounts, disks, err := mgr.resolveMounts(inst)
+	mounts, disks, err := manager.resolveMounts(instance)
 	if err != nil {
 		t.Fatalf("resolveMounts: %v", err)
 	}
@@ -48,14 +48,14 @@ func TestResolveMountsAttachesExistingDisk(t *testing.T) {
 }
 
 func TestResolveMountsMissingDisk(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
-	mgr.volumes = fakeVolumes{dir: t.TempDir()}
+	manager, definitions, _ := newTestManager(t)
+	manager.volumes = fakeVolumes{dir: t.TempDir()}
 
 	definitions.volumes["data"] = types.Volume{ID: "vol-1", Name: "data"}
-	inst := seedInstance(t, definitions, "web")
-	inst.Mounts = []types.Mount{{Type: types.MountVolume, Source: "data", Target: "/data"}}
+	instance := seedInstance(t, definitions, "web")
+	instance.Mounts = []types.Mount{{Type: types.MountTypeVolume, Source: "data", Target: "/data"}}
 
-	if _, _, err := mgr.resolveMounts(inst); err == nil {
+	if _, _, err := manager.resolveMounts(instance); err == nil {
 		t.Error("resolveMounts succeeded for a volume whose disk is gone")
 	}
 }
@@ -64,13 +64,13 @@ func TestResolveMountsMissingDisk(t *testing.T) {
 // volume disks are lettered in order past the other mounts, and that a host
 // file is read at start with its permissions.
 func TestResolveMountsMixed(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
-	vols := fakeVolumes{dir: t.TempDir()}
-	mgr.volumes = vols
+	manager, definitions, _ := newTestManager(t)
+	volumes := fakeVolumes{dir: t.TempDir()}
+	manager.volumes = volumes
 
 	for _, name := range []string{"a", "b"} {
 		definitions.volumes[name] = types.Volume{ID: "vol-" + name, Name: name}
-		disk := vols.Path("vol-" + name)
+		disk := volumes.Path("vol-" + name)
 		if err := os.MkdirAll(filepath.Dir(disk), 0o750); err != nil {
 			t.Fatal(err)
 		}
@@ -83,15 +83,15 @@ func TestResolveMountsMixed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	inst := seedInstance(t, definitions, "web")
-	inst.Mounts = []types.Mount{
-		{Type: types.MountVolume, Source: "a", Target: "/a"},
-		{Type: types.MountFile, Source: hostFile, Target: "/etc/app.conf", ReadOnly: true},
-		{Type: types.MountTmpfs, Target: "/scratch"},
-		{Type: types.MountVolume, Source: "b", Target: "/b", ReadOnly: true},
+	instance := seedInstance(t, definitions, "web")
+	instance.Mounts = []types.Mount{
+		{Type: types.MountTypeVolume, Source: "a", Target: "/a"},
+		{Type: types.MountTypeFile, Source: hostFile, Target: "/etc/app.conf", ReadOnly: true},
+		{Type: types.MountTypeTmpfs, Target: "/scratch"},
+		{Type: types.MountTypeVolume, Source: "b", Target: "/b", ReadOnly: true},
 	}
 
-	mounts, disks, err := mgr.resolveMounts(inst)
+	mounts, disks, err := manager.resolveMounts(instance)
 	if err != nil {
 		t.Fatalf("resolveMounts: %v", err)
 	}
@@ -121,11 +121,11 @@ func TestResolveMountsMixed(t *testing.T) {
 // must not boot a VM for an instance that no longer exists.
 func TestStartOfDeletedInstanceIsRefused(t *testing.T) {
 	h := newHarness(t)
-	if err := h.mgr.Delete(t.Context(), h.inst, false); err != nil {
+	if err := h.manager.Delete(t.Context(), h.instance, false); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 
-	if err := h.mgr.Start(t.Context(), h.inst); !errors.Is(err, errdefs.ErrNotFound) {
+	if err := h.manager.Start(t.Context(), h.instance); !errors.Is(err, errdefs.ErrNotFound) {
 		t.Fatalf("Start = %v, want a refusal for an instance that no longer exists", err)
 	}
 	if n := h.starter.vmmCount(); n != 0 {
@@ -138,12 +138,12 @@ func TestStartOfDeletedInstanceIsRefused(t *testing.T) {
 // rate-limiting the host.
 func TestStartUsesTheImageHeld(t *testing.T) {
 	h := newHarness(t)
-	images, ok := h.mgr.images.(*fakeImages)
+	images, ok := h.manager.images.(*fakeImages)
 	if !ok {
-		t.Fatalf("images is a %T, want the fake", h.mgr.images)
+		t.Fatalf("images is a %T, want the fake", h.manager.images)
 	}
 	images.held = &types.Image{
-		Name: h.inst.ImageRef, Digest: "sha256:bbbb", DiskPath: images.diskPath, Entrypoint: []string{"/bin/sh"},
+		Name: h.instance.ImageRef, Digest: "sha256:bbbb", DiskPath: images.diskPath, Entrypoint: []string{"/bin/sh"},
 	}
 
 	h.start(t)
@@ -156,15 +156,15 @@ func TestStartUsesTheImageHeld(t *testing.T) {
 // The guest decides how to start the command, unless the instance says: the
 // host no longer guesses from the image's entrypoint.
 func TestInitConfigCarriesTheInitMode(t *testing.T) {
-	img := &types.Image{Entrypoint: []string{"/sbin/init"}}
-	net := &networkSetup{nic: hypervisor.NetworkInterfaceConfig{IP: "10.0.0.2"}, prefixLen: 24}
+	image := &types.Image{Entrypoint: []string{"/sbin/init"}}
+	setup := &networkSetup{nic: hypervisor.NetworkInterfaceConfig{IP: "10.0.0.2"}, prefixLen: 24}
 
 	for mode, want := range map[types.InitMode]types.InitMode{
-		"":                types.ModeAuto,
-		types.ModeExec:    types.ModeExec,
-		types.ModeSystemd: types.ModeSystemd,
+		"":                    types.InitModeAuto,
+		types.InitModeExec:    types.InitModeExec,
+		types.InitModeSystemd: types.InitModeSystemd,
 	} {
-		cfg := buildInitConfig(types.InstanceSpec{Name: "web", InitMode: mode}, img, nil, net, guest.HaltPowerOff)
+		cfg := buildInitConfig(types.InstanceSpec{Name: "web", InitMode: mode}, image, nil, setup, guest.HaltPowerOff)
 		if cfg.Mode != want {
 			t.Errorf("instance mode %q: config mode = %q, want %q", mode, cfg.Mode, want)
 		}

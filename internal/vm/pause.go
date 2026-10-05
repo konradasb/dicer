@@ -15,71 +15,71 @@ import (
 )
 
 // Pause halts the guest's vCPUs without tearing anything down.
-func (m *Manager) Pause(ctx context.Context, inst types.InstanceSpec) error {
-	return m.setPaused(ctx, inst, pauseMove{
-		op:      opPause,
-		from:    types.StateRunning,
-		to:      types.StatePaused,
-		do:      hypervisor.Hypervisor.PauseVM,
-		event:   events.ActionPaused,
-		message: "Paused instance: vCPUs halted, memory kept",
+func (m *Manager) Pause(ctx context.Context, instance types.InstanceSpec) error {
+	return m.setPaused(ctx, instance, pauseMove{
+		operation: operationPause,
+		from:      types.InstanceStateRunning,
+		to:        types.InstanceStatePaused,
+		do:        hypervisor.Hypervisor.PauseVM,
+		event:     events.ActionPaused,
+		message:   "Paused instance: vCPUs halted, memory kept",
 	})
 }
 
 // Resume restarts the vCPUs of a paused instance.
-func (m *Manager) Resume(ctx context.Context, inst types.InstanceSpec) error {
-	return m.setPaused(ctx, inst, pauseMove{
-		op:      opResume,
-		from:    types.StatePaused,
-		to:      types.StateRunning,
-		do:      hypervisor.Hypervisor.ResumeVM,
-		event:   events.ActionResumed,
-		message: "Resumed instance: vCPUs running",
+func (m *Manager) Resume(ctx context.Context, instance types.InstanceSpec) error {
+	return m.setPaused(ctx, instance, pauseMove{
+		operation: operationResume,
+		from:      types.InstanceStatePaused,
+		to:        types.InstanceStateRunning,
+		do:        hypervisor.Hypervisor.ResumeVM,
+		event:     events.ActionResumed,
+		message:   "Resumed instance: vCPUs running",
 	})
 }
 
 // pauseMove describes a pause or resume.
 type pauseMove struct {
-	op       string
-	from, to types.InstanceState
-	do       func(hypervisor.Hypervisor, context.Context) error
-	event    events.Action
-	message  string
+	operation string
+	from, to  types.InstanceState
+	do        func(hypervisor.Hypervisor, context.Context) error
+	event     events.Action
+	message   string
 }
 
 // setPaused moves a live instance between running and paused.
-func (m *Manager) setPaused(ctx context.Context, inst types.InstanceSpec, mv pauseMove) (err error) {
+func (m *Manager) setPaused(ctx context.Context, instance types.InstanceSpec, move pauseMove) (err error) {
 	started := time.Now()
-	defer func() { m.observe(mv.op, started, err) }()
+	defer func() { m.observeOperation(move.operation, started, err) }()
 
-	lock := m.lock(inst.ID)
+	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
 
-	rt, err := m.Runtime(inst)
+	status, err := m.Status(instance)
 	if err != nil {
 		return err
 	}
-	if rt.State != mv.from {
-		return errdefs.InvalidState("instance %q is %s, not %s", inst.Name, rt.State.Lower(), mv.from.Lower())
+	if status.State != move.from {
+		return errdefs.InvalidState("instance %q is %s, not %s", instance.Name, status.State.Lowercase(), move.from.Lowercase())
 	}
 
-	hv, err := m.connect(inst, rt)
+	hv, err := m.connect(instance, status)
 	if err != nil {
 		return err
 	}
-	if err := requireCapability(inst, hv.Capabilities().SupportsPause, mv.op); err != nil {
+	if err := requireCapability(instance, hv.Capabilities().SupportsPause, move.operation); err != nil {
 		return err
 	}
 
-	if err := mv.do(hv, ctx); err != nil {
-		return fmt.Errorf("%s vm: %w", mv.op, err)
+	if err := move.do(hv, ctx); err != nil {
+		return fmt.Errorf("%s vm: %w", move.operation, err)
 	}
-	if err := m.transition(inst, mv.to); err != nil {
+	if err := m.transition(instance, move.to); err != nil {
 		return err
 	}
 
-	m.record(inst, mv.event, mv.message, nil)
-	m.logger.InfoContext(ctx, "changed instance state", "instance", inst.Name, "state", mv.to.Lower())
+	m.record(instance, move.event, move.message, nil)
+	m.logger.InfoContext(ctx, "changed instance state", "instance", instance.Name, "state", move.to.Lowercase())
 	return nil
 }

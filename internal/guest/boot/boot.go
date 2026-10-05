@@ -13,8 +13,9 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// boot runs the full init sequence and never returns — it either execs the
-// guest process or drops to a debug shell on an unrecoverable error.
+// boot runs the init sequence. It does not return: it hands the machine to
+// the workload or to systemd, or drops to a debug shell on an unrecoverable
+// error.
 func boot(log *slog.Logger, configFile string) {
 	log.Info("dicer-init starting")
 
@@ -25,7 +26,7 @@ func boot(log *slog.Logger, configFile string) {
 		fatal(log, "mount overlay rootfs", err)
 	}
 
-	cfg, err := loadConfigDisk(log, configFile)
+	cfg, err := loadConfig(log, configFile)
 	if err != nil {
 		fatal(log, "load config", err)
 	}
@@ -36,26 +37,26 @@ func boot(log *slog.Logger, configFile string) {
 	log.Info("init mode", "mode", cfg.Mode, "argv", cfg.Argv())
 
 	if err := configureNetwork(log, cfg); err != nil {
-		log.Warn("failed to configure network", "err", err)
+		log.Warn("failed to configure network", "error", err)
 	}
 
-	if err := bindFilesystemsToNewRoot(log); err != nil {
-		fatal(log, "bind filesystems to new root", err)
+	if err := bindFilesystemsIntoOverlayRoot(log); err != nil {
+		fatal(log, "bind filesystems into overlay root", err)
 	}
 
 	if err := installGuestAgent(log); err != nil {
-		log.Warn("failed to install guest agent", "err", err)
+		log.Warn("failed to install guest agent", "error", err)
 	}
 
 	if !cfg.SkipKernelHeaders {
 		if err := extractKernelHeaders(log); err != nil {
-			log.Warn("failed to setup kernel headers", "err", err)
+			log.Warn("failed to set up kernel headers", "error", err)
 		}
 	}
 
 	if cfg.Hostname != "" {
 		if err := setHostname(cfg.Hostname); err != nil {
-			log.Warn("failed to set hostname", "err", err)
+			log.Warn("failed to set hostname", "error", err)
 		}
 	}
 
@@ -64,31 +65,22 @@ func boot(log *slog.Logger, configFile string) {
 
 	log.Info("boot complete", "mode", cfg.Mode)
 	switch cfg.Mode {
-	case types.ModeSystemd:
+	case types.InitModeSystemd:
 		bootSystemd(log, cfg)
 	default:
 		bootExec(log, cfg)
 	}
 }
 
-// fatal logs the error and drops to an interactive debug shell. It never returns.
+// fatal logs err and drops to an interactive /bin/sh on the console, then
+// exits with status 1 once the shell is closed. It does not return.
 func fatal(log *slog.Logger, msg string, err error) {
-	if err != nil {
-		log.Error(msg, "err", err)
-	} else {
-		log.Error(msg)
-	}
-	dropToDebugShell()
-}
+	log.Error(msg, "error", err)
 
-// dropToDebugShell spawns an interactive /bin/sh reachable via the serial
-// console. Called on unrecoverable boot errors; exits with code 1 when the
-// shell is closed.
-func dropToDebugShell() {
-	sh := exec.Command("/bin/sh", "-i")
-	sh.Stdin = os.Stdin
-	sh.Stdout = os.Stdout
-	sh.Stderr = os.Stderr
-	_ = sh.Run()
+	shell := exec.Command("/bin/sh", "-i")
+	shell.Stdin = os.Stdin
+	shell.Stdout = os.Stdout
+	shell.Stderr = os.Stderr
+	_ = shell.Run()
 	os.Exit(1)
 }

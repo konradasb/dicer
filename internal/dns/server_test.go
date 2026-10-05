@@ -177,7 +177,7 @@ func metricsOf(t *testing.T, srv *server) *fakeMetrics {
 	return m
 }
 
-// ask sends a query over network ("udp" or "tcp") and returns the answer.
+// ask sends a query over transport ("udp" or "tcp") and returns the answer.
 func ask(t *testing.T, transport, addr, name string, qtype dnsmessage.Type) dnsmessage.Message {
 	t.Helper()
 
@@ -277,7 +277,7 @@ func TestServerAnswersForTheNetworksInstances(t *testing.T) {
 func TestServerAnswersUnderANetworkNamedInCapitals(t *testing.T) {
 	resolver := fakeResolver{"db": "10.8.0.5"}
 	servers := NewServers(Config{Resolver: resolver, Logger: slog.New(slog.DiscardHandler)})
-	nw, _, err := servers.target(types.Network{Name: "Shop", Subnet: "10.8.0.0/24", Gateway: "10.8.0.1"})
+	nw, err := servers.networkOf(types.Network{Name: "Shop", Subnet: "10.8.0.0/24", Gateway: "10.8.0.1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -604,11 +604,11 @@ func TestServersServeAndStop(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Serving again as it is changes nothing.
-	first := servers.servers["shop"].server
+	first := servers.servers["shop"]
 	if err := servers.Serve(t.Context(), nw); err != nil {
 		t.Fatal(err)
 	}
-	if servers.servers["shop"].server != first {
+	if servers.servers["shop"] != first {
 		t.Error("serving an unchanged network again restarted its server")
 	}
 	if got := servers.servers["shop"].network.upstreams; !slices.Equal(got, []string{"192.0.2.1:53"}) {

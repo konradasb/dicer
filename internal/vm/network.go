@@ -6,17 +6,16 @@ package vm
 import (
 	"context"
 	"fmt"
-	"slices"
 
-	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/hypervisor"
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// Address returns the address assigned to an instance, if it holds one.
-func (m *Manager) Address(inst types.InstanceSpec) (types.NetworkAllocation, error) {
-	return m.networks.Get(inst.NetworkName, inst.ID)
+// Allocation returns the allocation an instance holds on its network, or an
+// errdefs.ErrNotFound error if it holds none.
+func (m *Manager) Allocation(instance types.InstanceSpec) (types.NetworkAllocation, error) {
+	return m.networks.Allocation(instance.NetworkName, instance.ID)
 }
 
 // networkSetup holds the result of attaching an instance to its network.
@@ -30,32 +29,32 @@ type networkSetup struct {
 
 // setupNetwork allocates an address and attaches a TAP device to the
 // network's bridge.
-func (m *Manager) setupNetwork(ctx context.Context, inst types.InstanceSpec) (*networkSetup, error) {
-	nw, err := m.definitions.GetNetwork(inst.NetworkName)
+func (m *Manager) setupNetwork(ctx context.Context, instance types.InstanceSpec) (*networkSetup, error) {
+	nw, err := m.definitions.Network(instance.NetworkName)
 	if err != nil {
-		return nil, fmt.Errorf("get network %q: %w", inst.NetworkName, err)
+		return nil, fmt.Errorf("get network %q: %w", instance.NetworkName, err)
 	}
 
-	alloc, err := m.networks.Allocate(nw, inst.ID, inst.StaticIP)
+	allocation, err := m.networks.Allocate(nw, instance.ID, instance.StaticIP)
 	if err != nil {
-		return nil, fmt.Errorf("allocate address on network %q: %w", inst.NetworkName, err)
+		return nil, fmt.Errorf("allocate address on network %q: %w", instance.NetworkName, err)
 	}
 
 	// The address is kept on failure; only host devices are undone. The undo
 	// must run even if ctx was cancelled.
 	undo := func() {
 		ctx := context.WithoutCancel(ctx)
-		m.hostNetwork.UnpublishPorts(ctx, inst.ID)
-		m.hostNetwork.RemoveTAP(ctx, &nw, inst.ID)
+		m.hostNetwork.UnpublishPorts(ctx, instance.ID)
+		m.hostNetwork.RemoveTAP(ctx, &nw, instance.ID)
 	}
 
-	servesDNS, err := m.attachTAP(ctx, &nw, &alloc)
+	servesDNS, err := m.attachTAP(ctx, &nw, &allocation)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(inst.Ports) > 0 {
-		if err := m.hostNetwork.PublishPorts(ctx, &nw, &alloc, inst.Ports); err != nil {
+	if len(instance.Ports) > 0 {
+		if err := m.hostNetwork.PublishPorts(ctx, &nw, &allocation, instance.Ports); err != nil {
 			undo()
 			return nil, err
 		}
@@ -86,9 +85,9 @@ func (m *Manager) setupNetwork(ctx context.Context, inst types.InstanceSpec) (*n
 
 	return &networkSetup{
 		nic: hypervisor.NetworkInterfaceConfig{
-			TapDevice: network.TAPName(inst.ID),
-			IP:        alloc.IP,
-			MAC:       alloc.MAC,
+			TAPDevice: network.TAPName(instance.ID),
+			IP:        allocation.IP,
+			MAC:       allocation.MAC,
 			Netmask:   netmask,
 			MTU:       mtu,
 		},
@@ -111,7 +110,7 @@ func upstreamNameservers(nw types.Network) []string {
 // attachTAP brings the network's bridge up, with its DNS server, and
 // attaches the instance's TAP device to it, under the network lock. It
 // reports whether the network's DNS server is serving.
-func (m *Manager) attachTAP(ctx context.Context, nw *types.Network, alloc *types.NetworkAllocation) (bool, error) {
+func (m *Manager) attachTAP(ctx context.Context, nw *types.Network, allocation *types.NetworkAllocation) (bool, error) {
 	lock := m.networkLock(nw.Name)
 	lock.Lock()
 	defer lock.Unlock()
@@ -119,8 +118,8 @@ func (m *Manager) attachTAP(ctx context.Context, nw *types.Network, alloc *types
 	if err := m.hostNetwork.SetupBridge(ctx, nw); err != nil {
 		return false, fmt.Errorf("set up bridge %q: %w", nw.Bridge, err)
 	}
-	if err := m.hostNetwork.CreateTAP(ctx, nw, alloc, network.Bandwidth{}); err != nil {
-		m.hostNetwork.RemoveTAP(context.WithoutCancel(ctx), nw, alloc.InstanceID)
+	if err := m.hostNetwork.CreateTAP(ctx, nw, allocation, network.Bandwidth{}); err != nil {
+		m.hostNetwork.RemoveTAP(context.WithoutCancel(ctx), nw, allocation.InstanceID)
 		return false, fmt.Errorf("create TAP device: %w", err)
 	}
 	return m.serveDNS(ctx, *nw), nil
@@ -145,22 +144,22 @@ func (m *Manager) serveDNS(ctx context.Context, nw types.Network) bool {
 // teardownNetwork removes an instance's published ports and TAP device, and
 // the network's bridge if no other instance uses it. The address is kept.
 // Failures are logged.
-func (m *Manager) teardownNetwork(ctx context.Context, inst types.InstanceSpec) {
-	nw, err := m.definitions.GetNetwork(inst.NetworkName)
+func (m *Manager) teardownNetwork(ctx context.Context, instance types.InstanceSpec) {
+	nw, err := m.definitions.Network(instance.NetworkName)
 	if err != nil {
 		m.logger.WarnContext(ctx, "network not found while tearing it down",
-			"instance", inst.Name, "network", inst.NetworkName, "error", err)
+			"instance", instance.Name, "network", instance.NetworkName, "error", err)
 		return
 	}
 
-	m.hostNetwork.UnpublishPorts(ctx, inst.ID)
-	m.hostNetwork.RemoveTAP(ctx, &nw, inst.ID)
+	m.hostNetwork.UnpublishPorts(ctx, instance.ID)
+	m.hostNetwork.RemoveTAP(ctx, &nw, instance.ID)
 
 	lock := m.networkLock(nw.Name)
 	lock.Lock()
 	defer lock.Unlock()
 
-	if m.networkInUse(nw, inst.ID) {
+	if m.networkInUse(nw, instance.ID) {
 		return
 	}
 
@@ -175,59 +174,20 @@ func (m *Manager) teardownNetwork(ctx context.Context, inst types.InstanceSpec) 
 // networkInUse reports whether any instance other than excludeID is active
 // on the network. It errs towards true.
 func (m *Manager) networkInUse(nw types.Network, excludeID string) bool {
-	instances, err := m.definitions.ListInstances()
-	if err != nil {
-		return true
-	}
+	instances := m.definitions.Instances()
 
 	for _, other := range instances {
 		if other.ID == excludeID || other.NetworkName != nw.Name {
 			continue
 		}
-		rt, err := m.Runtime(other)
+		status, err := m.Status(other)
 		if err != nil {
 			return true
 		}
-		if rt.State.IsActive() || rt.State == types.StateStarting {
+		if status.State.IsActive() || status.State == types.InstanceStateStarting {
 			return true
 		}
 	}
 
 	return false
-}
-
-// checkPorts refuses an instance that would publish a host port another
-// active instance holds. The caller must hold admissionMu.
-func (m *Manager) checkPorts(inst types.InstanceSpec) error {
-	if len(inst.Ports) == 0 {
-		return nil
-	}
-
-	instances, err := m.definitions.ListInstances()
-	if err != nil {
-		return err
-	}
-
-	for _, other := range instances {
-		if other.ID == inst.ID || len(other.Ports) == 0 {
-			continue
-		}
-
-		rt, err := m.Runtime(other)
-		if err != nil {
-			return err
-		}
-		if !rt.State.HoldsResources() && rt.State != types.StateStopping {
-			continue
-		}
-
-		for _, p := range inst.Ports {
-			if slices.ContainsFunc(other.Ports, p.Overlaps) {
-				return errdefs.InvalidState("port %s is already published by instance %q, which is %s",
-					p, other.Name, rt.State.Lower())
-			}
-		}
-	}
-
-	return nil
 }

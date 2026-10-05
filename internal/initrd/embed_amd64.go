@@ -6,6 +6,6 @@ package initrd
 import "embed"
 
 //go:embed bin/amd64
-var binFS embed.FS
+var binaries embed.FS
 
-const binDir = "bin/amd64"
+const binariesDir = "bin/amd64"

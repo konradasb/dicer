@@ -172,11 +172,11 @@ func (p *Project) Select(names ...string) ([]*Service, error) {
 
 // ServiceFor returns the service an instance of the project runs, if it
 // does.
-func (p *Project) ServiceFor(inst *dicerdv1.Instance) (*Service, bool) {
-	if inst.GetLabels()[LabelProject] != p.Name {
+func (p *Project) ServiceFor(instance *dicerdv1.Instance) (*Service, bool) {
+	if instance.GetLabels()[LabelProject] != p.Name {
 		return nil, false
 	}
-	s, ok := p.Services[inst.GetLabels()[LabelService]]
+	s, ok := p.Services[instance.GetLabels()[LabelService]]
 	return s, ok
 }
 

@@ -14,34 +14,34 @@ import (
 // TestStopFailedInstance checks that a failed start can be put to rest: Stop
 // on a Failed instance cleans up and leaves it Stopped, rather than refusing.
 func TestStopFailedInstance(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
-	inst := seedInstance(t, definitions, "web")
+	manager, definitions, _ := newTestManager(t)
+	instance := seedInstance(t, definitions, "web")
 
-	mgr.fail(inst.ID, errors.New("boot failed"))
+	manager.fail(instance.ID, errors.New("boot failed"))
 
-	if err := mgr.Stop(t.Context(), inst); err != nil {
+	if err := manager.Stop(t.Context(), instance); err != nil {
 		t.Fatalf("Stop() of a failed instance = %v, want nil", err)
 	}
 
-	rt, err := mgr.Runtime(inst)
+	status, err := manager.Status(instance)
 	if err != nil {
-		t.Fatalf("Runtime: %v", err)
+		t.Fatalf("Status: %v", err)
 	}
-	if rt.State != types.StateStopped {
-		t.Errorf("state = %s, want %s", rt.State, types.StateStopped)
+	if status.State != types.InstanceStateStopped {
+		t.Errorf("state = %s, want %s", status.State, types.InstanceStateStopped)
 	}
 }
 
 // A stop the client gives up on is still seen through: the host network is
 // torn down as fully as for any other.
 func TestStopOutlivesItsRequest(t *testing.T) {
-	mgr, definitions, hostNetwork := newTestManager(t)
-	inst := seedInstance(t, definitions, "web")
-	mgr.fail(inst.ID, errors.New("boot failed"))
+	manager, definitions, hostNetwork := newTestManager(t)
+	instance := seedInstance(t, definitions, "web")
+	manager.fail(instance.ID, errors.New("boot failed"))
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := mgr.Stop(ctx, inst); err != nil {
+	if err := manager.Stop(ctx, instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 	if n := hostNetwork.cancelledTeardowns.Load(); n > 0 {

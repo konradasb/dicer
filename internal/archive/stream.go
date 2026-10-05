@@ -32,10 +32,10 @@ func Send(src string, send func(chunk []byte) error) (int64, error) {
 	return cw.sent, nil
 }
 
-// Receive unpacks at dest an archive arriving in chunks from recv, which
+// Receive unpacks at dest an archive arriving in chunks from receive, which
 // returns io.EOF after the last.
-func Receive(recv func() ([]byte, error), dest string) error {
-	return Unpack(&chunkReader{recv: recv}, dest)
+func Receive(receive func() ([]byte, error), dest string) error {
+	return Unpack(&chunkReader{receive: receive}, dest)
 }
 
 // chunkWriter sends each write as one chunk.
@@ -57,13 +57,13 @@ func (w *chunkWriter) Write(p []byte) (int, error) {
 
 // chunkReader reads chunks as one continuous stream.
 type chunkReader struct {
-	recv func() ([]byte, error)
-	buf  []byte
+	receive func() ([]byte, error)
+	buf     []byte
 }
 
 func (r *chunkReader) Read(p []byte) (int, error) {
 	for len(r.buf) == 0 {
-		chunk, err := r.recv()
+		chunk, err := r.receive()
 		if errors.Is(err, io.EOF) {
 			return 0, io.EOF
 		}

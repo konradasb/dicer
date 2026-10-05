@@ -16,30 +16,31 @@ import (
 	"github.com/konradasb/dicer/internal/guest"
 )
 
-// bootSystemd injects the dicer-agent.service unit, chroots into the overlay
-// rootfs, and execs systemd as the new PID 1. This function does not return.
+// bootSystemd injects the guest agent's unit and the exit unit, then
+// chroots into the overlay root and execs systemd as PID 1. It does not
+// return.
 func bootSystemd(log *slog.Logger, cfg *guest.Config) {
 	if err := injectGuestAgentUnit(cfg.Env); err != nil {
-		log.Warn("guest agent service injection failed", "err", err)
+		log.Warn("guest agent unit injection failed", "error", err)
 	} else {
-		log.Debug("dicer-agent.service injected")
+		log.Debug("guest agent unit injected")
 	}
 	if err := injectExitUnit(cfg.StatusDevice); err != nil {
-		log.Warn("exit report service injection failed", "err", err)
+		log.Warn("exit unit injection failed", "error", err)
 	}
 
 	if err := syscall.Chroot(overlayRoot); err != nil {
-		fatal(log, "chroot failed", err)
+		fatal(log, "chroot", err)
 	}
 	if err := os.Chdir("/"); err != nil {
-		fatal(log, "chdir / failed", err)
+		fatal(log, "chdir /", err)
 	}
 
 	argv := cfg.Argv()
 	log.Info("exec systemd", "argv", argv)
 
 	if err := syscall.Exec(argv[0], argv, guestEnv(cfg.Env)); err != nil {
-		fatal(log, "exec systemd failed", err)
+		fatal(log, "exec systemd", err)
 	}
 }
 
@@ -53,7 +54,7 @@ Before=shutdown.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/dicer-agent report-exit --device %s --code 0
+ExecStart=` + guestAgentPath + ` report-exit --device %s --code 0
 
 [Install]
 WantedBy=poweroff.target
@@ -82,7 +83,7 @@ func injectExitUnit(device string) error {
 
 	link := wantsDir + "/dicer-exit.service"
 	if err := os.Symlink("../dicer-exit.service", link); err != nil && !errors.Is(err, fs.ErrExist) {
-		return fmt.Errorf("symlink unit: %w", err)
+		return fmt.Errorf("enable unit: %w", err)
 	}
 
 	return nil

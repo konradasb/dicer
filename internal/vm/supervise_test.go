@@ -20,23 +20,23 @@ func TestVMMCrashFailsInstance(t *testing.T) {
 	h.start(t)
 
 	h.crash(t)
-	rt := h.waitForState(t, types.StateFailed)
+	status := h.waitForState(t, types.InstanceStateFailed)
 
-	if !strings.Contains(rt.StateError, "exited unexpectedly") ||
-		!strings.Contains(rt.StateError, "signal: killed") {
-		t.Errorf("state error = %q, want the unexpected exit and its signal", rt.StateError)
+	if !strings.Contains(status.StateError, "exited unexpectedly") ||
+		!strings.Contains(status.StateError, "signal: killed") {
+		t.Errorf("state error = %q, want the unexpected exit and its signal", status.StateError)
 	}
-	if rt.HypervisorPID != nil || rt.HypervisorSocketPath != "" {
-		t.Errorf("runtime still names the dead process: pid=%v socket=%q",
-			rt.HypervisorPID, rt.HypervisorSocketPath)
+	if status.VMMPID != nil || status.HypervisorSocketPath != "" {
+		t.Errorf("status still names the dead process: pid=%v socket=%q",
+			status.VMMPID, status.HypervisorSocketPath)
 	}
-	if h.mgr.vmm(h.inst.ID) != nil {
+	if h.manager.vmm(h.instance.ID) != nil {
 		t.Error("the dead VMM is still registered")
 	}
 
 	// Host resources go with the VMM, not on the next request.
-	if len(h.hostNetwork.removedTAPs) != 1 || h.hostNetwork.removedTAPs[0] != h.inst.ID {
-		t.Errorf("removed TAPs = %v, want [%s]", h.hostNetwork.removedTAPs, h.inst.ID)
+	if len(h.hostNetwork.removedTAPs) != 1 || h.hostNetwork.removedTAPs[0] != h.instance.ID {
+		t.Errorf("removed TAPs = %v, want [%s]", h.hostNetwork.removedTAPs, h.instance.ID)
 	}
 	if len(h.hostNetwork.tornDownBridges) != 1 {
 		t.Errorf("torn down bridges = %v, want the bridge to go with its last instance", h.hostNetwork.tornDownBridges)
@@ -46,8 +46,8 @@ func TestVMMCrashFailsInstance(t *testing.T) {
 	// dead VMM's sockets are still in the runtime directory it left behind:
 	// a real hypervisor refuses to bind over them.
 	stale := []string{
-		filepath.Join(h.mgr.runtimeDir(h.inst.ID), hypervisorSocketFile),
-		filepath.Join(h.mgr.runtimeDir(h.inst.ID), vsockSocketFile),
+		filepath.Join(h.manager.runtimeDir(h.instance.ID), hypervisorSocketFile),
+		filepath.Join(h.manager.runtimeDir(h.instance.ID), vsockSocketFile),
 	}
 	for _, path := range stale {
 		if err := os.WriteFile(path, nil, 0o600); err != nil {
@@ -56,8 +56,8 @@ func TestVMMCrashFailsInstance(t *testing.T) {
 	}
 
 	h.start(t)
-	if rt := h.runtime(t); rt.State != types.StateRunning {
-		t.Errorf("state after restart = %s, want Running", rt.State)
+	if status := h.status(t); status.State != types.InstanceStateRunning {
+		t.Errorf("state after restart = %s, want Running", status.State)
 	}
 	for _, path := range stale {
 		if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
@@ -69,12 +69,12 @@ func TestVMMCrashFailsInstance(t *testing.T) {
 func TestPausedVMMCrashFailsInstance(t *testing.T) {
 	h := newHarness(t)
 	h.start(t)
-	if err := h.mgr.Pause(t.Context(), h.inst); err != nil {
+	if err := h.manager.Pause(t.Context(), h.instance); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
 
 	h.crash(t)
-	h.waitForState(t, types.StateFailed)
+	h.waitForState(t, types.InstanceStateFailed)
 }
 
 func TestStopIsNotACrash(t *testing.T) {
@@ -82,7 +82,7 @@ func TestStopIsNotACrash(t *testing.T) {
 	h.start(t)
 	vmm := h.starter.vmm()
 
-	if err := h.mgr.Stop(t.Context(), h.inst); err != nil {
+	if err := h.manager.Stop(t.Context(), h.instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 
@@ -94,8 +94,8 @@ func TestStopIsNotACrash(t *testing.T) {
 
 	// Give a watcher that wrongly took the exit for a crash time to act.
 	time.Sleep(50 * time.Millisecond)
-	if rt := h.runtime(t); rt.State != types.StateStopped {
-		t.Errorf("state = %s (%s), want Stopped", rt.State, rt.StateError)
+	if status := h.status(t); status.State != types.InstanceStateStopped {
+		t.Errorf("state = %s (%s), want Stopped", status.State, status.StateError)
 	}
 }
 
@@ -104,11 +104,11 @@ func TestStopIsNotACrash(t *testing.T) {
 func TestStopKillsVMMThatIgnoresShutdown(t *testing.T) {
 	h := newHarness(t)
 	h.hv.onShutdown = nil
-	h.mgr.shutdownTimeout = 10 * time.Millisecond
+	h.manager.shutdownTimeout = 10 * time.Millisecond
 	h.start(t)
 	vmm := h.starter.vmm()
 
-	if err := h.mgr.Stop(t.Context(), h.inst); err != nil {
+	if err := h.manager.Stop(t.Context(), h.instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 
@@ -117,8 +117,8 @@ func TestStopKillsVMMThatIgnoresShutdown(t *testing.T) {
 	default:
 		t.Error("Stop returned while the VMM was still running")
 	}
-	if rt := h.runtime(t); rt.State != types.StateStopped {
-		t.Errorf("state = %s, want Stopped", rt.State)
+	if status := h.status(t); status.State != types.InstanceStateStopped {
+		t.Errorf("state = %s, want Stopped", status.State)
 	}
 }
 
@@ -127,7 +127,7 @@ func TestForcedDeleteIsNotACrash(t *testing.T) {
 	h.start(t)
 	vmm := h.starter.vmm()
 
-	if err := h.mgr.Delete(t.Context(), h.inst, true); err != nil {
+	if err := h.manager.Delete(t.Context(), h.instance, true); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 
@@ -138,8 +138,8 @@ func TestForcedDeleteIsNotACrash(t *testing.T) {
 	}
 
 	time.Sleep(50 * time.Millisecond)
-	if rt := h.runtime(t); rt.State != types.StateStopped {
-		t.Errorf("state = %s (%s), want no runtime state left", rt.State, rt.StateError)
+	if status := h.status(t); status.State != types.InstanceStateStopped {
+		t.Errorf("state = %s (%s), want no status left", status.State, status.StateError)
 	}
 }
 
@@ -149,16 +149,16 @@ func TestForcedDeleteIsNotACrash(t *testing.T) {
 func TestOldVMMExitDoesNotTouchNewOne(t *testing.T) {
 	h := newHarness(t)
 	h.start(t)
-	if err := h.mgr.Stop(t.Context(), h.inst); err != nil {
+	if err := h.manager.Stop(t.Context(), h.instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 	h.start(t)
 
 	time.Sleep(50 * time.Millisecond)
-	if rt := h.runtime(t); rt.State != types.StateRunning {
-		t.Errorf("state = %s (%s), want Running", rt.State, rt.StateError)
+	if status := h.status(t); status.State != types.InstanceStateRunning {
+		t.Errorf("state = %s (%s), want Running", status.State, status.StateError)
 	}
-	if h.mgr.vmm(h.inst.ID) != h.starter.vmm() {
+	if h.manager.vmm(h.instance.ID) != h.starter.vmm() {
 		t.Error("the new VMM is no longer registered")
 	}
 }
@@ -166,18 +166,18 @@ func TestOldVMMExitDoesNotTouchNewOne(t *testing.T) {
 func TestRestoredVMMCrashFailsInstance(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
-	if _, err := h.mgr.CreateSnapshot(t.Context(), h.inst, "snap"); err != nil {
+	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "snap"); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.mgr.clearRuntime(h.inst.ID); err != nil {
+	if err := h.manager.removeRuntimeDir(h.instance.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.mgr.RestoreSnapshot(t.Context(), h.inst, "snap"); err != nil {
+	if err := h.manager.RestoreSnapshot(t.Context(), h.instance, "snap"); err != nil {
 		t.Fatalf("RestoreSnapshot: %v", err)
 	}
 
 	h.crash(t)
-	h.waitForState(t, types.StateFailed)
+	h.waitForState(t, types.InstanceStateFailed)
 }
 
 // TestCloseStopsWatching checks that the daemon shutting down leaves its VMMs
@@ -186,12 +186,12 @@ func TestCloseStopsWatching(t *testing.T) {
 	h := newHarness(t)
 	h.start(t)
 
-	h.mgr.Close()
+	h.manager.Close()
 	h.crash(t)
 	<-h.starter.vmm().Done()
 
 	time.Sleep(50 * time.Millisecond)
-	if rt := h.runtime(t); rt.State != types.StateRunning {
-		t.Errorf("state = %s, want Running: a closed manager watches nothing", rt.State)
+	if status := h.status(t); status.State != types.InstanceStateRunning {
+		t.Errorf("state = %s, want Running: a closed manager watches nothing", status.State)
 	}
 }

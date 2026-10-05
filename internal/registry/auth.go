@@ -41,37 +41,41 @@ func (e *CredentialsError) Error() string {
 // Unwrap returns the cause.
 func (e *CredentialsError) Unwrap() error { return e.Err }
 
-// keychain gives each registry the credentials configured for it, by host,
-// and every other registry none: an image there is pulled anonymously.
-type keychain map[string]Auth
+// Keychain gives each registry the credentials configured for it, by host,
+// and every other registry none: an image there is pulled anonymously. The
+// zero Keychain pulls every image anonymously. It implements authn.Keychain.
+type Keychain struct {
+	auths map[string]Auth
+}
 
 // NewKeychain returns a keychain of the credentials in auths, keyed by
 // registry host. Docker Hub may be named docker.io.
-func NewKeychain(auths map[string]Auth) authn.Keychain {
-	k := make(keychain, len(auths))
+func NewKeychain(auths map[string]Auth) Keychain {
+	k := Keychain{auths: make(map[string]Auth, len(auths))}
 	for host, auth := range auths {
-		k[canonicalHost(host)] = auth
+		k.auths[canonicalHost(host)] = auth
 	}
 	return k
 }
 
 // Resolve returns the credentials for a registry. A password file is read
 // each time, so a rotated password is used without a restart.
-func (k keychain) Resolve(res authn.Resource) (authn.Authenticator, error) {
-	auth, ok := k[canonicalHost(res.RegistryStr())]
+func (k Keychain) Resolve(resource authn.Resource) (authn.Authenticator, error) {
+	host := resource.RegistryStr()
+	auth, ok := k.auths[canonicalHost(host)]
 	if !ok {
 		return authn.Anonymous, nil
 	}
 
 	if auth.CredentialHelper != "" {
-		return helperCredentials(auth.CredentialHelper, res.RegistryStr())
+		return helperCredentials(auth.CredentialHelper, host)
 	}
 
 	password := auth.Password
 	if auth.PasswordFile != "" {
 		data, err := os.ReadFile(auth.PasswordFile)
 		if err != nil {
-			return nil, &CredentialsError{Registry: res.RegistryStr(), Err: err}
+			return nil, &CredentialsError{Registry: host, Err: err}
 		}
 		password = strings.TrimSpace(string(data))
 	}
@@ -83,17 +87,17 @@ func (k keychain) Resolve(res authn.Resource) (authn.Authenticator, error) {
 func helperCredentials(helper, host string) (authn.Authenticator, error) {
 	program := "docker-credential-" + helper
 
-	creds, err := client.Get(client.NewShellProgramFunc(program), host)
+	credentials, err := client.Get(client.NewShellProgramFunc(program), host)
 	if err != nil {
 		return nil, &CredentialsError{Registry: host, Err: fmt.Errorf("%s: %w", program, err)}
 	}
 
 	// By the helpers' convention, this username means the secret is an
 	// identity token rather than a password.
-	if creds.Username == "<token>" {
-		return authn.FromConfig(authn.AuthConfig{IdentityToken: creds.Secret}), nil
+	if credentials.Username == "<token>" {
+		return authn.FromConfig(authn.AuthConfig{IdentityToken: credentials.Secret}), nil
 	}
-	return authn.FromConfig(authn.AuthConfig{Username: creds.Username, Password: creds.Secret}), nil
+	return authn.FromConfig(authn.AuthConfig{Username: credentials.Username, Password: credentials.Secret}), nil
 }
 
 // canonicalHost names a registry as references resolve it, so that

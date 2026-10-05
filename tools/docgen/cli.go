@@ -36,12 +36,14 @@ func writeCLI(dir string) error {
 		return err
 	}
 
-	index, err := cliIndex(root)
+	commands := commandPaths(root)
+
+	index, err := cliIndex(root, commands)
 	if err != nil {
 		return err
 	}
 
-	m := meta{
+	m := frontMatter{
 		title: "Command line", weight: 1, icon: "terminal",
 		description: "Every dicer command, with its flags and examples.",
 		collapsed:   true,
@@ -51,8 +53,8 @@ func writeCLI(dir string) error {
 	}
 
 	for _, cmd := range descendants(root) {
-		page := commandPage(cmd)
-		m := meta{title: cmd.CommandPath(), description: cmd.Short}
+		page := commandPage(cmd, commands)
+		m := frontMatter{title: cmd.CommandPath(), description: cmd.Short}
 
 		if err := writePage(filepath.Join(dir, pageName(cmd)+".md"), m, page); err != nil {
 			return err
@@ -62,10 +64,8 @@ func writeCLI(dir string) error {
 	return nil
 }
 
-// commandPaths returns every dicer command's path, the root's included.
-func commandPaths() map[string]bool {
-	root := cli.NewCommand()
-
+// commandPaths returns the path of root and of every command under it.
+func commandPaths(root *cobra.Command) map[string]bool {
 	paths := map[string]bool{root.CommandPath(): true}
 	for _, c := range descendants(root) {
 		paths[c.CommandPath()] = true
@@ -114,7 +114,9 @@ func commandRow(cmd *cobra.Command) string {
 
 // cliIndex returns the section index's body: what dicer is, its commands in
 // the groups its help shows them in, and the flags every command takes.
-func cliIndex(root *cobra.Command) ([]byte, error) {
+// Commands are every command's path, written as code where the text names
+// one.
+func cliIndex(root *cobra.Command, commands map[string]bool) ([]byte, error) {
 	var b bytes.Buffer
 
 	b.WriteString(cliIntro + "\n\n## Commands\n")
@@ -138,7 +140,7 @@ func cliIndex(root *cobra.Command) ([]byte, error) {
 	}
 
 	b.WriteString("\n## Global flags\n\n")
-	writeFlags(&b, root.PersistentFlags(), "Every command takes them, and `-h`, `--help`.")
+	writeFlags(&b, root.PersistentFlags(), "Every command takes them, and `-h`, `--help`.", commands)
 	b.WriteString("\n`dicer --version` prints the version, as `dicer version` does.\n")
 
 	return b.Bytes(), nil
@@ -153,14 +155,14 @@ func groupTitle(title string) string {
 
 // commandPage returns a command's page body: what it does, how it is run, its
 // flags, and, for a group, its commands.
-func commandPage(cmd *cobra.Command) []byte {
+func commandPage(cmd *cobra.Command, commands map[string]bool) []byte {
 	var b bytes.Buffer
 
 	text := cmd.Long
 	if text == "" {
 		text = cmd.Short + "."
 	}
-	b.WriteString(asCode(quotedCommands(text), nil, commandPaths()) + "\n")
+	b.WriteString(asCode(quotedCommands(text), nil, commands) + "\n")
 
 	if !isGroup(cmd) {
 		fmt.Fprintf(&b, "\n## Usage\n\n```console\n$ %s\n```\n", cmd.UseLine())
@@ -187,12 +189,12 @@ func commandPage(cmd *cobra.Command) []byte {
 
 	if flags := ownFlags(cmd); flags.HasAvailableFlags() {
 		b.WriteString("\n## Flags\n\n")
-		writeFlags(&b, flags, "")
+		writeFlags(&b, flags, "", commands)
 	}
 
 	if !isGroup(cmd) {
 		b.WriteString("\n## Global flags\n\n")
-		writeFlags(&b, cmd.InheritedFlags(), "")
+		writeFlags(&b, cmd.InheritedFlags(), "", commands)
 	}
 
 	return b.Bytes()
@@ -241,7 +243,7 @@ func ownFlags(cmd *cobra.Command) *pflag.FlagSet {
 var zeroDefaults = map[string]bool{"": true, "false": true, "0": true, "0s": true, "[]": true}
 
 // writeFlags writes a table of flags, sorted by name, and a note under it.
-func writeFlags(b *bytes.Buffer, flags *pflag.FlagSet, note string) {
+func writeFlags(b *bytes.Buffer, flags *pflag.FlagSet, note string, commands map[string]bool) {
 	var rows []string
 
 	flags.VisitAll(func(f *pflag.Flag) {
@@ -249,28 +251,28 @@ func writeFlags(b *bytes.Buffer, flags *pflag.FlagSet, note string) {
 			return
 		}
 
-		varname, usage := pflag.UnquoteUsage(f)
+		valueName, usage := pflag.UnquoteUsage(f)
 
 		name := "`--" + f.Name
-		if varname != "" {
-			name += " " + varname
+		if valueName != "" {
+			name += " " + valueName
 		}
 		name += "`"
 		if f.Shorthand != "" {
 			name = "`-" + f.Shorthand + "`, " + name
 		}
 
-		text := asCode(strings.TrimSuffix(usage, ".")+".", nil, commandPaths())
-		if def := f.DefValue; !zeroDefaults[def] && !strings.Contains(usage, "(default") {
-			text += " Default: `" + def + "`."
+		text := asCode(strings.TrimSuffix(usage, ".")+".", nil, commands)
+		if !zeroDefaults[f.DefValue] && !strings.Contains(usage, "(default") {
+			text += " Default: `" + f.DefValue + "`."
 		}
 
 		rows = append(rows, fmt.Sprintf("| %s | %s |", name, cell(text)))
 	})
 
 	b.WriteString("| Flag | Description |\n|---|---|\n")
-	for _, r := range rows {
-		b.WriteString(r + "\n")
+	for _, row := range rows {
+		b.WriteString(row + "\n")
 	}
 
 	if note != "" {

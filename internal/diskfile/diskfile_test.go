@@ -4,6 +4,7 @@
 package diskfile
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,19 +12,21 @@ import (
 	"testing"
 )
 
-// needMke2fs skips a test on a host without mke2fs.
-func needMke2fs(t *testing.T) {
+// skipUnlessInstalled skips a test on a host without every one of programs.
+func skipUnlessInstalled(t *testing.T, programs ...string) {
 	t.Helper()
 
-	if _, err := exec.LookPath("mke2fs"); err != nil {
-		t.Skip("mke2fs is not installed")
+	for _, program := range programs {
+		if _, err := exec.LookPath(program); err != nil {
+			t.Skipf("%s is not installed", program)
+		}
 	}
 }
 
 // TestCreateExt4MakesASparseDisk checks the disk file is the size asked for,
 // takes up far less than that, and is left alone in its directory.
 func TestCreateExt4MakesASparseDisk(t *testing.T) {
-	needMke2fs(t)
+	skipUnlessInstalled(t, "mke2fs")
 
 	const size = 64 << 20
 	path := filepath.Join(t.TempDir(), "disks", "overlay.raw")
@@ -54,10 +57,7 @@ func TestCreateExt4MakesASparseDisk(t *testing.T) {
 // TestCreateExt4FromCopiesTheDirectory checks the filesystem holds the files
 // it was made from.
 func TestCreateExt4FromCopiesTheDirectory(t *testing.T) {
-	needMke2fs(t)
-	if _, err := exec.LookPath("debugfs"); err != nil {
-		t.Skip("debugfs is not installed")
-	}
+	skipUnlessInstalled(t, "mke2fs", "debugfs")
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"a":1}`), 0o600); err != nil {
@@ -80,7 +80,7 @@ func TestCreateExt4FromCopiesTheDirectory(t *testing.T) {
 // TestFailedCreateLeavesNothing checks a disk that cannot be formatted leaves
 // no file behind, under its name or another.
 func TestFailedCreateLeavesNothing(t *testing.T) {
-	needMke2fs(t)
+	skipUnlessInstalled(t, "mke2fs")
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.raw")
@@ -100,5 +100,36 @@ func TestFailedCreateLeavesNothing(t *testing.T) {
 func TestAllocatedBytesOfAMissingFileIsZero(t *testing.T) {
 	if got := AllocatedBytes(filepath.Join(t.TempDir(), "missing")); got != 0 {
 		t.Errorf("AllocatedBytes = %d, want 0", got)
+	}
+}
+
+// TestAllocatedBytesUnderSumsTheTree checks every file in the tree is counted,
+// those in subdirectories too.
+func TestAllocatedBytesUnderSumsTheTree(t *testing.T) {
+	dir := t.TempDir()
+	files := []string{filepath.Join(dir, "vmstate"), filepath.Join(dir, "disks", "overlay.raw")}
+	var want int64
+	for _, path := range files {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, bytes.Repeat([]byte{1}, 64<<10), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		want += AllocatedBytes(path)
+	}
+
+	got, err := AllocatedBytesUnder(dir)
+	if err != nil {
+		t.Fatalf("AllocatedBytesUnder: %v", err)
+	}
+	if want == 0 || got != want {
+		t.Errorf("AllocatedBytesUnder = %d, want the files' %d", got, want)
+	}
+}
+
+func TestAllocatedBytesUnderAMissingDirectoryFails(t *testing.T) {
+	if _, err := AllocatedBytesUnder(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Error("AllocatedBytesUnder of a missing directory succeeded")
 	}
 }

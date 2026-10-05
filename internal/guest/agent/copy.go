@@ -37,14 +37,14 @@ func (s *server) CopyIn(stream grpc.ClientStreamingServer[diceragentv1.CopyInReq
 
 	var recvErr error
 	err = archive.Receive(func() ([]byte, error) {
-		msg, err := stream.Recv()
+		req, err := stream.Recv()
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				recvErr = err
 			}
 			return nil, err
 		}
-		return msg.GetData(), nil
+		return req.GetData(), nil
 	}, dest)
 	if err != nil {
 		return copyError(err, recvErr)
@@ -91,17 +91,17 @@ func copyError(err, streamErr error) error {
 
 	// "/srv/x: no such file or directory", not "lstat /srv/x: ...": which
 	// system call found out is nothing the caller can use.
-	msg := err.Error()
+	message := err.Error()
 	if pathErr := (*fs.PathError)(nil); errors.As(err, &pathErr) {
-		msg = pathErr.Path + ": " + pathErr.Err.Error()
+		message = pathErr.Path + ": " + pathErr.Err.Error()
 	}
 
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return status.Error(codes.NotFound, msg)
+		return status.Error(codes.NotFound, message)
 	case errors.Is(err, fs.ErrPermission):
-		return status.Error(codes.PermissionDenied, msg)
+		return status.Error(codes.PermissionDenied, message)
 	default:
-		return status.Error(codes.FailedPrecondition, msg)
+		return status.Error(codes.FailedPrecondition, message)
 	}
 }

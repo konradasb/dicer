@@ -8,12 +8,8 @@ import "path"
 // The guest binaries are built into bin/$GOARCH by `make embedded`. Each
 // architecture's file embeds only its own directory.
 
-// initBinary returns the embedded dicer-init binary.
-func initBinary() ([]byte, error) {
-	return binFS.ReadFile(path.Join(binDir, "dicer-init"))
-}
-
-// agentBinary returns the embedded dicer-agent binary.
-func agentBinary() ([]byte, error) {
-	return binFS.ReadFile(path.Join(binDir, "dicer-agent"))
+// embeddedBinary returns the embedded guest binary of a name, such as
+// dicer-init.
+func embeddedBinary(name string) ([]byte, error) {
+	return binaries.ReadFile(path.Join(binariesDir, name))
 }

@@ -10,8 +10,8 @@ import (
 	"github.com/konradasb/dicer/internal/hypervisor"
 )
 
-func testSpec() hypervisor.VirtualMachine {
-	return hypervisor.VirtualMachine{
+func testSpec() hypervisor.VMSpec {
+	return hypervisor.VMSpec{
 		Boot: hypervisor.BootConfig{
 			KernelPath: "/var/lib/dicer/kernels/k/vmlinux",
 			KernelArgs: "console=ttyS0",
@@ -23,11 +23,11 @@ func testSpec() hypervisor.VirtualMachine {
 			{Path: "/rootfs.img", ReadOnly: true},
 			{Path: "/overlay.img"},
 		},
-		NICs: []hypervisor.NetworkInterfaceConfig{
-			{TapDevice: "tap-abcd1234", MAC: "02:00:00:00:00:01", MTU: 1500},
+		NetworkInterfaces: []hypervisor.NetworkInterfaceConfig{
+			{TAPDevice: "tap-abcd1234", MAC: "02:00:00:00:00:01", MTU: 1500},
 		},
 		Console: hypervisor.ConsoleConfig{Path: "/run/dicer/serial.log"},
-		Vsock:   &hypervisor.VsockConfig{CID: 42, Socket: "/run/dicer/vsock.sock"},
+		Vsock:   &hypervisor.VsockConfig{CID: 42, SocketPath: "/run/dicer/vsock.sock"},
 	}
 }
 
@@ -65,9 +65,9 @@ func TestNewSetup(t *testing.T) {
 		}
 	}
 
-	if len(s.nics) != 1 || s.nics[0].IfaceID != "eth0" ||
-		s.nics[0].HostDevName != "tap-abcd1234" || s.nics[0].MTU != 1500 {
-		t.Errorf("nics = %+v", s.nics)
+	if len(s.networkInterfaces) != 1 || s.networkInterfaces[0].IfaceID != "eth0" ||
+		s.networkInterfaces[0].HostDevName != "tap-abcd1234" || s.networkInterfaces[0].MTU != 1500 {
+		t.Errorf("network interfaces = %+v", s.networkInterfaces)
 	}
 
 	if s.vsock == nil || s.vsock.GuestCID != 42 || s.vsock.UDSPath != "/run/dicer/vsock.sock" {
@@ -106,8 +106,8 @@ func TestNewSetupMemoryRounding(t *testing.T) {
 
 func TestNewSetupDiskRateLimit(t *testing.T) {
 	spec := testSpec()
-	spec.Disks[1].RateLimitBps = 1 << 20
-	spec.Disks[1].RateLimitBurstBps = 3 << 20
+	spec.Disks[1].RateLimitBytesPerSecond = 1 << 20
+	spec.Disks[1].RateLimitBurstBytesPerSecond = 3 << 20
 
 	s, err := newSetup(spec)
 	if err != nil {
@@ -132,19 +132,19 @@ func TestNewSetupDiskRateLimit(t *testing.T) {
 func TestNewSetupRejectsUnsupported(t *testing.T) {
 	tests := []struct {
 		name   string
-		mutate func(*hypervisor.VirtualMachine)
+		mutate func(*hypervisor.VMSpec)
 	}{
-		{"vcpu hotplug", func(s *hypervisor.VirtualMachine) { s.CPU.MaxCount = 8 }},
-		{"cpu topology", func(s *hypervisor.VirtualMachine) {
+		{"vcpu hotplug", func(s *hypervisor.VMSpec) { s.CPU.MaxCount = 8 }},
+		{"cpu topology", func(s *hypervisor.VMSpec) {
 			s.CPU.Topology = &hypervisor.CPUTopology{Packages: 1}
 		}},
-		{"cpu affinity", func(s *hypervisor.VirtualMachine) {
+		{"cpu affinity", func(s *hypervisor.VMSpec) {
 			s.CPU.Affinity = []hypervisor.CPUAffinity{{VCPU: 0, HostCPUs: []int{1}}}
 		}},
-		{"pci passthrough", func(s *hypervisor.VirtualMachine) {
-			s.Devices = []hypervisor.PCIDeviceConfig{{Path: "/sys/bus/pci/devices/0000:00:01.0"}}
+		{"pci passthrough", func(s *hypervisor.VMSpec) {
+			s.PCIDevices = []hypervisor.PCIDeviceConfig{{Path: "/sys/bus/pci/devices/0000:00:01.0"}}
 		}},
-		{"gpu", func(s *hypervisor.VirtualMachine) {
+		{"gpu", func(s *hypervisor.VMSpec) {
 			s.GPU = &hypervisor.GPUConfig{Profile: "nvidia-35"}
 		}},
 	}
@@ -163,17 +163,23 @@ func TestNewSetupRejectsUnsupported(t *testing.T) {
 }
 
 func TestNewSetupRejectsBadSizing(t *testing.T) {
-	for _, vcpus := range []int{0, maxVCPUs + 1} {
-		spec := testSpec()
-		spec.CPU.Count = vcpus
-		if _, err := newSetup(spec); err == nil {
-			t.Errorf("newSetup with %d vCPUs succeeded", vcpus)
-		}
+	tests := []struct {
+		name   string
+		mutate func(*hypervisor.VMSpec)
+	}{
+		{"no vcpus", func(s *hypervisor.VMSpec) { s.CPU.Count = 0 }},
+		{"too many vcpus", func(s *hypervisor.VMSpec) { s.CPU.Count = maxVCPUs + 1 }},
+		{"no memory", func(s *hypervisor.VMSpec) { s.Memory.SizeBytes = 0 }},
 	}
 
-	spec := testSpec()
-	spec.Memory.SizeBytes = 0
-	if _, err := newSetup(spec); err == nil {
-		t.Error("newSetup with no memory succeeded")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := testSpec()
+			tt.mutate(&spec)
+
+			if _, err := newSetup(spec); err == nil {
+				t.Error("newSetup succeeded")
+			}
+		})
 	}
 }

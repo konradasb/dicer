@@ -48,11 +48,7 @@ func resolveTarget(cmd *cobra.Command) (target, error) {
 		return target{name: name, remote: r}, nil
 	}
 
-	dir, err := remote.Dir()
-	if err != nil {
-		return target{}, err
-	}
-	cfg, err := remote.Load(dir)
+	cfg, err := loadRemoteConfig()
 	if err != nil {
 		return target{}, err
 	}
@@ -60,7 +56,7 @@ func resolveTarget(cmd *cobra.Command) (target, error) {
 	if name == "" {
 		name = cfg.CurrentName()
 	}
-	r, err := cfg.Get(name)
+	r, err := cfg.Remote(name)
 	if err != nil {
 		return target{}, err
 	}

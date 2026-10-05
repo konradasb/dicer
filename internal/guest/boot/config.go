@@ -23,9 +23,9 @@ const (
 	configMountPoint = "/mnt/config"
 )
 
-// loadConfigDisk mounts the config disk read-only, reads filename from it,
+// loadConfig mounts the config disk read-only, reads filename from it,
 // and returns the validated Config.
-func loadConfigDisk(log *slog.Logger, filename string) (*guest.Config, error) {
+func loadConfig(log *slog.Logger, filename string) (*guest.Config, error) {
 	if err := os.MkdirAll(configMountPoint, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", configMountPoint, err)
 	}
@@ -37,7 +37,7 @@ func loadConfigDisk(log *slog.Logger, filename string) (*guest.Config, error) {
 	if err := syscall.Mount(configDiskDevice, configMountPoint, "ext4", syscall.MS_RDONLY, ""); err != nil {
 		return nil, fmt.Errorf("mount config disk: %w", err)
 	}
-	log.Debug("config disk mounted", "dev", configDiskDevice)
+	log.Debug("config disk mounted", "device", configDiskDevice)
 
 	data, err := os.ReadFile(filepath.Join(configMountPoint, filename))
 	if err != nil {
@@ -54,6 +54,6 @@ func loadConfigDisk(log *slog.Logger, filename string) (*guest.Config, error) {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
-	log.Info("config loaded", "cfg", cfg)
+	log.Info("config loaded", "config", cfg)
 	return &cfg, nil
 }

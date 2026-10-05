@@ -6,78 +6,22 @@ package grpcapi
 import (
 	"errors"
 	"fmt"
-	"log/slog"
-	"path/filepath"
 	"testing"
 
 	"github.com/konradasb/dicer/internal/errdefs"
-	"github.com/konradasb/dicer/internal/filestore"
-	"github.com/konradasb/dicer/internal/kernel"
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/types"
-	"github.com/konradasb/dicer/internal/vm"
-	"github.com/konradasb/dicer/internal/volume"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
-// testCapacity is a 4-CPU, 8GiB host with the daemon's default admission:
-// 16 vCPUs and 7GiB.
-var testCapacity = types.Capacity{
-	Host:                types.Resources{VCPUs: 4, MemoryBytes: 8 << 30},
-	ReservedMemoryBytes: 1 << 30,
-	CPUOvercommit:       4,
-	MemoryOvercommit:    1,
-}
-
-// newResourceServer returns a Server over a real definition store and a
-// lifecycle manager with testCapacity, and the store.
-func newResourceServer(t *testing.T) (*Server, *filestore.Manager) {
-	t.Helper()
-
-	logger := slog.New(slog.DiscardHandler)
-	dataDir := filepath.Join(t.TempDir(), "data")
-
-	definitions, err := filestore.NewManager(filestore.Config{DataDir: dataDir, Logger: logger})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	networkManager, err := network.NewManager(network.Config{Dir: filepath.Join(dataDir, "allocations"), Logger: logger})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	kernels, err := kernel.NewManager(kernel.Config{DataDir: dataDir, Logger: logger})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	instances := vm.NewManager(vm.Config{
-		Definitions: definitions,
-		RunDir:      filepath.Join(t.TempDir(), "run"),
-		Capacity:    testCapacity,
-		Logger:      logger,
-	})
-
-	return NewServer(Config{
-		Definitions: definitions,
-		Networks:    networkManager,
-		Instances:   instances,
-		Volumes:     volume.NewManager(volume.Config{DataDir: dataDir, Logger: logger}),
-		Kernels:     kernels,
-		DataDir:     dataDir,
-		Logger:      logger,
-	}), definitions
-}
-
 func TestGetResources(t *testing.T) {
-	s, definitions := newResourceServer(t)
+	s, definitions := newTestServer(t)
 
-	for _, inst := range []types.InstanceSpec{
+	for _, instance := range []types.InstanceSpec{
 		{ID: "i-1", Name: "web", VCPUs: 2, MemoryBytes: 1 << 30, DiskBytes: 10 << 30},
 		{ID: "i-2", Name: "db", VCPUs: 1, MemoryBytes: 1 << 30, DiskBytes: 20 << 30},
 	} {
-		if err := definitions.CreateInstance(inst); err != nil {
+		if err := definitions.CreateInstance(instance); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -110,39 +54,6 @@ func TestGetResources(t *testing.T) {
 	}
 	if resp.GetDisk().GetTotalBytes() <= 0 {
 		t.Errorf("disk = %v, want the filesystem's size", resp.GetDisk())
-	}
-}
-
-// A definition that could never start is refused when it is written, not at
-// its first start.
-func TestCreateInstanceTooBigForTheHost(t *testing.T) {
-	s, definitions := newResourceServer(t)
-
-	if err := definitions.CreateKernel(types.Kernel{ID: "k-1", Name: "k"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := definitions.CreateNetwork(types.Network{
-		ID: "n-1", Name: "default", Subnet: "10.0.0.0/24", Gateway: "10.0.0.1", Bridge: "dicer-default",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, tc := range []struct {
-		name   string
-		vcpus  int32
-		memory int64
-	}{
-		{"more vCPUs than CPUs", 5, 1 << 30},
-		{"more memory than allocatable", 1, 8 << 30},
-	} {
-		_, err := s.CreateInstance(t.Context(), &dicerdv1.CreateInstanceRequest{
-			Name: "big", ImageRef: "alpine", KernelName: "k", NetworkName: "default",
-			Vcpus: tc.vcpus, MemoryBytes: tc.memory, DiskBytes: 1 << 30,
-		})
-		wantClass(t, err, errdefs.ErrInvalidArgument)
-		if _, err := definitions.GetInstance("big"); err == nil {
-			t.Errorf("%s: the definition was recorded", tc.name)
-		}
 	}
 }
 

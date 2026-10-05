@@ -98,13 +98,13 @@ func writeMetrics(dir string) error {
 	var body bytes.Buffer
 	body.WriteString(metricsIntro)
 
-	for _, sec := range metricSections {
-		fmt.Fprintf(&body, "\n## %s\n\n", sec.heading)
+	for _, section := range metricSections {
+		fmt.Fprintf(&body, "\n## %s\n\n", section.heading)
 		body.WriteString("| Metric | Type | Labels | Description |\n|---|---|---|---|\n")
-		for _, d := range byGroup[sec.group] {
+		for _, d := range byGroup[section.group] {
 			labels := make([]string, len(d.Labels))
-			for i, l := range d.Labels {
-				labels[i] = "`" + l + "`"
+			for i, label := range d.Labels {
+				labels[i] = "`" + label + "`"
 			}
 
 			text := d.Help
@@ -115,18 +115,18 @@ func writeMetrics(dir string) error {
 			fmt.Fprintf(&body, "| `%s` | %s | %s | %s |\n", d.Name, d.Type, strings.Join(labels, ", "), cell(text))
 		}
 
-		if sec.after != "" {
-			body.WriteString("\n" + sec.after + "\n")
+		if section.after != "" {
+			body.WriteString("\n" + section.after + "\n")
 		}
 
-		delete(byGroup, sec.group)
+		delete(byGroup, section.group)
 	}
 
-	for group, ds := range byGroup {
-		return fmt.Errorf("%s is in group %q, which the reference has no section for", ds[0].Name, group)
+	for group, descriptions := range byGroup {
+		return fmt.Errorf("%s is in group %q, which the reference has no section for", descriptions[0].Name, group)
 	}
 
-	return writePage(filepath.Join(dir, "metrics.md"), meta{
+	return writePage(filepath.Join(dir, "metrics.md"), frontMatter{
 		title: "Metrics", weight: 5, icon: "chart-bar",
 		description: "Every Prometheus metric the daemon serves, with its labels.",
 	}, body.Bytes())

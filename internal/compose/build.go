@@ -1,15 +1,21 @@
 // Copyright 2026 Dicer Authors
 // SPDX-License-Identifier: MIT
 
-// Turning a file's services, networks and volumes into the daemon's
-// requests.
+// Turning a decoded compose file into a Project: its services, networks and
+// volumes checked and made the daemon's requests.
 
 package compose
 
 import (
+	"bytes"
 	"cmp"
 	"errors"
 	"fmt"
+	"maps"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +36,216 @@ const (
 	defaultVolumeBytes = 10 << 30
 )
 
+// notProjectNameCharacters are what a directory's name loses to become a
+// project's.
+var notProjectNameCharacters = regexp.MustCompile(`[^a-z0-9-]+`)
+
+// projectNameFromDir makes a project name from a directory's name, as Docker
+// Compose does: lower case, with what a name cannot hold replaced.
+func projectNameFromDir(dir string) string {
+	name := notProjectNameCharacters.ReplaceAllString(strings.ToLower(filepath.Base(dir)), "-")
+	return strings.Trim(name, "-")
+}
+
+// builder turns a decoded file into a project.
+type builder struct {
+	dir    string
+	lookup Lookup
+	p      *Project
+}
+
+// project builds the project a decoded file describes. A name overrides the
+// file's.
+func (b *builder) project(raw *rawFile, name string) (*Project, error) {
+	if name == "" {
+		name = raw.Name
+	}
+	if name == "" {
+		name = projectNameFromDir(b.dir)
+	}
+	if err := naming.Validate(name); err != nil {
+		return nil, fmt.Errorf("project name %q: use letters, digits and hyphens, starting and ending "+
+			"with a letter or digit; set another with -p or name", name)
+	}
+
+	b.p = &Project{
+		Name:     name,
+		Dir:      b.dir,
+		Services: make(map[string]*Service),
+		Networks: make(map[string]*Network),
+		Volumes:  make(map[string]*Volume),
+	}
+
+	if len(raw.Services) == 0 {
+		return nil, errors.New("the file has no services")
+	}
+
+	for key, n := range raw.Networks {
+		network, err := b.network(key, n)
+		if err != nil {
+			return nil, fmt.Errorf("network %s: %w", key, err)
+		}
+		b.p.Networks[key] = network
+	}
+	// Services that name no network join one of the project's own, so that
+	// their names are theirs alone: a db of another project's is not on it.
+	if _, ok := b.p.Networks["default"]; !ok && slices.ContainsFunc(
+		slices.Collect(maps.Values(raw.Services)),
+		func(s *rawService) bool { return s != nil && len(s.Networks.names) == 0 },
+	) {
+		network, err := b.network("default", nil)
+		if err != nil {
+			return nil, fmt.Errorf("network default: %w", err)
+		}
+		b.p.Networks["default"] = network
+	}
+	for key, v := range raw.Volumes {
+		volume, err := b.volume(key, v)
+		if err != nil {
+			return nil, fmt.Errorf("volume %s: %w", key, err)
+		}
+		b.p.Volumes[key] = volume
+	}
+
+	for _, key := range slices.Sorted(maps.Keys(raw.Services)) {
+		s := raw.Services[key]
+		if s == nil {
+			return nil, fmt.Errorf("service %s: it needs an image", key)
+		}
+		service, err := b.service(key, s)
+		if err != nil {
+			return nil, fmt.Errorf("service %s: %w", key, err)
+		}
+		b.p.Services[key] = service
+	}
+
+	if err := b.checkDependencies(); err != nil {
+		return nil, err
+	}
+	if err := b.checkInstanceNames(); err != nil {
+		return nil, err
+	}
+	return b.p, nil
+}
+
+// resourceName returns the daemon's name for a network or volume: the name
+// the file gives it, the key of an external one, or else PROJECT-KEY.
+func (b *builder) resourceName(key, name string, external bool) (string, error) {
+	switch {
+	case name != "":
+	case external:
+		name = key
+	default:
+		name = b.p.Name + "-" + key
+	}
+
+	if err := naming.Validate(name); err != nil {
+		return "", fmt.Errorf("%q cannot be a name: use letters, digits and hyphens", name)
+	}
+	return name, nil
+}
+
+// checkDependencies refuses a dependency on a service that is not there, or
+// a cycle of them.
+func (b *builder) checkDependencies() error {
+	for _, name := range b.p.ServiceNames() {
+		for _, dep := range b.p.Services[name].DependsOn {
+			if dep.Service == name {
+				return fmt.Errorf("service %s depends on itself", name)
+			}
+			if _, ok := b.p.Services[dep.Service]; !ok {
+				return fmt.Errorf("service %s depends on %s, which is not a service", name, dep.Service)
+			}
+		}
+	}
+
+	const (
+		unvisited = iota
+		visiting
+		done
+	)
+	state := make(map[string]int)
+	var path []string
+	var visit func(name string) error
+	visit = func(name string) error {
+		switch state[name] {
+		case visiting:
+			start := slices.Index(path, name)
+			cycle := append(slices.Clone(path[start:]), name)
+			return fmt.Errorf("services depend on each other in a cycle: %s", strings.Join(cycle, " -> "))
+		case done:
+			return nil
+		}
+
+		state[name] = visiting
+		path = append(path, name)
+		for _, dep := range b.p.Services[name].DependsOn {
+			if err := visit(dep.Service); err != nil {
+				return err
+			}
+		}
+		path = path[:len(path)-1]
+		state[name] = done
+		return nil
+	}
+
+	for _, name := range b.p.ServiceNames() {
+		if err := visit(name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkInstanceNames refuses two services with one instance name, which
+// container_name can give them.
+func (b *builder) checkInstanceNames() error {
+	seen := make(map[string]string)
+	for _, name := range b.p.ServiceNames() {
+		instance := b.p.Services[name].Instance.GetName()
+		if other, ok := seen[instance]; ok {
+			return fmt.Errorf("services %s and %s would both be instance %s", other, name, instance)
+		}
+		seen[instance] = name
+	}
+	return nil
+}
+
+// resolvePath makes a path from the file absolute: from the project
+// directory, or from the home directory for one starting ~.
+func (b *builder) resolvePath(path string) (string, error) {
+	if rest, ok := strings.CutPrefix(path, "~"); ok && (rest == "" || strings.HasPrefix(rest, "/")) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(home, rest), nil
+	}
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path), nil
+	}
+	return filepath.Join(b.dir, path), nil
+}
+
+// readEnvFile reads an env_file, relative to the project directory.
+func (b *builder) readEnvFile(path string) (map[string]*string, error) {
+	abs, err := b.resolvePath(path)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return nil, fmt.Errorf("env_file: %w", err)
+	}
+	vars, err := parseEnvFile(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("env_file %s: %w", path, err)
+	}
+	return vars, nil
+}
+
+// network builds the network under a key of the file's networks. A nil raw
+// is one declared with nothing.
 func (b *builder) network(key string, raw *rawNetwork) (*Network, error) {
 	if raw == nil {
 		raw = &rawNetwork{}
@@ -75,6 +291,8 @@ func (b *builder) network(key string, raw *rawNetwork) (*Network, error) {
 	return n, nil
 }
 
+// volume builds the volume under a key of the file's volumes. A nil raw is
+// one declared with nothing.
 func (b *builder) volume(key string, raw *rawVolume) (*Volume, error) {
 	if raw == nil {
 		raw = &rawVolume{}
@@ -104,6 +322,7 @@ func (b *builder) volume(key string, raw *rawVolume) (*Volume, error) {
 	return v, nil
 }
 
+// service builds the service under a key of the file's services.
 func (b *builder) service(key string, raw *rawService) (*Service, error) {
 	if raw.Image == "" {
 		return nil, errors.New("it needs an image")
@@ -127,7 +346,7 @@ func (b *builder) service(key string, raw *rawService) (*Service, error) {
 		Hostname:          cmp.Or(raw.Hostname, key),
 		KernelName:        raw.Kernel,
 		KernelArgs:        raw.KernelArgs,
-		HypervisorVersion: raw.HypervisorVer,
+		HypervisorVersion: raw.HypervisorVersion,
 		Vcpus:             defaultVCPUs,
 		MemoryBytes:       defaultMemoryBytes,
 		DiskBytes:         defaultDiskBytes,
@@ -145,7 +364,8 @@ func (b *builder) service(key string, raw *rawService) (*Service, error) {
 	}
 
 	steps := []func(*rawService, *dicerdv1.CreateInstanceRequest) error{
-		b.sizes, b.hypervisor, b.environment, b.labels, b.ports, b.mounts, b.networks, b.restart, b.healthcheck,
+		b.setSizes, b.setHypervisor, b.setInitMode, b.setEnvironment, b.setLabels, b.setPorts, b.setMounts,
+		b.setNetwork, b.setRestartPolicy, b.setHealthCheck,
 	}
 	for _, step := range steps {
 		if err := step(raw, req); err != nil {
@@ -168,6 +388,7 @@ func (b *builder) service(key string, raw *rawService) (*Service, error) {
 	return s, nil
 }
 
+// parseCondition parses a depends_on condition. Empty is ConditionStarted.
 func parseCondition(s string) (Condition, error) {
 	switch c := Condition(s); c {
 	case "":
@@ -180,7 +401,8 @@ func parseCondition(s string) (Condition, error) {
 	}
 }
 
-func (b *builder) sizes(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
+// setSizes sets the instance's vCPUs, memory and disk.
+func (b *builder) setSizes(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
 	switch {
 	case raw.VCPUs != nil && raw.CPUs != nil:
 		return errors.New("give vcpus or cpus, not both")
@@ -211,7 +433,8 @@ func (b *builder) sizes(raw *rawService, req *dicerdv1.CreateInstanceRequest) er
 	return nil
 }
 
-func (b *builder) hypervisor(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
+// setHypervisor sets the hypervisor the instance runs under.
+func (b *builder) setHypervisor(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
 	switch raw.Hypervisor {
 	case "":
 	case "cloud-hypervisor":
@@ -221,7 +444,11 @@ func (b *builder) hypervisor(raw *rawService, req *dicerdv1.CreateInstanceReques
 	default:
 		return fmt.Errorf("invalid hypervisor %q: want cloud-hypervisor or firecracker", raw.Hypervisor)
 	}
+	return nil
+}
 
+// setInitMode sets how the guest's init runs the workload.
+func (b *builder) setInitMode(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
 	switch raw.InitMode {
 	case "":
 	case "auto":
@@ -236,10 +463,10 @@ func (b *builder) hypervisor(raw *rawService, req *dicerdv1.CreateInstanceReques
 	return nil
 }
 
-// environment is env_file's variables, in order, then environment's, which
-// win. A variable given no value takes the environment's, and is left out
-// if it has none, as with Docker Compose.
-func (b *builder) environment(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
+// setEnvironment sets env_file's variables, in order, then environment's,
+// which win. A variable given no value takes the environment's, and is left
+// out if it has none, as with Docker Compose.
+func (b *builder) setEnvironment(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
 	env := make(map[string]string)
 	set := func(vars map[string]*string) {
 		for k, v := range vars {
@@ -266,7 +493,8 @@ func (b *builder) environment(raw *rawService, req *dicerdv1.CreateInstanceReque
 	return nil
 }
 
-func (b *builder) labels(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
+// setLabels sets the service's labels, refusing dicer compose's own.
+func (b *builder) setLabels(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
 	req.Labels = make(map[string]string, len(raw.Labels)+3)
 	for k, v := range raw.Labels {
 		if strings.HasPrefix(k, LabelPrefix) {
@@ -281,7 +509,8 @@ func (b *builder) labels(raw *rawService, req *dicerdv1.CreateInstanceRequest) e
 	return nil
 }
 
-func (b *builder) ports(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
+// setPorts sets the ports the instance publishes.
+func (b *builder) setPorts(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
 	for _, p := range raw.Ports {
 		var (
 			m   *dicerdv1.PortMapping
@@ -290,7 +519,7 @@ func (b *builder) ports(raw *rawService, req *dicerdv1.CreateInstanceRequest) er
 		if p.Short != "" {
 			m, err = parseShortPort(p.Short)
 		} else {
-			m, err = longPort(p)
+			m, err = parseLongPort(p)
 		}
 		if err != nil {
 			return fmt.Errorf("line %d: %w", p.line, err)
@@ -341,7 +570,8 @@ func parseShortPort(s string) (*dicerdv1.PortMapping, error) {
 	return m, nil
 }
 
-func longPort(p rawPort) (*dicerdv1.PortMapping, error) {
+// parseLongPort parses Docker's long form of a published port.
+func parseLongPort(p rawPort) (*dicerdv1.PortMapping, error) {
 	if p.Target == 0 || p.Target > 65535 {
 		return nil, errors.New("a port needs a target from 1 to 65535")
 	}
@@ -360,6 +590,7 @@ func longPort(p rawPort) (*dicerdv1.PortMapping, error) {
 	return m, nil
 }
 
+// parsePortNumber parses a port from 1 to 65535, refusing a range.
 func parsePortNumber(s string) (uint32, error) {
 	if strings.Contains(s, "-") {
 		return 0, fmt.Errorf("%q is a range: publish each port on its own", s)
@@ -371,6 +602,7 @@ func parsePortNumber(s string) (uint32, error) {
 	return uint32(n), nil
 }
 
+// parseProtocol parses tcp or udp. Empty is left to the daemon.
 func parseProtocol(s string) (dicerdv1.Protocol, error) {
 	switch s {
 	case "":
@@ -384,9 +616,9 @@ func parseProtocol(s string) (dicerdv1.Protocol, error) {
 	}
 }
 
-// mounts are the service's volumes and tmpfs. A named volume must be one of
-// the file's, and a host path is a file, copied into the guest.
-func (b *builder) mounts(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
+// setMounts sets the service's volumes and tmpfs. A named volume must be one
+// of the file's, and a host path is a file, copied into the guest.
+func (b *builder) setMounts(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
 	for _, m := range raw.Volumes {
 		mount, err := b.mount(m)
 		if err != nil {
@@ -405,6 +637,7 @@ func (b *builder) mounts(raw *rawService, req *dicerdv1.CreateInstanceRequest) e
 	return nil
 }
 
+// mount builds the mount an entry of a service's volumes describes.
 func (b *builder) mount(m rawMount) (*dicerdv1.Mount, error) {
 	kind, source, target, readOnly := m.Type, m.Source, m.Target, m.ReadOnly
 
@@ -472,10 +705,10 @@ func isHostPath(source string) bool {
 	return strings.HasPrefix(source, "/") || strings.HasPrefix(source, ".") || strings.HasPrefix(source, "~")
 }
 
-// networks sets the one network a service joins: the one it names, the
+// setNetwork sets the one network a service joins: the one it names, the
 // file's network called default if it names none, or else the daemon's
 // default.
-func (b *builder) networks(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
+func (b *builder) setNetwork(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
 	names := raw.Networks.names
 	switch len(names) {
 	case 0:
@@ -498,7 +731,8 @@ func (b *builder) networks(raw *rawService, req *dicerdv1.CreateInstanceRequest)
 	return nil
 }
 
-func (b *builder) restart(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
+// setRestartPolicy sets when the instance is restarted.
+func (b *builder) setRestartPolicy(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
 	if raw.Restart == "" {
 		return nil
 	}
@@ -529,8 +763,9 @@ func (b *builder) restart(raw *rawService, req *dicerdv1.CreateInstanceRequest) 
 	return nil
 }
 
-func (b *builder) healthcheck(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
-	h := raw.Healthcheck
+// setHealthCheck sets how the workload's health is checked.
+func (b *builder) setHealthCheck(raw *rawService, req *dicerdv1.CreateInstanceRequest) error {
+	h := raw.HealthCheck
 	if h == nil {
 		return nil
 	}
@@ -569,7 +804,7 @@ func (b *builder) healthcheck(raw *rawService, req *dicerdv1.CreateInstanceReque
 
 	switch {
 	case len(test) > 0:
-		command, err := healthCommand(test)
+		command, err := healthCheckCommand(test)
 		if err != nil {
 			return fmt.Errorf("line %d: healthcheck: %w", h.Test.line, err)
 		}
@@ -592,8 +827,8 @@ func (b *builder) healthcheck(raw *rawService, req *dicerdv1.CreateInstanceReque
 	return nil
 }
 
-// healthCommand turns Docker's test into the command the guest runs.
-func healthCommand(test []string) ([]string, error) {
+// healthCheckCommand turns Docker's test into the command the guest runs.
+func healthCheckCommand(test []string) ([]string, error) {
 	switch test[0] {
 	case "CMD":
 		if len(test) < 2 {
@@ -610,6 +845,8 @@ func healthCommand(test []string) ([]string, error) {
 	}
 }
 
+// duration returns d as a protobuf duration, or nil for zero, which leaves
+// the daemon's default.
 func duration(d time.Duration) *durationpb.Duration {
 	if d == 0 {
 		return nil

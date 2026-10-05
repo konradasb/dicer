@@ -42,7 +42,7 @@ func eachNameOrAll(
 		return eachName(cmd, args, list, do)
 	}
 
-	names, err := listAll(cmd, list)
+	names, err := allNames(cmd, list)
 	if err != nil {
 		return err
 	}
@@ -52,23 +52,21 @@ func eachNameOrAll(
 	return eachName(cmd, names, list, do)
 }
 
-// listAll returns the names list returns, without their descriptions.
-func listAll(cmd *cobra.Command, list completer) ([]string, error) {
+// allNames returns the names list offers, without their descriptions.
+func allNames(cmd *cobra.Command, list completer) ([]string, error) {
 	client, cleanup, err := newClient(cmd)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
 
-	entries, err := list(cmd.Context(), client, nil)
+	names, err := list(cmd.Context(), client, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		name, _, _ := strings.Cut(e, "\t")
-		names = append(names, name)
+	for i, n := range names {
+		names[i] = completionValue(n)
 	}
 	return names, nil
 }

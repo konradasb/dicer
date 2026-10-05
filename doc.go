@@ -14,7 +14,7 @@
 //	}
 //	defer c.Close()
 //
-//	inst, err := c.GetInstance(ctx, &dicerdv1.GetInstanceRequest{Name: "web"})
+//	instance, err := c.GetInstance(ctx, &dicerdv1.GetInstanceRequest{Name: "web"})
 //
 // A daemon on another machine is named by its address, a gRPC target:
 //

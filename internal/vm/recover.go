@@ -14,7 +14,7 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// Recover reconciles recorded runtime state with what is running on the host.
+// Recover reconciles recorded instance status with what is running on the host.
 // It runs once at startup, before the API is served. For each instance:
 //
 //   - Running or Paused, VMM alive: adopt it.
@@ -22,15 +22,12 @@ import (
 //   - Starting or Stopping: kill the VMM, release resources, mark Failed.
 //   - Restarting: schedule the restart again.
 //   - Stopped or Failed: nothing.
-func (m *Manager) Recover(ctx context.Context) error {
-	instances, err := m.definitions.ListInstances()
-	if err != nil {
-		return err
-	}
+func (m *Manager) Recover(ctx context.Context) {
+	instances := m.definitions.Instances()
 
 	var adopted, cleaned int
-	for _, inst := range instances {
-		switch m.recoverInstance(ctx, inst) {
+	for _, instance := range instances {
+		switch m.recoverInstance(ctx, instance) {
 		case recoveryAdopted:
 			adopted++
 		case recoveryCleaned:
@@ -41,16 +38,14 @@ func (m *Manager) Recover(ctx context.Context) error {
 
 	live := make(map[string]struct{}, len(instances))
 	networks := make(map[string]struct{})
-	for _, inst := range instances {
-		live[inst.ID] = struct{}{}
-		networks[inst.NetworkName] = struct{}{}
+	for _, instance := range instances {
+		live[instance.ID] = struct{}{}
+		networks[instance.NetworkName] = struct{}{}
 	}
 
 	// Include networks with no instances so stale allocations are dropped.
-	if all, err := m.definitions.ListNetworks(); err == nil {
-		for _, n := range all {
-			networks[n.Name] = struct{}{}
-		}
+	for _, n := range m.definitions.Networks() {
+		networks[n.Name] = struct{}{}
 	}
 
 	released, err := m.networks.Reconcile(slices.Collect(maps.Keys(networks)), live)
@@ -66,10 +61,9 @@ func (m *Manager) Recover(ctx context.Context) error {
 		"cleaned_up", cleaned,
 		"allocations_released", released,
 	)
-
-	return nil
 }
 
+// recovery is what recoverInstance did with an instance.
 type recovery int
 
 const (
@@ -79,67 +73,67 @@ const (
 )
 
 // recoverInstance applies Recover to one instance.
-func (m *Manager) recoverInstance(ctx context.Context, inst types.InstanceSpec) recovery {
-	lock := m.lock(inst.ID)
+func (m *Manager) recoverInstance(ctx context.Context, instance types.InstanceSpec) recovery {
+	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
 
-	rt, err := m.Runtime(inst)
+	status, err := m.Status(instance)
 	if err != nil {
-		m.logger.WarnContext(ctx, "cannot read runtime state, skipping",
-			"instance", inst.Name, "error", err)
+		m.logger.WarnContext(ctx, "cannot read instance status, skipping",
+			"instance", instance.Name, "error", err)
 		return recoveryNone
 	}
 
-	switch rt.State {
-	case types.StateStopped, types.StateFailed:
+	switch status.State {
+	case types.InstanceStateStopped, types.InstanceStateFailed:
 		return recoveryNone
-	case types.StateRestarting:
-		m.scheduleRestart(ctx, inst.ID, rt.NextRestartAt)
+	case types.InstanceStateRestarting:
+		m.scheduleRestart(ctx, instance.ID, status.NextRestartAt)
 		m.logger.InfoContext(ctx, "instance is waiting to restart",
-			"instance", inst.Name, "restart_at", rt.NextRestartAt)
+			"instance", instance.Name, "restart_at", status.NextRestartAt)
 		return recoveryNone
 	}
 
 	var vmm *process.Process
-	if rt.HypervisorPID != nil {
-		vmm, err = m.attach(*rt.HypervisorPID, rt.HypervisorSocketPath)
+	if status.VMMPID != nil {
+		vmm, err = m.attach(*status.VMMPID, status.HypervisorSocketPath)
 		if err != nil {
 			m.logger.DebugContext(ctx, "recorded hypervisor is not running",
-				"instance", inst.Name, "pid", *rt.HypervisorPID, "error", err)
+				"instance", instance.Name, "pid", *status.VMMPID, "error", err)
 		}
 	}
 
-	if vmm != nil && rt.State.IsActive() {
-		m.supervise(ctx, inst, vmm, rt)
+	if vmm != nil && status.State.IsActive() {
+		m.supervise(ctx, instance, vmm, status)
 		m.logger.InfoContext(ctx, "adopted running instance",
-			"instance", inst.Name, "state", rt.State, "pid", vmm.PID())
+			"instance", instance.Name, "state", status.State, "pid", vmm.PID())
 		return recoveryAdopted
 	}
 
-	if rt.State.IsActive() {
+	if status.State.IsActive() {
 		m.logger.WarnContext(ctx, "instance ended while dicerd was not running",
-			"instance", inst.Name, "recorded_state", rt.State)
-		exit := m.readExit(inst.ID, process.ErrExitStatusUnknown)
+			"instance", instance.Name, "recorded_state", status.State)
+		exit := m.readExit(instance.ID, process.ErrExitStatusUnknown)
 		if !exit.Clean() {
 			exit.Failure = fmt.Errorf("%w, while dicerd was not running", exit.Failure)
 		}
-		m.ended(ctx, inst, rt, exit)
+		m.ended(ctx, instance, status, exit)
 		return recoveryCleaned
 	}
 
-	cause := fmt.Errorf("%s interrupted by a daemon restart", operationOf(rt.State))
+	cause := fmt.Errorf("%s interrupted by a daemon restart", operationOf(status.State))
 
 	if vmm != nil {
 		vmm.Terminate()
 	}
 
 	m.logger.WarnContext(ctx, "instance did not survive daemon restart, cleaning up",
-		"instance", inst.Name, "recorded_state", rt.State, "cause", cause)
+		"instance", instance.Name, "recorded_state", status.State, "cause", cause)
 
-	m.teardownNetwork(ctx, inst)
-	m.fail(inst.ID, cause)
-	m.record(inst, events.ActionDied, "Instance failed: "+cause.Error(), nil)
+	m.teardownNetwork(ctx, instance)
+	m.fail(instance.ID, cause)
+	m.record(instance, events.ActionDied, "Instance failed: "+cause.Error(), nil)
 
 	return recoveryCleaned
 }
@@ -151,19 +145,19 @@ func (m *Manager) recoverInstance(ctx context.Context, inst types.InstanceSpec) 
 // still.
 func (m *Manager) restoreAdoptedNetworks(ctx context.Context, instances []types.InstanceSpec) {
 	restored := make(map[string]bool)
-	for _, inst := range instances {
-		if restored[inst.NetworkName] {
+	for _, instance := range instances {
+		if restored[instance.NetworkName] {
 			continue
 		}
-		rt, err := m.Runtime(inst)
-		if err != nil || !rt.State.IsActive() {
+		status, err := m.Status(instance)
+		if err != nil || !status.State.IsActive() {
 			continue
 		}
-		nw, err := m.definitions.GetNetwork(inst.NetworkName)
+		nw, err := m.definitions.Network(instance.NetworkName)
 		if err != nil {
 			continue
 		}
-		restored[inst.NetworkName] = true
+		restored[instance.NetworkName] = true
 		m.restoreNetwork(ctx, nw)
 	}
 }
@@ -184,10 +178,10 @@ func (m *Manager) restoreNetwork(ctx context.Context, nw types.Network) {
 // operationOf names the operation an in-progress state belongs to.
 func operationOf(s types.InstanceState) string {
 	switch s {
-	case types.StateStarting:
-		return opStart
-	case types.StateStopping:
-		return opStop
+	case types.InstanceStateStarting:
+		return operationStart
+	case types.InstanceStateStopping:
+		return operationStop
 	default:
 		return string(s)
 	}
@@ -196,28 +190,24 @@ func operationOf(s types.InstanceState) string {
 // StartOnBoot starts every Stopped or Failed instance whose restart policy
 // starts it on boot. It runs after Recover.
 func (m *Manager) StartOnBoot(ctx context.Context) {
-	instances, err := m.definitions.ListInstances()
-	if err != nil {
-		m.logger.WarnContext(ctx, "cannot list instances to start on boot", "error", err)
-		return
-	}
+	instances := m.definitions.Instances()
 
-	for _, inst := range instances {
+	for _, instance := range instances {
 		if ctx.Err() != nil {
 			return
 		}
-		if !inst.Restart.StartsOnBoot(inst.StoppedByUser) {
+		if !instance.Restart.StartsOnBoot(instance.StoppedByUser) {
 			continue
 		}
 
-		rt, err := m.Runtime(inst)
-		if err != nil || (rt.State != types.StateStopped && rt.State != types.StateFailed) {
+		status, err := m.Status(instance)
+		if err != nil || (status.State != types.InstanceStateStopped && status.State != types.InstanceStateFailed) {
 			continue
 		}
 
-		if err := m.Start(ctx, inst); err != nil {
+		if err := m.Start(ctx, instance); err != nil {
 			m.logger.ErrorContext(ctx, "start on boot failed",
-				"instance", inst.Name, "error", err)
+				"instance", instance.Name, "error", err)
 			continue
 		}
 	}

@@ -17,7 +17,7 @@ import (
 // deletion are recorded with its URL and architecture, and refused requests
 // are not.
 func TestKernelImportedAndDeletedAreRecorded(t *testing.T) {
-	s, definitions := newResourceServer(t)
+	s, definitions := newTestServer(t)
 	recorded := &fakeRecorder{}
 	s.kernelHandler.events = recorded
 
@@ -72,7 +72,7 @@ func TestKernelImportedAndDeletedAreRecorded(t *testing.T) {
 // TestDeletingAFetchedKernelSaysItsCopyWentToo checks the deleted event of a
 // kernel fetched to the host says its copy was removed with it.
 func TestDeletingAFetchedKernelSaysItsCopyWentToo(t *testing.T) {
-	s, definitions := newResourceServer(t)
+	s, definitions := newTestServer(t)
 	recorded := &fakeRecorder{}
 	s.kernelHandler.events = recorded
 
@@ -85,7 +85,7 @@ func TestDeletingAFetchedKernelSaysItsCopyWentToo(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("ImportKernel: %v", err)
 	}
-	k, err := definitions.GetKernel("k")
+	k, err := definitions.Kernel("k")
 	if err != nil {
 		t.Fatal(err)
 	}

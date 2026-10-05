@@ -103,8 +103,8 @@ type Metrics struct {
 }
 
 // New creates the registry and registers every metric on it.
-func New(opts Options) *Metrics {
-	logger := opts.Logger
+func New(options Options) *Metrics {
+	logger := options.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -115,33 +115,33 @@ func New(opts Options) *Metrics {
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
-	m.registerBuildInfo(opts.Version, opts.Commit)
+	m.registerBuildInfo(options.Version, options.Commit)
 
-	if src := opts.Sources.Instances; src != nil {
-		m.registry.MustRegister(m.newInstanceCollector(src))
+	if source := options.Sources.Instances; source != nil {
+		m.registry.MustRegister(m.newInstanceCollector(source))
 	}
 	m.instance = m.newInstanceMetrics()
 
-	if src := opts.Sources.InstanceStats; src != nil {
-		m.registry.MustRegister(m.newInstanceStatsCollector(src))
+	if source := options.Sources.InstanceStats; source != nil {
+		m.registry.MustRegister(m.newInstanceStatsCollector(source))
 	}
 
-	if src := opts.Sources.Images; src != nil {
-		m.registry.MustRegister(m.newImageCollector(src))
+	if source := options.Sources.Images; source != nil {
+		m.registry.MustRegister(m.newImageCollector(source))
 	}
 	m.image = m.newImageMetrics()
 
-	if src := opts.Sources.Kernels; src != nil {
-		m.registry.MustRegister(m.newKernelCollector(src))
+	if source := options.Sources.Kernels; source != nil {
+		m.registry.MustRegister(m.newKernelCollector(source))
 	}
 	m.kernel = m.newKernelMetrics()
 
-	if src := opts.Sources.Volumes; src != nil {
-		m.registry.MustRegister(m.newVolumeCollector(src))
+	if source := options.Sources.Volumes; source != nil {
+		m.registry.MustRegister(m.newVolumeCollector(source))
 	}
 
-	if src := opts.Sources.Networks; src != nil {
-		m.registry.MustRegister(m.newNetworkCollector(src))
+	if source := options.Sources.Networks; source != nil {
+		m.registry.MustRegister(m.newNetworkCollector(source))
 	}
 	m.dns = m.newDNSMetrics()
 

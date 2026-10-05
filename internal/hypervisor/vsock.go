@@ -19,15 +19,15 @@ const vsockHandshakeTimeout = 5 * time.Second
 // DialVsock connects to a guest port through the VMM's hybrid vsock Unix
 // socket, using the "CONNECT <port>" handshake.
 func DialVsock(ctx context.Context, socketPath string, port uint32) (net.Conn, error) {
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "unix", socketPath)
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(ctx, "unix", socketPath)
 	if err != nil {
 		return nil, fmt.Errorf("dial vsock socket %s: %w", socketPath, err)
 	}
 
 	deadline := time.Now().Add(vsockHandshakeTimeout)
-	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
-		deadline = d
+	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
+		deadline = ctxDeadline
 	}
 	if err := conn.SetDeadline(deadline); err != nil {
 		_ = conn.Close()
@@ -65,6 +65,7 @@ type bufferedConn struct {
 	reader *bufio.Reader
 }
 
+// Read implements io.Reader.
 func (c *bufferedConn) Read(p []byte) (int, error) {
 	return c.reader.Read(p)
 }

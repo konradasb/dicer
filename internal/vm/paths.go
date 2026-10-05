@@ -12,13 +12,13 @@ import (
 
 // An instance's files live in two places: the persistent instance directory,
 // keyed by name, holds the overlay disk, console log and snapshots; the
-// runtime directory under RunDir, keyed by ID, holds the runtime state,
-// sockets, config and status disks and the VMM's log.
+// runtime directory under RunDir, keyed by ID, holds the status, sockets,
+// config and status disks and the VMM's log.
 const (
 	overlayDiskFile      = "overlay.img"
 	serialLogFile        = "serial.log"
 	snapshotsDirName     = "snapshots"
-	runtimeStateFile     = "state.json"
+	statusFile           = "state.json"
 	configDiskFile       = "config.img"
 	statusDiskFile       = "status.img"
 	hypervisorSocketFile = "hypervisor.sock"
@@ -27,39 +27,39 @@ const (
 )
 
 // instanceDir returns an instance's persistent directory.
-func (m *Manager) instanceDir(inst types.InstanceSpec) string {
-	return m.definitions.InstanceDir(inst.Name)
+func (m *Manager) instanceDir(instance types.InstanceSpec) string {
+	return m.definitions.InstanceDir(instance.Name)
 }
 
 // overlayDiskPath returns the writable disk holding an instance's root
 // filesystem.
-func (m *Manager) overlayDiskPath(inst types.InstanceSpec) string {
-	return filepath.Join(m.instanceDir(inst), overlayDiskFile)
+func (m *Manager) overlayDiskPath(instance types.InstanceSpec) string {
+	return filepath.Join(m.instanceDir(instance), overlayDiskFile)
 }
 
 // serialLogPath returns the file an instance's serial console is written to.
-func (m *Manager) serialLogPath(inst types.InstanceSpec) string {
-	return filepath.Join(m.instanceDir(inst), serialLogFile)
+func (m *Manager) serialLogPath(instance types.InstanceSpec) string {
+	return filepath.Join(m.instanceDir(instance), serialLogFile)
 }
 
 // snapshotsDir returns the directory holding an instance's snapshots.
-func (m *Manager) snapshotsDir(inst types.InstanceSpec) string {
-	return filepath.Join(m.instanceDir(inst), snapshotsDirName)
+func (m *Manager) snapshotsDir(instance types.InstanceSpec) string {
+	return filepath.Join(m.instanceDir(instance), snapshotsDirName)
 }
 
 // snapshotDir returns the directory holding one snapshot.
-func (m *Manager) snapshotDir(inst types.InstanceSpec, name string) string {
-	return filepath.Join(m.snapshotsDir(inst), name)
+func (m *Manager) snapshotDir(instance types.InstanceSpec, name string) string {
+	return filepath.Join(m.snapshotsDir(instance), name)
 }
 
 // snapshotMetadataPath returns the file recording a snapshot's metadata.
-func (m *Manager) snapshotMetadataPath(inst types.InstanceSpec, name string) string {
-	return filepath.Join(m.snapshotDir(inst, name), snapshotMetadataFile)
+func (m *Manager) snapshotMetadataPath(instance types.InstanceSpec, name string) string {
+	return filepath.Join(m.snapshotDir(instance, name), snapshotMetadataFile)
 }
 
 // snapshotOverlayDiskPath returns a snapshot's copy of the overlay disk.
-func (m *Manager) snapshotOverlayDiskPath(inst types.InstanceSpec, name string) string {
-	return filepath.Join(m.snapshotDir(inst, name), overlayDiskFile)
+func (m *Manager) snapshotOverlayDiskPath(instance types.InstanceSpec, name string) string {
+	return filepath.Join(m.snapshotDir(instance, name), overlayDiskFile)
 }
 
 // runtimeDir returns an instance's ephemeral directory.
@@ -67,9 +67,9 @@ func (m *Manager) runtimeDir(instanceID string) string {
 	return filepath.Join(m.runDir, "instances", instanceID)
 }
 
-// runtimeStatePath returns the file an instance's runtime state is kept in.
-func (m *Manager) runtimeStatePath(instanceID string) string {
-	return filepath.Join(m.runtimeDir(instanceID), runtimeStateFile)
+// statusPath returns the file an instance's status is kept in.
+func (m *Manager) statusPath(instanceID string) string {
+	return filepath.Join(m.runtimeDir(instanceID), statusFile)
 }
 
 // configDiskPath returns the disk dicer-init reads its configuration from.

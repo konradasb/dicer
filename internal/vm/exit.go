@@ -24,23 +24,20 @@ type Exit struct {
 // Clean reports whether the guest ended because it meant to.
 func (e Exit) Clean() bool { return e.Failure == nil }
 
-// failedExit is the Exit of an instance that ended because of cause.
-func failedExit(cause error) Exit { return Exit{Failure: cause} }
-
 // readExit reads how an instance's guest ended from its status disk. vmmErr
 // is the VMM's process.Process.Err.
 func (m *Manager) readExit(instanceID string, vmmErr error) Exit {
-	st, err := readStatusDisk(m.statusDiskPath(instanceID))
+	guestStatus, err := readStatusDisk(m.statusDiskPath(instanceID))
 	if err != nil {
 		m.logger.Warn("cannot read how the guest ended", "instance_id", instanceID, "error", err)
 	}
-	return classifyExit(st, vmmErr)
+	return classifyExit(guestStatus, vmmErr)
 }
 
 // classifyExit decides an Exit from the guest's status and the VMM's error.
-func classifyExit(st guest.Status, vmmErr error) Exit {
-	if st.ExitCode != nil {
-		code := *st.ExitCode
+func classifyExit(guestStatus guest.Status, vmmErr error) Exit {
+	if guestStatus.ExitCode != nil {
+		code := *guestStatus.ExitCode
 		if code == 0 {
 			return Exit{Code: &code}
 		}
@@ -48,13 +45,13 @@ func classifyExit(st guest.Status, vmmErr error) Exit {
 	}
 
 	switch {
-	case st.Boots > 1:
-		return failedExit(errors.New("guest reset (kernel panic or reboot)"))
+	case guestStatus.Boots > 1:
+		return Exit{Failure: errors.New("guest reset (kernel panic or reboot)")}
 	case errors.Is(vmmErr, process.ErrExitStatusUnknown):
-		return failedExit(errors.New("hypervisor exited, no exit code reported"))
+		return Exit{Failure: errors.New("hypervisor exited, no exit code reported")}
 	case vmmErr != nil:
-		return failedExit(fmt.Errorf("hypervisor exited unexpectedly: %w", vmmErr))
+		return Exit{Failure: fmt.Errorf("hypervisor exited unexpectedly: %w", vmmErr)}
 	default:
-		return failedExit(errors.New("guest ended, no exit code reported"))
+		return Exit{Failure: errors.New("guest ended, no exit code reported")}
 	}
 }

@@ -59,7 +59,7 @@ func TestStartReportsCleanExit(t *testing.T) {
 	}
 }
 
-func TestKillAfterExit(t *testing.T) {
+func TestKillAfterExitSucceeds(t *testing.T) {
 	p, err := Start(exec.CommandContext(t.Context(), "true"))
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -72,7 +72,7 @@ func TestKillAfterExit(t *testing.T) {
 	p.Terminate()
 }
 
-func TestStartFailure(t *testing.T) {
+func TestStartFailsForMissingBinary(t *testing.T) {
 	if _, err := Start(exec.CommandContext(t.Context(), "/nonexistent/binary")); err == nil {
 		t.Error("Start of a missing binary succeeded")
 	}

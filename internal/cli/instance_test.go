@@ -13,11 +13,6 @@ import (
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
-// buildCreateRequest merges a YAML definition with command-line flags. The
-// merge is guarded by flags.Changed so that cobra's defaults do not silently
-// overwrite what the file said -- a wrong guard loses user input without any
-// error, so the precedence rules are worth pinning down.
-
 // runBuild parses argv through a real create command and returns the request
 // it would send, exercising the flag plumbing rather than bypassing it.
 func runBuild(t *testing.T, argv ...string) (*dicerdv1.CreateInstanceRequest, error) {

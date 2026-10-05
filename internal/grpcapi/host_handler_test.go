@@ -21,12 +21,12 @@ var errFakeStarter = errors.New("fake starter")
 // fakeStarter is a hypervisor.Starter that only knows its version.
 type fakeStarter struct{ version string }
 
-func (f fakeStarter) Version() string         { return f.version }
-func (f fakeStarter) DefaultBootArgs() string { return "" }
-func (f fakeStarter) PowerOffEndsVM() bool    { return true }
+func (f fakeStarter) Version() string           { return f.version }
+func (f fakeStarter) DefaultKernelArgs() string { return "" }
+func (f fakeStarter) PowerOffEndsVM() bool      { return true }
 
 func (f fakeStarter) StartVM(
-	context.Context, string, hypervisor.VirtualMachine,
+	context.Context, string, hypervisor.VMSpec,
 ) (*process.Process, hypervisor.Hypervisor, error) {
 	return nil, nil, errFakeStarter
 }
@@ -41,13 +41,13 @@ func (f fakeStarter) Connect(string) (hypervisor.Hypervisor, error) {
 	return nil, errFakeStarter
 }
 
-func TestHypervisorInfo(t *testing.T) {
+func TestHypervisorInfosPutTheDefaultFirst(t *testing.T) {
 	h := &hostHandler{hypervisors: map[types.HypervisorType][]hypervisor.Starter{
-		types.HypervisorFirecracker:     {fakeStarter{version: "v1.17.0"}},
-		types.HypervisorCloudHypervisor: {fakeStarter{version: "v49.0.0"}, fakeStarter{version: "v48.0.0"}},
+		types.HypervisorTypeFirecracker:     {fakeStarter{version: "v1.17.0"}},
+		types.HypervisorTypeCloudHypervisor: {fakeStarter{version: "v49.0.0"}, fakeStarter{version: "v48.0.0"}},
 	}}
 
-	got := h.hypervisorInfo()
+	got := h.hypervisorInfos()
 	if len(got) != 2 {
 		t.Fatalf("got %d hypervisors, want 2", len(got))
 	}
@@ -65,15 +65,15 @@ func TestHypervisorInfo(t *testing.T) {
 	}
 }
 
-// TestHypervisorInfoOmitsMissingDrivers covers a daemon that could not build
+// TestHypervisorInfosOmitMissingDrivers covers a daemon that could not build
 // a starter: what it cannot start must not be advertised.
-func TestHypervisorInfoOmitsMissingDrivers(t *testing.T) {
+func TestHypervisorInfosOmitMissingDrivers(t *testing.T) {
 	h := &hostHandler{hypervisors: map[types.HypervisorType][]hypervisor.Starter{
-		types.HypervisorCloudHypervisor: {fakeStarter{version: "v49.0.0"}},
+		types.HypervisorTypeCloudHypervisor: {fakeStarter{version: "v49.0.0"}},
 	}}
 
-	got := h.hypervisorInfo()
+	got := h.hypervisorInfos()
 	if len(got) != 1 || got[0].GetType() != dicerdv1.HypervisorType_HYPERVISOR_TYPE_CLOUD_HYPERVISOR {
-		t.Errorf("hypervisorInfo() = %+v, want only cloud-hypervisor", got)
+		t.Errorf("hypervisorInfos() = %+v, want only cloud-hypervisor", got)
 	}
 }

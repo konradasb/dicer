@@ -47,7 +47,7 @@ func TestRecordInstanceRestart(t *testing.T) {
 }
 
 func TestInstanceGaugesAreReadPerScrape(t *testing.T) {
-	stats := InstanceSummary{
+	summary := InstanceSummary{
 		ByState:     map[string]int{"running": 1, "stopped": 0},
 		ByHealth:    map[string]int{"healthy": 1, "unhealthy": 0},
 		VCPUs:       2,
@@ -61,7 +61,7 @@ func TestInstanceGaugesAreReadPerScrape(t *testing.T) {
 	m := New(Options{Sources: Sources{
 		Instances: func() InstanceSummary {
 			reads++
-			return stats
+			return summary
 		},
 	}})
 
@@ -88,7 +88,7 @@ func TestInstanceGaugesAreReadPerScrape(t *testing.T) {
 	}
 
 	// The gauges follow the world rather than being set once at startup.
-	stats.ByState["running"] = 4
+	summary.ByState["running"] = 4
 	if body := scrape(t, m); !strings.Contains(body, `dicer_instances{state="running"} 4`) {
 		t.Errorf("second scrape did not pick up the new value:\n%s", body)
 	}

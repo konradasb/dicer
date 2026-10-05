@@ -4,12 +4,11 @@
 // Package grpcapi implements the DaemonService gRPC service and the audit
 // interceptors in front of it.
 //
-// Handlers validate the request, call the store or the lifecycle manager, and
-// convert the result. They take their dependencies as concrete types.
+// Handlers validate the request, call the definitions (filestore) or the
+// lifecycle manager (vm), and convert the result. They take their dependencies as concrete types.
 package grpcapi
 
 import (
-	"log/slog"
 	"net/netip"
 
 	"google.golang.org/grpc"
@@ -37,7 +36,10 @@ type Config struct {
 	Images      *image.Manager
 	Kernels     *kernel.Manager
 	Volumes     *volume.Manager
-	Events      *events.Log
+
+	// Events is the event log GetEvents reads and the handlers record to.
+	// Nil records nothing.
+	Events *events.Log
 
 	// APIAddress is the daemon's TCP address, or empty.
 	APIAddress string
@@ -52,8 +54,8 @@ type Config struct {
 	// Defaults are the configured default kernel and network.
 	Defaults Defaults
 
+	// Version is the daemon's version, as GetHostInfo reports it.
 	Version string
-	Logger  *slog.Logger
 }
 
 // recorder records what happens to the resources the API changes.
@@ -91,10 +93,6 @@ type Server struct {
 
 // NewServer creates a Server with the given configuration.
 func NewServer(cfg Config) *Server {
-	if cfg.Logger == nil {
-		cfg.Logger = slog.Default()
-	}
-
 	defaults := defaultResolver{definitions: cfg.Definitions, configured: cfg.Defaults}
 
 	return &Server{
@@ -102,11 +100,10 @@ func NewServer(cfg Config) *Server {
 			definitions: cfg.Definitions,
 			instances:   cfg.Instances,
 			defaults:    defaults,
-			logger:      cfg.Logger,
 
 			statsInterval: instanceStatsInterval,
 		},
-		snapshotHandler: snapshotHandler{definitions: cfg.Definitions, instances: cfg.Instances, logger: cfg.Logger},
+		snapshotHandler: snapshotHandler{definitions: cfg.Definitions, instances: cfg.Instances},
 		networkHandler: networkHandler{
 			definitions: cfg.Definitions,
 			networks:    cfg.Networks,
@@ -151,13 +148,9 @@ func (s *Server) Register(gs *grpc.Server) {
 // refuseInUse returns an ErrInvalidState error naming the first instance
 // for which inUse is true, or nil. what reads like `kernel "k" is in use`.
 func refuseInUse(definitions *filestore.Manager, what string, inUse func(types.InstanceSpec) bool) error {
-	instances, err := definitions.ListInstances()
-	if err != nil {
-		return err
-	}
-	for _, inst := range instances {
-		if inUse(inst) {
-			return errdefs.InvalidState("%s by instance %q", what, inst.Name)
+	for _, instance := range definitions.Instances() {
+		if inUse(instance) {
+			return errdefs.InvalidState("%s by instance %q", what, instance.Name)
 		}
 	}
 	return nil

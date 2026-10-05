@@ -11,12 +11,15 @@ import (
 	"path/filepath"
 )
 
-// erofs packs a directory tree into a read-only compressed erofs filesystem image.
+// erofs is the packer that makes the read-only, compressed EROFS disk a
+// guest boots from.
 type erofs struct{}
 
+// Pack packs dir into an EROFS image at outputPath, creating its directory,
+// and returns the image's size in bytes.
 func (erofs) Pack(ctx context.Context, dir, outputPath string) (int64, error) {
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o750); err != nil {
-		return 0, fmt.Errorf("create output dir: %w", err)
+		return 0, fmt.Errorf("create output directory: %w", err)
 	}
 
 	// -zlz4: LZ4 fast compression (~20-25% space savings, faster builds)
@@ -26,9 +29,9 @@ func (erofs) Pack(ctx context.Context, dir, outputPath string) (int64, error) {
 		return 0, fmt.Errorf("mkfs.erofs: %w: %s", err, output)
 	}
 
-	stat, err := os.Stat(outputPath)
+	info, err := os.Stat(outputPath)
 	if err != nil {
 		return 0, fmt.Errorf("stat output: %w", err)
 	}
-	return stat.Size(), nil
+	return info.Size(), nil
 }

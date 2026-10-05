@@ -81,8 +81,8 @@ network:
 	}
 }
 
-// TestLoadConfigPartialKeepsDefaults: a file that sets one key must not blank
-// out everything it does not mention.
+// TestLoadConfigPartialKeepsDefaults checks that a file setting one key does
+// not blank out everything it does not mention.
 func TestLoadConfigPartialKeepsDefaults(t *testing.T) {
 	cfg, err := loadConfig(writeConfig(t, "log_level: warn\n"))
 	if err != nil {
@@ -118,8 +118,7 @@ func TestLoadConfigDNSIsOnUnlessTurnedOff(t *testing.T) {
 }
 
 // A key the daemon does not know is refused rather than ignored, so that a
-// typo cannot silently leave a setting
-// at its default.
+// typo cannot silently leave a setting at its default.
 func TestLoadConfigRejectsUnknownKeys(t *testing.T) {
 	if _, err := loadConfig(writeConfig(t, "listen: /tmp/dicer.sock\n")); err == nil {
 		t.Error("expected an error for an unknown key")
@@ -305,11 +304,13 @@ func TestValidateResources(t *testing.T) {
 		{"negative memory overcommit", func(r *ResourcesConfig) { r.MemoryOvercommit = -1 }},
 		{"negative reserve", func(r *ResourcesConfig) { r.ReservedMemoryBytes = -1 }},
 	} {
-		cfg := defaultConfig()
-		tc.mutate(&cfg.Resources)
-		if err := cfg.Validate(); err == nil {
-			t.Errorf("%s: accepted", tc.name)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := defaultConfig()
+			tc.mutate(&cfg.Resources)
+			if err := cfg.Validate(); err == nil {
+				t.Error("Validate accepted it")
+			}
+		})
 	}
 }
 

@@ -6,11 +6,8 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
-
-	"golang.org/x/term"
 
 	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
@@ -36,13 +33,9 @@ type pullReporter struct {
 	total int64
 }
 
+// newPullReporter returns a reporter writing to out.
 func newPullReporter(out io.Writer) *pullReporter {
-	terminal := false
-	if f, ok := out.(*os.File); ok {
-		terminal = term.IsTerminal(int(f.Fd()))
-	}
-
-	return &pullReporter{out: out, terminal: terminal}
+	return &pullReporter{out: out, terminal: isTerminal(out)}
 }
 
 // report shows one progress message.

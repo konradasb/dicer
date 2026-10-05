@@ -36,23 +36,23 @@ func TestLifecycleIsRecorded(t *testing.T) {
 	ctx := t.Context()
 
 	created := types.InstanceSpec{ID: "new-id", Name: "new", ImageRef: "alpine"}
-	if err := h.mgr.Create(ctx, created, types.PullMissing); err != nil {
+	if err := h.manager.Create(ctx, created, types.PullPolicyMissing); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	h.start(t)
-	if err := h.mgr.Pause(ctx, h.inst); err != nil {
+	if err := h.manager.Pause(ctx, h.instance); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.mgr.Resume(ctx, h.inst); err != nil {
+	if err := h.manager.Resume(ctx, h.instance); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.mgr.Stop(ctx, h.inst); err != nil {
+	if err := h.manager.Stop(ctx, h.instance); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.mgr.Update(ctx, h.inst); err != nil {
+	if err := h.manager.Update(ctx, h.instance); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.mgr.Delete(ctx, h.inst, false); err != nil {
+	if err := h.manager.Delete(ctx, h.instance, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -78,8 +78,8 @@ func TestLifecycleIsRecorded(t *testing.T) {
 		t.Errorf("created = %+v, want the new instance", first)
 	}
 	started, _ := h.events.last(events.ActionStarted)
-	if started.ID != h.inst.ID || started.Name != h.inst.Name {
-		t.Errorf("started = %+v, want it about %s", started, h.inst.Name)
+	if started.ID != h.instance.ID || started.Name != h.instance.Name {
+		t.Errorf("started = %+v, want it about %s", started, h.instance.Name)
 	}
 }
 
@@ -87,13 +87,13 @@ func TestLifecycleIsRecorded(t *testing.T) {
 // will be restarted, when; it started again.
 func TestCrashAndRestartAreRecorded(t *testing.T) {
 	h := newHarness(t)
-	h.setRestart(t, types.RestartPolicy{Mode: types.RestartAlways})
+	h.setRestart(t, types.RestartPolicy{Mode: types.RestartModeAlways})
 	h.restartAtOnce()
 	h.start(t)
 
 	h.crash(t)
 	h.waitForVMMs(t, 2)
-	h.waitForState(t, types.StateRunning)
+	h.waitForState(t, types.InstanceStateRunning)
 	restarted, _ := h.events.last(events.ActionStarted)
 
 	died, _ := h.events.last(events.ActionDied)
@@ -131,7 +131,7 @@ func TestFailedStartIsRecorded(t *testing.T) {
 	h := newHarness(t)
 	h.starter.startErr = errors.New("no hypervisor today")
 
-	if err := h.mgr.Start(t.Context(), h.inst); err == nil {
+	if err := h.manager.Start(t.Context(), h.instance); err == nil {
 		t.Fatal("Start succeeded")
 	}
 	died, ok := h.events.last(events.ActionDied)
@@ -161,10 +161,10 @@ func TestSnapshotsAreRecorded(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
 
-	if _, err := h.mgr.CreateSnapshot(t.Context(), h.inst, "before"); err != nil {
+	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "before"); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.mgr.DeleteSnapshot(t.Context(), h.inst, "before"); err != nil {
+	if err := h.manager.DeleteSnapshot(t.Context(), h.instance, "before"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -200,14 +200,14 @@ func TestUpdateMessage(t *testing.T) {
 	after.Env = map[string]string{"A": "1"}
 
 	want := "Updated instance: memory 256 MiB → 512 MiB, environment changed; takes effect on next start"
-	if got := updateMessage(before, after, types.StateStopped); got != want {
+	if got := updateMessage(before, after, types.InstanceStateStopped); got != want {
 		t.Errorf("updateMessage =\n%q\nwant\n%q", got, want)
 	}
 
 	after = before
-	after.Restart = types.RestartPolicy{Mode: types.RestartOnFailure, MaxRetries: 3}
+	after.Restart = types.RestartPolicy{Mode: types.RestartModeOnFailure, MaxRetries: 3}
 	want = "Updated instance: restart policy no → on-failure:3; takes effect when the instance next ends"
-	if got := updateMessage(before, after, types.StateRunning); got != want {
+	if got := updateMessage(before, after, types.InstanceStateRunning); got != want {
 		t.Errorf("updateMessage =\n%q\nwant\n%q", got, want)
 	}
 }

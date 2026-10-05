@@ -53,7 +53,7 @@ func TestInstanceLifecycle(t *testing.T) {
 		t.Errorf("address %q is not from the %s subnet", running.IP, subnet)
 	}
 
-	// Reaching the guest proves the whole chain, not just that a hypervisor
+	// Reaching the guest proves the whole chain, not just that a VMM
 	// process exists: userspace is up and the agent is answering on vsock.
 	// What the guest reports as its hostname is TestInstanceHostname's.
 	env.exec(t, name, "true")
@@ -285,20 +285,20 @@ func TestInstanceStartOnBoot(t *testing.T) {
 	env.waitForState(t, auto, "Stopped")
 }
 
-// TestInstanceHypervisorCrashIsReported kills a running guest's hypervisor
-// behind the daemon's back.
+// TestInstanceVMMCrashIsReported kills a running guest's VMM behind the
+// daemon's back.
 //
 // A VMM can die without being asked to -- the OOM killer, a crash, an
 // operator's kill -9 -- and the daemon has to notice when it happens, not the
 // next time someone touches the instance: until then it would report a dead
 // VM as running, refuse to start it, and keep its TAP device up.
-func TestInstanceHypervisorCrashIsReported(t *testing.T) {
+func TestInstanceVMMCrashIsReported(t *testing.T) {
 	name := instanceName(t)
 
 	env.createInstance(t, name)
 	running := env.startInstance(t, name)
 	env.waitForAgent(t, name)
-	tap := env.tapOf(t, running.IP)
+	tapDevice := env.tapDeviceAt(t, running.IP)
 
 	env.killVMM(t, name)
 
@@ -308,8 +308,8 @@ func TestInstanceHypervisorCrashIsReported(t *testing.T) {
 	}
 
 	// Host resources go with the VMM.
-	if env.linkExists(t, tap) {
-		t.Errorf("TAP device %s is still up after its hypervisor died", tap)
+	if env.linkExists(t, tapDevice) {
+		t.Errorf("TAP device %s is still up after its VMM died", tapDevice)
 	}
 
 	// And a failed instance starts again without being stopped first.
@@ -382,18 +382,21 @@ func (e *environment) waitForHealth(t *testing.T, name, want string) instanceVie
 	})
 }
 
-// instanceRecord is what `dicer instance show --format json` prints: the
-// API's Instance message, as protobuf's JSON mapping writes it, with its
-// field names and its enums' names.
+// instanceView is what `dicer instance show --format json` prints: the API's
+// Instance message, as protobuf's JSON mapping writes it, with its field
+// names. Its enums are named as the CLI shows them, though: its state as
+// "Running", and its health as "healthy".
 //
 // Only the fields the tests assert on are named.
-type instanceRecord struct {
-	Name         string `json:"name"`
-	State        string `json:"state"`
-	StateError   string `json:"state_error"`
-	IP           string `json:"ip"`
-	ExitCode     *int   `json:"exit_code"`
-	RestartCount int    `json:"restart_count"`
+type instanceView struct {
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	State        string            `json:"state"`
+	StateError   string            `json:"state_error"`
+	IP           string            `json:"ip"`
+	ExitCode     *int              `json:"exit_code"`
+	RestartCount int               `json:"restart_count"`
+	Labels       map[string]string `json:"labels"`
 
 	// Health is a value rather than a pointer so that an instance with no
 	// check reads as the zero health instead of panicking.
@@ -402,42 +405,6 @@ type instanceRecord struct {
 		FailingStreak int    `json:"failing_streak"`
 		LastOutput    string `json:"last_output"`
 	} `json:"health"`
-}
-
-// instanceView is a record as the assertions are written against it: its
-// state as the CLI shows it, "Running", and its health as "healthy".
-type instanceView struct {
-	Name         string
-	State        string
-	StateError   string
-	IP           string
-	ExitCode     *int
-	RestartCount int
-	Health       struct {
-		Status        string
-		FailingStreak int
-		LastOutput    string
-	}
-}
-
-// view names a record's enums as the CLI does.
-func (r instanceRecord) view() instanceView {
-	v := instanceView{
-		Name:         r.Name,
-		State:        enumValue(r.State, "INSTANCE_STATE_"),
-		StateError:   r.StateError,
-		IP:           r.IP,
-		ExitCode:     r.ExitCode,
-		RestartCount: r.RestartCount,
-	}
-	if state := []rune(v.State); len(state) > 0 {
-		v.State = strings.ToUpper(string(state[0])) + string(state[1:])
-	}
-	v.Health.Status = enumValue(r.Health.Status, "HEALTH_STATUS_")
-	v.Health.FailingStreak = r.Health.FailingStreak
-	v.Health.LastOutput = r.Health.LastOutput
-
-	return v
 }
 
 // enumValue is an enum's value without its prefix, in lower case:
@@ -466,12 +433,19 @@ func (e *environment) instance(t *testing.T, name string) instanceView {
 
 	out := e.dicer(t, "instance", "show", name, "--format", "json")
 
-	records := rows[instanceRecord](t, out, "instance "+name)
-	if len(records) != 1 {
-		t.Fatalf("instance show %s returned %d rows, want 1:\n%s", name, len(records), out)
+	views := rows[instanceView](t, out, "instance "+name)
+	if len(views) != 1 {
+		t.Fatalf("instance show %s returned %d rows, want 1:\n%s", name, len(views), out)
 	}
 
-	return records[0].view()
+	v := views[0]
+	v.State = enumValue(v.State, "INSTANCE_STATE_")
+	if state := []rune(v.State); len(state) > 0 {
+		v.State = strings.ToUpper(string(state[0])) + string(state[1:])
+	}
+	v.Health.Status = enumValue(v.Health.Status, "HEALTH_STATUS_")
+
+	return v
 }
 
 // createInstance defines an instance with the defaults these tests share, and
@@ -547,9 +521,10 @@ func (e *environment) waitForInstance(
 	return last
 }
 
-// vmmPID returns the PID of an instance's hypervisor, as the daemon recorded
-// it. The CLI does not print it, so it is read from the host: the definition
-// maps the name to the ID, and the runtime state under that ID holds the PID.
+// vmmPID returns the PID of an instance's VMM, as the daemon
+// recorded it. The CLI does not print it, so it is read from the host: the
+// definition maps the name to the ID, and the runtime state under that ID
+// holds the PID.
 func (e *environment) vmmPID(t *testing.T, name string) int {
 	t.Helper()
 
@@ -563,19 +538,20 @@ func (e *environment) vmmPID(t *testing.T, name string) int {
 
 	out, err := e.host.runShell(ctx, script)
 	if err != nil {
-		t.Fatalf("read the hypervisor PID of %s: %v", name, err)
+		t.Fatalf("read the VMM PID of %s: %v", name, err)
 	}
 
 	pid, err := strconv.Atoi(strings.TrimSpace(out))
 	if err != nil {
-		t.Fatalf("instance %s has no recorded hypervisor PID (got %q)", name, out)
+		t.Fatalf("instance %s has no recorded VMM PID (got %q)", name, out)
 	}
 
 	return pid
 }
 
-// killVMM kills an instance's hypervisor with SIGKILL, from outside the
-// daemon -- the way an operator, the OOM killer or a VMM bug would end it.
+// killVMM kills an instance's VMM with SIGKILL, from outside
+// the daemon -- the way an operator, the OOM killer or a VMM bug would end it.
+// It returns the VMM's PID.
 func (e *environment) killVMM(t *testing.T, name string) int {
 	t.Helper()
 
@@ -585,7 +561,7 @@ func (e *environment) killVMM(t *testing.T, name string) int {
 	defer cancel()
 
 	if _, err := e.host.run(ctx, "kill", "-9", strconv.Itoa(pid)); err != nil {
-		t.Fatalf("kill the hypervisor of %s: %v", name, err)
+		t.Fatalf("kill the VMM of %s: %v", name, err)
 	}
 
 	return pid
@@ -613,13 +589,14 @@ func (e *environment) linkExists(t *testing.T, name string) bool {
 	return err == nil
 }
 
-// tapOf returns the TAP device an instance's address is attached through.
-func (e *environment) tapOf(t *testing.T, ip string) string {
+// tapDeviceAt returns the TAP device an address on the shared network is
+// attached through.
+func (e *environment) tapDeviceAt(t *testing.T, ip string) string {
 	t.Helper()
 
 	for _, a := range e.allocations(t, networkName) {
 		if a.IP == ip {
-			return a.TAP
+			return a.TAPDevice
 		}
 	}
 

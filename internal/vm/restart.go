@@ -18,8 +18,9 @@ const (
 	restartBackoffReset = 10 * time.Minute
 )
 
-// decision is what the restart policy decided about an instance that ended.
-type decision struct {
+// restartDecision is what the restart policy decided about an instance that
+// ended.
+type restartDecision struct {
 	// restart is whether to start it again, after delay.
 	restart bool
 	delay   time.Duration
@@ -31,32 +32,32 @@ type decision struct {
 	gaveUp bool
 }
 
-// decide applies a restart policy to an instance that ended after ranFor with
-// restarts restarts in a row so far.
-func decide(p types.RestartPolicy, exit Exit, restarts int, ranFor time.Duration) decision {
+// decideRestart applies a restart policy to an instance that ended after
+// ranFor with restarts restarts in a row so far.
+func decideRestart(policy types.RestartPolicy, exit Exit, restarts int, ranFor time.Duration) restartDecision {
 	if ranFor >= restartBackoffReset {
 		restarts = 0
 	}
 
 	wanted := false
-	switch p.Mode {
-	case types.RestartAlways, types.RestartUnlessStopped:
+	switch policy.Mode {
+	case types.RestartModeAlways, types.RestartModeUnlessStopped:
 		wanted = true
-	case types.RestartOnFailure:
+	case types.RestartModeOnFailure:
 		wanted = !exit.Clean()
-	case "", types.RestartNo:
+	case "", types.RestartModeNo:
 	}
 
 	if !wanted {
-		return decision{restarts: restarts}
+		return restartDecision{restarts: restarts}
 	}
 
 	// Validate allows MaxRetries only for on-failure.
-	if p.MaxRetries > 0 && restarts >= p.MaxRetries {
-		return decision{restarts: restarts, gaveUp: true}
+	if policy.MaxRetries > 0 && restarts >= policy.MaxRetries {
+		return restartDecision{restarts: restarts, gaveUp: true}
 	}
 
-	return decision{restart: true, delay: backoff(restarts), restarts: restarts + 1}
+	return restartDecision{restart: true, delay: backoff(restarts), restarts: restarts + 1}
 }
 
 // backoff returns the delay before the next restart.

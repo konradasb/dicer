@@ -49,9 +49,9 @@ func readFile(t *testing.T, path string) string {
 	return string(data)
 }
 
-// srcTree builds a directory with a nested file, an executable, a symlink
+// sourceTree builds a directory with a nested file, an executable, a symlink
 // and an empty directory, and returns it.
-func srcTree(t *testing.T) string {
+func sourceTree(t *testing.T) string {
 	t.Helper()
 
 	src := filepath.Join(t.TempDir(), "app")
@@ -68,7 +68,7 @@ func srcTree(t *testing.T) string {
 }
 
 func TestCopyDirectoryIntoExistingDirectory(t *testing.T) {
-	src := srcTree(t)
+	src := sourceTree(t)
 	dest := t.TempDir()
 
 	if err := copyPath(t, src, dest); err != nil {
@@ -103,7 +103,7 @@ func TestCopyDirectoryIntoExistingDirectory(t *testing.T) {
 }
 
 func TestCopyToNewPathRenames(t *testing.T) {
-	src := srcTree(t)
+	src := sourceTree(t)
 	dest := filepath.Join(t.TempDir(), "renamed")
 
 	if err := copyPath(t, src, dest); err != nil {
@@ -115,7 +115,7 @@ func TestCopyToNewPathRenames(t *testing.T) {
 	}
 }
 
-func TestCopyFileOverFile(t *testing.T) {
+func TestCopyFileReplacesFile(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "new.txt")
 	writeFile(t, src, "new", 0o644)
 	dest := filepath.Join(t.TempDir(), "old.txt")
@@ -133,8 +133,8 @@ func TestCopyFileOverFile(t *testing.T) {
 func TestCopyFilePreservesModTime(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "f")
 	writeFile(t, src, "x", 0o644)
-	mtime := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
-	if err := os.Chtimes(src, mtime, mtime); err != nil {
+	modTime := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := os.Chtimes(src, modTime, modTime); err != nil {
 		t.Fatal(err)
 	}
 	dest := t.TempDir()
@@ -147,13 +147,13 @@ func TestCopyFilePreservesModTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !info.ModTime().Equal(mtime) {
-		t.Errorf("mtime = %s, want %s", info.ModTime(), mtime)
+	if !info.ModTime().Equal(modTime) {
+		t.Errorf("modification time = %s, want %s", info.ModTime(), modTime)
 	}
 }
 
 func TestCopyDirectoryOverFileIsRefused(t *testing.T) {
-	src := srcTree(t)
+	src := sourceTree(t)
 	dest := filepath.Join(t.TempDir(), "file")
 	writeFile(t, dest, "keep me", 0o644)
 
@@ -175,7 +175,7 @@ func TestCopyIntoMissingParentIsRefused(t *testing.T) {
 }
 
 // A read-only directory still gets its contents: its mode is applied after.
-func TestCopyReadOnlyDirectory(t *testing.T) {
+func TestCopyReadOnlyDirectoryKeepsContents(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "ro")
 	writeFile(t, filepath.Join(src, "f"), "x", 0o444)
 	if err := os.Chmod(src, 0o555); err != nil {
@@ -230,14 +230,14 @@ func hostileArchive(t *testing.T, entries ...*tar.Header) *bytes.Buffer {
 
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
-	for _, hdr := range entries {
-		if hdr.Typeflag == tar.TypeReg {
-			hdr.Size = 4
+	for _, header := range entries {
+		if header.Typeflag == tar.TypeReg {
+			header.Size = 4
 		}
-		if err := tw.WriteHeader(hdr); err != nil {
+		if err := tw.WriteHeader(header); err != nil {
 			t.Fatal(err)
 		}
-		if hdr.Typeflag == tar.TypeReg {
+		if header.Typeflag == tar.TypeReg {
 			if _, err := tw.Write([]byte("evil")); err != nil {
 				t.Fatal(err)
 			}
@@ -307,13 +307,13 @@ func TestHostileArchivesStayInside(t *testing.T) {
 	}
 }
 
-func TestUnpackEmptyArchive(t *testing.T) {
+func TestUnpackRefusesEmptyArchive(t *testing.T) {
 	if err := Unpack(hostileArchive(t), t.TempDir()); err == nil {
 		t.Error("an empty archive unpacked without error")
 	}
 }
 
-func TestPackMissingSource(t *testing.T) {
+func TestPackRefusesMissingSource(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Pack(&buf, filepath.Join(t.TempDir(), "missing")); err == nil {
 		t.Error("packed a path that does not exist")
@@ -321,7 +321,7 @@ func TestPackMissingSource(t *testing.T) {
 }
 
 // Send and Receive carry an archive in bounded chunks, as a stream does.
-func TestSendReceiveInChunks(t *testing.T) {
+func TestSendAndReceiveCarryArchiveInChunks(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "big")
 	writeFile(t, src, string(bytes.Repeat([]byte("0123456789"), ChunkSize/4)), 0o644)
 

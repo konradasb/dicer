@@ -51,15 +51,15 @@ type LogOptions struct {
 
 // StreamLogs writes an instance's log to w. With opts.Follow it keeps writing
 // until the instance stops or ctx is done.
-func (m *Manager) StreamLogs(ctx context.Context, inst types.InstanceSpec, opts LogOptions, w io.Writer) error {
-	path, err := m.logPath(inst, opts.Source)
+func (m *Manager) StreamLogs(ctx context.Context, instance types.InstanceSpec, opts LogOptions, w io.Writer) error {
+	path, err := m.logPath(instance, opts.Source)
 	if err != nil {
 		return err
 	}
 
 	f, err := os.Open(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return errdefs.NotFound("instance %q has no %s log yet", inst.Name, opts.Source)
+		return errdefs.NotFound("instance %q has no %s log yet", instance.Name, opts.Source)
 	}
 	if err != nil {
 		return err
@@ -77,8 +77,8 @@ func (m *Manager) StreamLogs(ctx context.Context, inst types.InstanceSpec, opts 
 	for {
 		n, err := f.Read(buf)
 		if n > 0 {
-			if _, werr := w.Write(buf[:n]); werr != nil {
-				return werr
+			if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+				return writeErr
 			}
 			continue
 		}
@@ -92,7 +92,7 @@ func (m *Manager) StreamLogs(ctx context.Context, inst types.InstanceSpec, opts 
 
 		// Once the instance has stopped, read once more for its last output.
 		// One still starting has not: its boot is what there is to follow.
-		if rt, err := m.Runtime(inst); err == nil && !rt.State.HoldsResources() {
+		if status, err := m.Status(instance); err == nil && !status.State.HoldsResources() {
 			ended = true
 			continue
 		}
@@ -106,12 +106,12 @@ func (m *Manager) StreamLogs(ctx context.Context, inst types.InstanceSpec, opts 
 }
 
 // logPath returns the file a log source is written to.
-func (m *Manager) logPath(inst types.InstanceSpec, source LogSource) (string, error) {
+func (m *Manager) logPath(instance types.InstanceSpec, source LogSource) (string, error) {
 	switch source {
 	case LogSourceGuest, "":
-		return m.serialLogPath(inst), nil
+		return m.serialLogPath(instance), nil
 	case LogSourceHypervisor:
-		return m.hypervisorLogPath(inst.ID), nil
+		return m.hypervisorLogPath(instance.ID), nil
 	default:
 		return "", errdefs.InvalidArgument("unknown log source %q: want %s or %s",
 			source, LogSourceGuest, LogSourceHypervisor)

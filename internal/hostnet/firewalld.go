@@ -27,9 +27,9 @@ const firewalldStartTimeout = 30 * time.Second
 
 // firewalld's D-Bus names.
 const (
-	firewalldName      = "org.fedoraproject.FirewallD1"
-	firewalldPath      = "/org/fedoraproject/FirewallD1"
-	firewalldZoneIface = firewalldName + ".zone"
+	firewalldName          = "org.fedoraproject.FirewallD1"
+	firewalldPath          = "/org/fedoraproject/FirewallD1"
+	firewalldZoneInterface = firewalldName + ".zone"
 )
 
 // errNoFirewalldZone is firewalld running without firewalldZone, as on a
@@ -116,7 +116,7 @@ func (f *firewalld) bind(ctx context.Context, bridge string) error {
 	}
 
 	var zones []string
-	if err := f.call(ctx, firewalldZoneIface+".getZones", &zones); err != nil {
+	if err := f.call(ctx, firewalldZoneInterface+".getZones", &zones); err != nil {
 		return fmt.Errorf("list firewalld zones: %w", err)
 	}
 	if !slices.Contains(zones, firewalldZone) {
@@ -124,13 +124,13 @@ func (f *firewalld) bind(ctx context.Context, bridge string) error {
 	}
 
 	var zone string
-	if err := f.call(ctx, firewalldZoneIface+".getZoneOfInterface", &zone, bridge); err != nil {
+	if err := f.call(ctx, firewalldZoneInterface+".getZoneOfInterface", &zone, bridge); err != nil {
 		return fmt.Errorf("find the firewalld zone of %s: %w", bridge, err)
 	}
 	if zone == firewalldZone {
 		return nil
 	}
-	if err := f.call(ctx, firewalldZoneIface+".changeZoneOfInterface", nil, firewalldZone, bridge); err != nil {
+	if err := f.call(ctx, firewalldZoneInterface+".changeZoneOfInterface", nil, firewalldZone, bridge); err != nil {
 		return fmt.Errorf("bind %s to firewalld zone %q: %w", bridge, firewalldZone, err)
 	}
 	return nil
@@ -143,13 +143,13 @@ func (f *firewalld) unbind(ctx context.Context, bridge string) error {
 	}
 
 	var zone string
-	if err := f.call(ctx, firewalldZoneIface+".getZoneOfInterface", &zone, bridge); err != nil {
+	if err := f.call(ctx, firewalldZoneInterface+".getZoneOfInterface", &zone, bridge); err != nil {
 		return fmt.Errorf("find the firewalld zone of %s: %w", bridge, err)
 	}
 	if zone != firewalldZone {
 		return nil
 	}
-	if err := f.call(ctx, firewalldZoneIface+".removeInterface", nil, firewalldZone, bridge); err != nil {
+	if err := f.call(ctx, firewalldZoneInterface+".removeInterface", nil, firewalldZone, bridge); err != nil {
 		return fmt.Errorf("unbind %s from firewalld zone %q: %w", bridge, firewalldZone, err)
 	}
 	return nil

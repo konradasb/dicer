@@ -31,8 +31,8 @@ type TLS struct {
 	ServerName string `yaml:"server_name,omitempty"`
 }
 
-// Validate reports whether the settings are a usable combination. The files
-// are not read.
+// Validate returns an error if the settings are not a usable combination. A
+// nil TLS is valid. The files are not read.
 func (t *TLS) Validate() error {
 	if t == nil {
 		return nil

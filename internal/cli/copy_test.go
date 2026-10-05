@@ -4,7 +4,6 @@
 package cli
 
 import (
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,33 +73,13 @@ func (d *fakeCopyDaemon) CopyFromInstance(
 	return err
 }
 
-// serveCopyDaemon starts a fakeCopyDaemon on a socket, and returns the
-// --remote address for it and the directory standing in for the guest.
+// serveCopyDaemon serves a fakeCopyDaemon, and returns the --remote address
+// for it and the directory standing in for the guest.
 func serveCopyDaemon(t *testing.T) (string, string) {
 	t.Helper()
-	isolateConfig(t)
-
-	// A short directory: a socket path is limited to about 100 bytes, and
-	// a test's temporary directory can be most of that on its own.
-	dir, err := os.MkdirTemp("", "dicer")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-
-	socket := filepath.Join(dir, "d.sock")
-	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", socket)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	guest := t.TempDir()
-	server := newTestServer()
-	dicerdv1.RegisterDaemonServiceServer(server, &fakeCopyDaemon{guest: guest})
-	go func() { _ = server.Serve(listener) }()
-	t.Cleanup(server.Stop)
-
-	return "unix://" + socket, guest
+	return serveFakeDaemon(t, &fakeCopyDaemon{guest: guest}), guest
 }
 
 func TestCopyRoundTrip(t *testing.T) {

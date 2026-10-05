@@ -81,7 +81,6 @@ func (d *daemon) listenAPI(ctx context.Context) (listeners []apiListener, err er
 		DataDir:     d.cfg.DataDir,
 		Defaults:    grpcapi.Defaults{Kernel: d.cfg.Defaults.Kernel, Network: d.cfg.Defaults.Network},
 		Version:     version.Version,
-		Logger:      d.logger,
 	})
 
 	listeners = make([]apiListener, 0, 2)
@@ -97,7 +96,7 @@ func (d *daemon) listenAPI(ctx context.Context) (listeners []apiListener, err er
 		return listeners, nil
 	}
 
-	creds, err := d.apiCredentials()
+	credentialOptions, err := d.apiCredentials()
 	if err != nil {
 		_ = tcp.Close()
 		return listeners, err
@@ -107,7 +106,7 @@ func (d *daemon) listenAPI(ctx context.Context) (listeners []apiListener, err er
 		transport: transportTCP,
 		address:   tcp.Addr().String(),
 		listener:  tcp,
-		server:    d.newGRPCServer(api, creds...), //nolint:contextcheck // interceptors run with each call's own context
+		server:    d.newGRPCServer(api, credentialOptions...), //nolint:contextcheck // interceptors run with each call's own context
 	}), nil
 }
 
@@ -123,7 +122,7 @@ func (d *daemon) apiCredentials() ([]grpc.ServerOption, error) {
 		return nil, nil
 	}
 
-	cfg, err := serverTLSConfig(tcp.TLS, d.logger)
+	tlsConfig, err := serverTLSConfig(tcp.TLS, d.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +136,7 @@ func (d *daemon) apiCredentials() ([]grpc.ServerOption, error) {
 			"listen", tcp.Listen)
 	}
 
-	return []grpc.ServerOption{grpc.Creds(credentials.NewTLS(cfg))}, nil
+	return []grpc.ServerOption{grpc.Creds(credentials.NewTLS(tlsConfig))}, nil
 }
 
 // newGRPCServer builds an API server with metrics and audit interceptors,
@@ -168,12 +167,10 @@ func (d *daemon) newGRPCServer(api *grpcapi.Server, opts ...grpc.ServerOption) *
 // keepaliveOptions returns the server options that ping quiet clients and
 // let clients ping, as cfg says.
 func keepaliveOptions(cfg KeepaliveConfig) []grpc.ServerOption {
-	opts := []grpc.ServerOption{
+	return []grpc.ServerOption{
 		grpc.KeepaliveParams(keepalive.ServerParameters{Time: cfg.Interval, Timeout: cfg.Timeout}),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{MinTime: cfg.MinClientInterval, PermitWithoutStream: true}),
 	}
-
-	return opts
 }
 
 // listenSocket opens the API socket, removing a stale one left by a previous
@@ -226,7 +223,7 @@ func removeStaleSocket(ctx context.Context, path string) error {
 		return nil
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("check for a stale socket: %w", err)
 	}
 	if info.Mode()&os.ModeSocket == 0 {
 		return fmt.Errorf("%s exists and is not a socket", path)

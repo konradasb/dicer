@@ -105,8 +105,8 @@ type Log struct {
 // pendingEvent is an event waiting to be written, numbered in the order it
 // was recorded.
 type pendingEvent struct {
-	seq   uint64
-	event Event
+	number uint64
+	event  Event
 }
 
 // eventsFile is the events file as the writer goroutine sees it: something
@@ -226,7 +226,7 @@ func (l *Log) Record(e Event) {
 	l.events = append(l.events, e)
 	l.trim()
 	l.recorded++
-	warning := l.queue(pendingEvent{seq: l.recorded, event: e})
+	warning := l.queue(pendingEvent{number: l.recorded, event: e})
 	dropped := l.dropped
 	for sub := range l.subscriptions {
 		if sub.filter.Matches(e) {
@@ -236,11 +236,11 @@ func (l *Log) Record(e Event) {
 	l.mu.Unlock()
 
 	switch warning {
-	case warnClosed:
+	case queueWarningClosed:
 		l.logger.Warn("events recorded after the event log closed may not be written",
 			slog.String("kind", string(e.Kind)), slog.String("name", e.Name),
 			slog.String("action", string(e.Action)))
-	case warnDropping:
+	case queueWarningDropping:
 		l.logger.Warn("events are recorded faster than they are written; "+
 			"the file will have them when next compacted",
 			slog.Uint64("dropped", dropped))
@@ -251,12 +251,12 @@ func (l *Log) Record(e Event) {
 type queueWarning int
 
 const (
-	noWarning queueWarning = iota
-	// warnDropping is the first event dropped since the queue last had
-	// room.
-	warnDropping
-	// warnClosed is the first event recorded after Close.
-	warnClosed
+	queueWarningNone queueWarning = iota
+	// queueWarningDropping is the first event dropped since the queue last
+	// had room.
+	queueWarningDropping
+	// queueWarningClosed is the first event recorded after Close.
+	queueWarningClosed
 )
 
 // queue passes p to the writer goroutine without waiting, dropping it if the
@@ -265,36 +265,37 @@ const (
 func (l *Log) queue(p pendingEvent) queueWarning {
 	if l.closed {
 		if l.recordedAfterClose {
-			return noWarning
+			return queueWarningNone
 		}
 		l.recordedAfterClose = true
 
-		return warnClosed
+		return queueWarningClosed
 	}
 
 	select {
 	case l.writes <- p:
 		l.dropping = false
 
-		return noWarning
+		return queueWarningNone
 	default:
 		l.dropped++
-		l.droppedThrough = p.seq
+		l.droppedThrough = p.number
 		if l.dropping {
-			return noWarning
+			return queueWarningNone
 		}
 		l.dropping = true
 
-		return warnDropping
+		return queueWarningDropping
 	}
 }
 
-// droppedSince reports whether an event after seq was dropped.
-func (l *Log) droppedSince(seq uint64) bool {
+// droppedSince reports whether an event after the one numbered number was
+// dropped.
+func (l *Log) droppedSince(number uint64) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	return l.droppedThrough > seq
+	return l.droppedThrough > number
 }
 
 // write is the writer goroutine: it appends each queued event to f, and
@@ -309,7 +310,7 @@ func (l *Log) write(f *eventsFile) {
 		// An event a compaction already wrote is skipped, but the checks
 		// below still run: it may be the last one queued, with an event
 		// dropped during that compaction still to be written.
-		if p.seq > f.compactedThrough && f.file != nil {
+		if p.number > f.compactedThrough && f.file != nil {
 			if err := f.writeEvent(p.event); err != nil {
 				l.logger.Warn("cannot write an event; the events file will be rewritten",
 					slog.String("kind", string(p.event.Kind)), slog.String("name", p.event.Name),
@@ -392,9 +393,9 @@ func (l *Log) trim() {
 	}
 }
 
-// snapshot returns the events kept, and the number of the last one recorded:
-// every event up to it is either among them or no longer kept.
-func (l *Log) snapshot() ([]Event, uint64) {
+// keptEvents returns the events kept, and the number of the last one
+// recorded: every event up to it is either among them or no longer kept.
+func (l *Log) keptEvents() ([]Event, uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -402,12 +403,12 @@ func (l *Log) snapshot() ([]Event, uint64) {
 }
 
 // compact rewrites the file with only the events kept, and reopens it for
-// appending. Only once the file is rewritten does it count the events up to
-// the snapshot as written. It is called by the writer goroutine, or by open
-// before that starts, and never with l.mu held: it takes it only to snapshot
-// the events.
+// appending. Only once the file is rewritten does it count the events it was
+// rewritten with as written. It is called by the writer goroutine, or by open
+// before that starts, and never with l.mu held: it takes it only to copy the
+// events kept.
 func (l *Log) compact(f *eventsFile) error {
-	events, seq := l.snapshot()
+	events, last := l.keptEvents()
 
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -419,7 +420,7 @@ func (l *Log) compact(f *eventsFile) error {
 	if err := f.replace(f.path, buf.Bytes(), fileMode); err != nil {
 		return fmt.Errorf("write events: %w", err)
 	}
-	f.compactedThrough = seq
+	f.compactedThrough = last
 
 	if f.file != nil {
 		_ = f.file.Close()

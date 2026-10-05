@@ -10,53 +10,38 @@ import (
 	"strings"
 )
 
-// Resolver resolves image references to manifest digests.
+// Resolver looks up the digest of the manifest a tagged reference names.
 type Resolver interface {
 	Resolve(ctx context.Context, ref *Ref) (string, error)
 }
 
-// ResolvedRef is an image reference with a resolved manifest digest.
+// ResolvedRef is an image reference pinned to a manifest digest.
 type ResolvedRef struct {
-	*Ref
-	manifestDigest string
+	ref    *Ref
+	digest string
 }
 
-// NewResolvedRef creates a resolved reference.
-func NewResolvedRef(ref *Ref, digest string) *ResolvedRef {
-	rRef := &ResolvedRef{
-		Ref:            ref,
-		manifestDigest: digest,
-	}
+// String returns the normalised reference, as it was before it was resolved.
+func (r *ResolvedRef) String() string { return r.ref.String() }
 
-	return rRef
-}
+// Digest returns the manifest digest the reference was resolved to.
+func (r *ResolvedRef) Digest() string { return r.digest }
 
-// ManifestDigest returns the resolved manifest digest.
-func (r *ResolvedRef) ManifestDigest() string {
-	return r.manifestDigest
-}
-
-// DigestHex returns the hex portion of the resolved manifest digest.
-// This shadows Ref.DigestHex() to use the resolved digest instead of the
-// original reference's digest, which may be empty for tag-based references.
+// DigestHex returns the digest without its algorithm prefix, suitable for
+// use as a directory name.
 func (r *ResolvedRef) DigestHex() string {
-	_, hex, _ := strings.Cut(r.manifestDigest, ":")
+	_, hex, _ := strings.Cut(r.digest, ":")
 	return hex
 }
 
-// Resolve resolves the reference using the provided resolver.
-func Resolve(ctx context.Context, resolver Resolver, refStr string) (*ResolvedRef, error) {
-	ref, err := Parse(refStr)
-	if err != nil {
-		return nil, fmt.Errorf("parse reference: %w", err)
-	}
-
-	// If already has digest, use it directly
+// Resolve pins ref to a manifest digest: its own if it names one, otherwise
+// the one resolver finds for its tag. resolver may be nil only for a
+// reference by digest.
+func Resolve(ctx context.Context, resolver Resolver, ref *Ref) (*ResolvedRef, error) {
 	if ref.HasDigest() {
-		return NewResolvedRef(ref, ref.Digest()), nil
+		return &ResolvedRef{ref: ref, digest: ref.Digest()}, nil
 	}
 
-	// Otherwise resolve via registry
 	if resolver == nil {
 		return nil, errors.New("resolver is required for tag-based references")
 	}
@@ -65,5 +50,5 @@ func Resolve(ctx context.Context, resolver Resolver, refStr string) (*ResolvedRe
 		return nil, fmt.Errorf("resolve manifest: %w", err)
 	}
 
-	return NewResolvedRef(ref, digest), nil
+	return &ResolvedRef{ref: ref, digest: digest}, nil
 }

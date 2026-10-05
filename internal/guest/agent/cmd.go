@@ -23,12 +23,12 @@ import (
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "dicer-agent",
-		Short:         "Serve exec and file copy requests from the host: runs inside the VM",
+		Short:         "Serve the host's requests: runs inside the VM",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		Version:       version.Version,
 		Args:          cobra.NoArgs,
-		RunE:          runRootCmd,
+		RunE:          runRoot,
 	}
 
 	cmd.SetVersionTemplate(version.String() + "\n")
@@ -63,32 +63,35 @@ func newReportExitCommand() *cobra.Command {
 	return cmd
 }
 
-func runRootCmd(cmd *cobra.Command, _ []string) error {
+// runRoot serves the agent's gRPC API on the vsock port until the listener
+// fails. The port may not be ready as the guest boots, so listening is
+// retried for a while.
+func runRoot(cmd *cobra.Command, _ []string) error {
 	port, err := cmd.Flags().GetUint32("port")
 	if err != nil {
 		return fmt.Errorf("get port flag: %w", err)
 	}
 
-	var l *vsock.Listener
+	var listener *vsock.Listener
 	for i := range 10 {
-		l, err = vsock.Listen(port, nil)
+		listener, err = vsock.Listen(port, nil)
 		if err == nil {
 			break
 		}
-		slog.Warn("vsock listen failed, retrying", "attempt", i+1, "port", port, "err", err)
+		slog.Warn("vsock listen failed, retrying", "attempt", i+1, "port", port, "error", err)
 		time.Sleep(time.Second)
 	}
 	if err != nil {
 		return fmt.Errorf("vsock listen on port %d: %w", port, err)
 	}
-	defer func() { _ = l.Close() }()
+	defer func() { _ = listener.Close() }()
 
 	slog.Info("dicer agent listening", "port", port)
 
 	grpcServer := grpc.NewServer()
 	diceragentv1.RegisterAgentServiceServer(grpcServer, &server{})
 
-	if err := grpcServer.Serve(l); err != nil {
+	if err := grpcServer.Serve(listener); err != nil {
 		return fmt.Errorf("grpc serve: %w", err)
 	}
 

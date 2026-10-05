@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/konradasb/dicer/internal/cli/printer"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -56,7 +57,7 @@ func newInfoCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if format, _ := cmd.Flags().GetString("format"); format != "table" {
+			if format, _ := cmd.Flags().GetString("format"); !printer.IsTable(format) {
 				hostRecord, err := record(host)
 				if err != nil {
 					return err
@@ -196,14 +197,14 @@ func hypervisorLines(hypervisors []*dicerdv1.HypervisorInfo) []string {
 	}
 
 	lines := make([]string, 0, len(hypervisors))
-	for _, hv := range hypervisors {
-		versions := hv.GetVersions()
-		if len(versions) > 0 && hv.GetIsDefault() {
+	for _, hypervisor := range hypervisors {
+		versions := hypervisor.GetVersions()
+		if len(versions) > 0 && hypervisor.GetIsDefault() {
 			// The first version is the one an instance gets by default, and
 			// the default hypervisor is listed first.
 			versions = append([]string{versions[0] + " (default)"}, versions[1:]...)
 		}
-		lines = append(lines, enumName(hv.GetType())+" "+strings.Join(versions, ", "))
+		lines = append(lines, enumName(hypervisor.GetType())+" "+strings.Join(versions, ", "))
 	}
 
 	return lines
@@ -217,8 +218,8 @@ func instanceSummary(instances []*dicerdv1.Instance, p palette) string {
 	}
 
 	counts := make(map[dicerdv1.InstanceState]int, len(stateOrder))
-	for _, inst := range instances {
-		counts[inst.GetState()]++
+	for _, instance := range instances {
+		counts[instance.GetState()]++
 	}
 
 	parts := make([]string, 0, len(stateOrder))
@@ -235,8 +236,8 @@ func instanceSummary(instances []*dicerdv1.Instance, p palette) string {
 // " · 2 healthy, 1 unhealthy". Nothing if none is checked.
 func healthSummary(instances []*dicerdv1.Instance, p palette) string {
 	counts := make(map[dicerdv1.HealthStatus]int)
-	for _, inst := range instances {
-		if status := inst.GetHealth().GetStatus(); status != 0 {
+	for _, instance := range instances {
+		if status := instance.GetHealth().GetStatus(); status != 0 {
 			counts[status]++
 		}
 	}

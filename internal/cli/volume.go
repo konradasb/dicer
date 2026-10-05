@@ -20,21 +20,21 @@ type printableVolume struct {
 	Volumes []*dicerdv1.Volume
 }
 
-func (p *printableVolume) Cols() []string {
+func (p *printableVolume) Columns() []string {
 	return []string{"ID", "Name", "Size", "Created"}
 }
 
-func (p *printableVolume) KV() []map[string]any {
-	kv := make([]map[string]any, 0, len(p.Volumes))
+func (p *printableVolume) Rows() []map[string]any {
+	rows := make([]map[string]any, 0, len(p.Volumes))
 	for _, v := range p.Volumes {
-		kv = append(kv, map[string]any{
+		rows = append(rows, map[string]any{
 			"ID":      v.GetId(),
 			"Name":    v.GetName(),
 			"Size":    humanize.Bytes(v.GetSizeBytes()),
 			"Created": age(timeOf(v.GetCreateTime())),
 		})
 	}
-	return kv
+	return rows
 }
 
 func newVolumeCommand() *cobra.Command {

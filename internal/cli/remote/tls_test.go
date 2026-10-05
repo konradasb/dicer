@@ -36,9 +36,9 @@ func TestTLSValidate(t *testing.T) {
 	}
 }
 
-// The name the daemon's certificate is checked against is the address's
-// host, which gRPC fills in, unless the remote names another.
-func TestTLSConfigServerName(t *testing.T) {
+// TestTLSConfigRefusesUnusableSettings checks that a configuration is not
+// built from settings that do not validate or from files that cannot be read.
+func TestTLSConfigRefusesUnusableSettings(t *testing.T) {
 	if _, err := (&TLS{}).Config(); err == nil {
 		t.Fatal("an empty TLS built a configuration")
 	}

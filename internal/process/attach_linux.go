@@ -27,7 +27,7 @@ func Attach(pid int, arg string) (*Process, error) {
 		return nil, fmt.Errorf("open pidfd for %d: %w", pid, err)
 	}
 
-	if err := verify(fd, pid, arg); err != nil {
+	if err := verifyCommandLine(fd, pid, arg); err != nil {
 		_ = unix.Close(fd)
 		return nil, err
 	}
@@ -73,31 +73,32 @@ func Attach(pid int, arg string) (*Process, error) {
 	return p, nil
 }
 
-// cmdlineRetries and cmdlineRetryInterval bound the wait for a process being
-// exec'd to show its command line.
+// commandLineRetries and commandLineRetryInterval bound the wait for a
+// process being exec'd to show its command line.
 const (
-	cmdlineRetries       = 20
-	cmdlineRetryInterval = 5 * time.Millisecond
+	commandLineRetries       = 20
+	commandLineRetryInterval = 5 * time.Millisecond
 )
 
-// verify checks that the process pinned by fd was started with arg.
-func verify(fd, pid int, arg string) error {
+// verifyCommandLine checks that the process pinned by fd was started with
+// arg.
+func verifyCommandLine(fd, pid int, arg string) error {
 	var (
-		cmdline []byte
-		err     error
+		commandLine []byte
+		err         error
 	)
-	for range cmdlineRetries {
-		cmdline, err = os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
+	for range commandLineRetries {
+		commandLine, err = os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
 		if err != nil {
 			return fmt.Errorf("read command line of %d: %w", pid, err)
 		}
-		if len(cmdline) > 0 {
+		if len(commandLine) > 0 {
 			break
 		}
-		time.Sleep(cmdlineRetryInterval)
+		time.Sleep(commandLineRetryInterval)
 	}
 
-	if !containsArg(cmdline, arg) {
+	if !containsArg(commandLine, arg) {
 		return fmt.Errorf("process %d was not started with %q; the PID has been reused", pid, arg)
 	}
 
@@ -111,10 +112,10 @@ func verify(fd, pid int, arg string) error {
 	return nil
 }
 
-// containsArg reports whether a NUL-separated /proc cmdline holds arg as one
-// of its arguments.
-func containsArg(cmdline []byte, arg string) bool {
-	for a := range bytes.SplitSeq(bytes.TrimRight(cmdline, "\x00"), []byte{0}) {
+// containsArg reports whether a NUL-separated command line, as /proc holds
+// it, has arg as one of its arguments.
+func containsArg(commandLine []byte, arg string) bool {
+	for a := range bytes.SplitSeq(bytes.TrimRight(commandLine, "\x00"), []byte{0}) {
 		if string(a) == arg {
 			return true
 		}

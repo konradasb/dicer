@@ -18,8 +18,8 @@ import (
 func startMarked(t *testing.T, marker string) *exec.Cmd {
 	t.Helper()
 
-	// sh takes the argument after the script as $0, so it appears in
-	// cmdline without being interpreted. The script loops rather than
+	// sh takes the argument after the script as $0, so it appears on the
+	// command line without being interpreted. The script loops rather than
 	// sleeping once: a shell handed a single simple command may exec it,
 	// replacing the command line -- marker and all -- with the command's.
 	cmd := exec.CommandContext(t.Context(), "sh", "-c", "while :; do sleep 1; done", marker)
@@ -60,7 +60,7 @@ func TestAttachSeesExit(t *testing.T) {
 	}
 }
 
-func TestAttachKill(t *testing.T) {
+func TestKillStopsAttachedProcess(t *testing.T) {
 	cmd := startMarked(t, "/sock")
 
 	p, err := Attach(cmd.Process.Pid, "/sock")
@@ -98,13 +98,13 @@ func TestAttachRejectsDeadProcess(t *testing.T) {
 	}
 }
 
-func TestContainsArg(t *testing.T) {
-	cmdline := []byte("cloud-hypervisor\x00--api-socket\x00/run/x.sock\x00")
+func TestContainsArgMatchesWholeArguments(t *testing.T) {
+	commandLine := []byte("cloud-hypervisor\x00--api-socket\x00/run/x.sock\x00")
 
-	if !containsArg(cmdline, "/run/x.sock") {
+	if !containsArg(commandLine, "/run/x.sock") {
 		t.Error("did not find a whole argument")
 	}
-	if containsArg(cmdline, "/run/x") {
+	if containsArg(commandLine, "/run/x") {
 		t.Error("matched a prefix of an argument")
 	}
 }

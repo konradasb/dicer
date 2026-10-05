@@ -40,9 +40,9 @@ func (d *fakeInstanceDaemon) GetInstanceStats(
 func TestInstanceStatsRowsShowWhatIsUsedOfTheHost(t *testing.T) {
 	p := &printableInstanceStats{Instances: fakeInstanceStats()}
 
-	rows := p.KV()
+	rows := p.Rows()
 	if len(rows) != 2 {
-		t.Fatalf("KV() has %d rows, want 2", len(rows))
+		t.Fatalf("Rows() has %d rows, want 2", len(rows))
 	}
 
 	want := map[string]any{
@@ -54,7 +54,7 @@ func TestInstanceStatsRowsShowWhatIsUsedOfTheHost(t *testing.T) {
 		"NetIO":    "1 MiB / 40 KiB",
 		"BlockIO":  "0 B / 3 MiB",
 	}
-	for _, col := range p.Cols() {
+	for _, col := range p.Columns() {
 		if rows[0][col] != want[col] {
 			t.Errorf("%s = %q, want %q", col, rows[0][col], want[col])
 		}
@@ -64,7 +64,7 @@ func TestInstanceStatsRowsShowWhatIsUsedOfTheHost(t *testing.T) {
 // TestStatsTemplatesAndJSONUseTheColumnNames checks that the column names
 // are a --format template's fields and JSON's keys.
 func TestStatsTemplatesAndJSONUseTheColumnNames(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon())
+	serveFakeDaemon(t, newFakeInstanceDaemon())
 
 	out, err := run(t, "stats", "--no-stream", "--format", "{{.Name}} {{.CPUPerc}} {{.MemPerc}}")
 	if err != nil {

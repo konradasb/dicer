@@ -16,38 +16,38 @@ import (
 
 // instanceToProto flattens an instance's spec and status into one message.
 func instanceToProto(instance types.Instance) *dicerdv1.Instance {
-	inst, rt := instance.Spec, instance.Status
+	spec, status := instance.Spec, instance.Status
 
 	out := &dicerdv1.Instance{
-		Id:                inst.ID,
-		Name:              inst.Name,
-		Hostname:          inst.Hostname,
-		ImageRef:          inst.ImageRef,
-		HypervisorType:    hypervisorTypes.toProto(inst.HypervisorType),
-		HypervisorVersion: inst.HypervisorVersion,
-		KernelName:        inst.KernelName,
-		KernelArgs:        inst.KernelArgs,
-		Vcpus:             int32(inst.VCPUs),
-		MemoryBytes:       inst.MemoryBytes,
-		DiskBytes:         inst.DiskBytes,
-		NetworkName:       inst.NetworkName,
-		StaticIp:          inst.StaticIP,
-		Env:               inst.Env,
-		Cmd:               inst.Cmd,
-		Labels:            inst.Labels,
-		RestartPolicy:     restartPolicyToProto(inst.Restart),
-		HealthCheck:       healthCheckToProto(inst.HealthCheck),
-		InitMode:          initModes.toProto(cmp.Or(inst.InitMode, types.ModeAuto)),
-		CreateTime:        timestamppb.New(inst.CreatedAt),
-		UpdateTime:        timestamppb.New(inst.UpdatedAt),
+		Id:                spec.ID,
+		Name:              spec.Name,
+		Hostname:          spec.Hostname,
+		ImageRef:          spec.ImageRef,
+		HypervisorType:    hypervisorTypes.toProto(spec.HypervisorType),
+		HypervisorVersion: spec.HypervisorVersion,
+		KernelName:        spec.KernelName,
+		KernelArgs:        spec.KernelArgs,
+		Vcpus:             int32(spec.VCPUs),
+		MemoryBytes:       spec.MemoryBytes,
+		DiskBytes:         spec.DiskBytes,
+		NetworkName:       spec.NetworkName,
+		StaticIp:          spec.StaticIP,
+		Env:               spec.Env,
+		Cmd:               spec.Cmd,
+		Labels:            spec.Labels,
+		RestartPolicy:     restartPolicyToProto(spec.Restart),
+		HealthCheck:       healthCheckToProto(spec.HealthCheck),
+		InitMode:          initModes.toProto(cmp.Or(spec.InitMode, types.InitModeAuto)),
+		CreateTime:        timestamppb.New(spec.CreatedAt),
+		UpdateTime:        timestamppb.New(spec.UpdatedAt),
 
-		State:        instanceStates.toProto(rt.State),
-		StateError:   rt.StateError,
-		VsockCid:     rt.VsockCID,
-		RestartCount: int32(rt.RestartCount),
+		State:        instanceStates.toProto(status.State),
+		StateError:   status.StateError,
+		VsockCid:     status.VsockCID,
+		RestartCount: int32(status.RestartCount),
 	}
 
-	for _, m := range inst.Mounts {
+	for _, m := range spec.Mounts {
 		out.Mounts = append(out.Mounts, &dicerdv1.Mount{
 			Type:     mountTypes.toProto(m.Type),
 			Source:   m.Source,
@@ -56,37 +56,37 @@ func instanceToProto(instance types.Instance) *dicerdv1.Instance {
 		})
 	}
 
-	for _, p := range inst.Ports {
+	for _, p := range spec.Ports {
 		out.Ports = append(out.Ports, &dicerdv1.PortMapping{
 			HostIp:    p.HostIP,
 			HostPort:  uint32(p.HostPort),
 			GuestPort: uint32(p.GuestPort),
-			Protocol:  protocols.toProto(p.Proto()),
+			Protocol:  protocols.toProto(p.EffectiveProtocol()),
 		})
 	}
 
-	if rt.HypervisorPID != nil {
-		out.HypervisorPid = int64(*rt.HypervisorPID)
+	if status.VMMPID != nil {
+		out.HypervisorPid = int64(*status.VMMPID)
 	}
-	if !rt.StartedAt.IsZero() {
-		out.StartTime = timestamppb.New(rt.StartedAt)
+	if !status.StartedAt.IsZero() {
+		out.StartTime = timestamppb.New(status.StartedAt)
 	}
-	if rt.HypervisorVersion != "" {
-		out.HypervisorVersion = rt.HypervisorVersion
+	if status.HypervisorVersion != "" {
+		out.HypervisorVersion = status.HypervisorVersion
 	}
-	out.Ip, out.Mac = rt.IP, rt.MAC
-	if rt.HealthCheck != nil && rt.Health != nil {
-		out.Health = healthToProto(*rt.HealthCheck, *rt.Health)
+	out.Ip, out.Mac = status.IP, status.MAC
+	if status.HealthCheck != nil && status.Health != nil {
+		out.Health = healthToProto(*status.HealthCheck, *status.Health)
 	}
-	if rt.ExitCode != nil {
-		code := int32(*rt.ExitCode)
+	if status.ExitCode != nil {
+		code := int32(*status.ExitCode)
 		out.ExitCode = &code
 	}
-	if !rt.FinishedAt.IsZero() {
-		out.FinishTime = timestamppb.New(rt.FinishedAt)
+	if !status.FinishedAt.IsZero() {
+		out.FinishTime = timestamppb.New(status.FinishedAt)
 	}
-	if !rt.NextRestartAt.IsZero() {
-		out.NextRestartTime = timestamppb.New(rt.NextRestartAt)
+	if !status.NextRestartAt.IsZero() {
+		out.NextRestartTime = timestamppb.New(status.NextRestartAt)
 	}
 
 	return out
@@ -96,14 +96,14 @@ func instanceToProto(instance types.Instance) *dicerdv1.Instance {
 func restartPolicyToProto(p types.RestartPolicy) *dicerdv1.RestartPolicy {
 	mode := p.Mode
 	if mode == "" {
-		mode = types.RestartNo
+		mode = types.RestartModeNo
 	}
 	return &dicerdv1.RestartPolicy{Mode: restartModes.toProto(mode), MaxRetries: int32(p.MaxRetries)}
 }
 
 // networkToProto converts a network with its address usage.
 func networkToProto(n types.Network, allocated int) *dicerdv1.Network {
-	total, free := n.Usage(allocated)
+	total, free := n.IPCounts(allocated)
 
 	return &dicerdv1.Network{
 		Id:          n.ID,
@@ -133,15 +133,15 @@ func allocationToProto(a types.NetworkAllocation, instanceName string) *dicerdv1
 }
 
 // snapshotToProto converts a snapshot of the named instance.
-func snapshotToProto(snap types.Snapshot, instanceName string) *dicerdv1.Snapshot {
+func snapshotToProto(snapshot types.Snapshot, instanceName string) *dicerdv1.Snapshot {
 	return &dicerdv1.Snapshot{
-		Name:              snap.Name,
+		Name:              snapshot.Name,
 		InstanceName:      instanceName,
-		HypervisorType:    hypervisorTypes.toProto(snap.HypervisorType),
-		HypervisorVersion: snap.HypervisorVersion,
-		MemoryBytes:       snap.MemoryBytes,
-		SizeBytes:         snap.SizeBytes,
-		CreateTime:        timestamppb.New(snap.CreatedAt),
+		HypervisorType:    hypervisorTypes.toProto(snapshot.HypervisorType),
+		HypervisorVersion: snapshot.HypervisorVersion,
+		MemoryBytes:       snapshot.MemoryBytes,
+		SizeBytes:         snapshot.SizeBytes,
+		CreateTime:        timestamppb.New(snapshot.CreatedAt),
 	}
 }
 
@@ -159,7 +159,7 @@ func kernelToProto(k types.Kernel) *dicerdv1.Kernel {
 	return &dicerdv1.Kernel{
 		Id:         k.ID,
 		Name:       k.Name,
-		Arch:       architectures.toProto(k.Arch),
+		Arch:       architectures.toProto(k.Architecture),
 		Url:        k.URL,
 		Sha256:     k.SHA256,
 		CreateTime: timestamppb.New(k.CreatedAt),
@@ -167,17 +167,17 @@ func kernelToProto(k types.Kernel) *dicerdv1.Kernel {
 	}
 }
 
-func imageToProto(img *types.Image) *dicerdv1.Image {
+func imageToProto(image *types.Image) *dicerdv1.Image {
 	out := &dicerdv1.Image{
-		Name:        img.Name,
-		Digest:      img.Digest,
-		SizeBytes:   img.SizeBytes,
-		CreateTime:  timestamppb.New(img.CreatedAt),
-		UpdateTime:  timestamppb.New(img.UpdatedAt),
-		HealthCheck: healthCheckToProto(img.HealthCheck),
+		Name:        image.Name,
+		Digest:      image.Digest,
+		SizeBytes:   image.SizeBytes,
+		CreateTime:  timestamppb.New(image.CreatedAt),
+		UpdateTime:  timestamppb.New(image.UpdatedAt),
+		HealthCheck: healthCheckToProto(image.HealthCheck),
 	}
-	if !img.LastUsedAt.IsZero() {
-		out.LastUsedTime = timestamppb.New(img.LastUsedAt)
+	if !image.LastUsedAt.IsZero() {
+		out.LastUsedTime = timestamppb.New(image.LastUsedAt)
 	}
 	return out
 }
@@ -191,7 +191,7 @@ func restartPolicyFromProto(p *dicerdv1.RestartPolicy) (types.RestartPolicy, err
 	}
 	policy := types.RestartPolicy{Mode: mode, MaxRetries: int(p.GetMaxRetries())}
 	if policy.Mode == "" {
-		policy.Mode = types.RestartNo
+		policy.Mode = types.RestartModeNo
 	}
 	if err := policy.Validate(); err != nil {
 		return types.RestartPolicy{}, errdefs.InvalidArgument("%v", err)

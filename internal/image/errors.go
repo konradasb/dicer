@@ -32,8 +32,8 @@ type PullError struct {
 
 // Error implements error.
 func (e *PullError) Error() string {
-	msg, _ := e.describe()
-	return msg
+	message, _ := e.describe()
+	return message
 }
 
 // Unwrap returns the underlying cause and the class.
@@ -44,7 +44,7 @@ func (e *PullError) Unwrap() []error {
 
 // describe returns the message and class of the failure.
 func (e *PullError) describe() (string, error) {
-	host := registryOf(e.Ref)
+	host := registryHost(e.Ref)
 
 	var httpErr *transport.Error
 	if errors.As(e.Cause, &httpErr) {
@@ -62,9 +62,9 @@ func (e *PullError) describe() (string, error) {
 
 	// Checked before network errors: credentials are resolved inside the
 	// HTTP transport, which wraps their failure as if it were the network's.
-	var credErr *registry.CredentialsError
-	if errors.As(e.Cause, &credErr) {
-		return fmt.Sprintf("cannot log in to %s: %v", host, credErr.Err), errdefs.ErrUnavailable
+	var credentialsErr *registry.CredentialsError
+	if errors.As(e.Cause, &credentialsErr) {
+		return fmt.Sprintf("cannot log in to %s: %v", host, credentialsErr.Err), errdefs.ErrUnavailable
 	}
 
 	var netErr net.Error
@@ -75,9 +75,9 @@ func (e *PullError) describe() (string, error) {
 	return fmt.Sprintf("cannot pull image %q: %v", e.Ref, innermost(e.Cause)), errdefs.ErrUnavailable
 }
 
-// registryOf returns the registry an image reference names, "docker.io" if
-// it names none.
-func registryOf(ref string) string {
+// registryHost returns the host of the registry an image reference names,
+// "docker.io" if it names none.
+func registryHost(ref string) string {
 	parsed, err := reference.Parse(ref)
 	if err != nil {
 		return "its registry"

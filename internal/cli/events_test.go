@@ -43,13 +43,13 @@ func testEvent(action, message string) *dicerdv1.Event {
 	return &dicerdv1.Event{
 		Time: timestamppb.New(time.Date(2026, 9, 1, 9, 49, 48, 0, time.Local)),
 		Kind: dicerdv1.EventKind_EVENT_KIND_INSTANCE, Id: "abc", Name: "grafana",
-		Action: eventAction_(action), Message: message,
+		Action: eventActionNamed(action), Message: message,
 		Attributes: map[string]string{"failing_streak": "3"},
 	}
 }
 
-// eventAction_ is the action enumName writes as name.
-func eventAction_(name string) dicerdv1.EventAction {
+// eventActionNamed is the action enumName writes as name.
+func eventActionNamed(name string) dicerdv1.EventAction {
 	a, err := parseEnum[dicerdv1.EventAction]("action", name)
 	if err != nil {
 		panic(err)
@@ -137,7 +137,7 @@ func TestWriteEventJSON(t *testing.T) {
 
 // inspect ends with what happened to the instance lately, lined up.
 func TestInspectShowsRecentEvents(t *testing.T) {
-	inst := &dicerdv1.Instance{Name: "grafana", ImageRef: "grafana/grafana", State: stateRunning}
+	instance := &dicerdv1.Instance{Name: "grafana", ImageRef: "grafana/grafana", State: stateRunning}
 	recent := []*dicerdv1.Event{
 		testEvent("unhealthy", "Check failed 3 times: timed out after 5s"),
 		testEvent("restarting", "Restart 1 in 1s"),
@@ -146,7 +146,7 @@ func TestInspectShowsRecentEvents(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := instanceView(inst, recent, palette{}).write(&buf); err != nil {
+	if err := instanceView(instance, recent, palette{}).write(&buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -160,7 +160,7 @@ func TestInspectShowsRecentEvents(t *testing.T) {
 
 	// No events, no block.
 	buf.Reset()
-	if err := instanceView(inst, nil, palette{}).write(&buf); err != nil {
+	if err := instanceView(instance, nil, palette{}).write(&buf); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(buf.String(), "Events") {
@@ -175,7 +175,7 @@ func TestEventColours(t *testing.T) {
 		"restarting": ansiYellow, "collected": ansiYellow,
 		"died": ansiRed, "unhealthy": ansiRed,
 	} {
-		if got := p.event(eventAction_(action), action); got != colour+action+ansiReset {
+		if got := p.event(eventActionNamed(action), action); got != colour+action+ansiReset {
 			t.Errorf("event(%s) = %q, want it in %q", action, got, colour)
 		}
 	}

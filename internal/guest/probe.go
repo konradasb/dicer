@@ -9,8 +9,8 @@ import "unicode/utf8"
 // host keeps.
 const MaxProbeOutput = 4096
 
-// TruncateOutput cuts s to at most MaxProbeOutput bytes, on a rune boundary.
-func TruncateOutput(s string) string {
+// TruncateProbeOutput cuts s to at most MaxProbeOutput bytes, on a rune boundary.
+func TruncateProbeOutput(s string) string {
 	n := MaxProbeOutput
 	if len(s) <= n {
 		return s

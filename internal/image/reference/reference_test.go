@@ -7,139 +7,97 @@ import (
 	"testing"
 )
 
-func TestParse(t *testing.T) {
-	tests := []struct {
-		name       string
-		input      string
-		wantRepo   string
-		wantTag    string
-		wantDigest string
-		wantErr    bool
+const testDigest = "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+func TestParseNormalisesReferences(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		input          string
+		wantString     string
+		wantRepository string
+		wantDigest     string
 	}{
 		{
-			name:     "simple name with tag",
-			input:    "alpine:3.18",
-			wantRepo: "docker.io/library/alpine",
-			wantTag:  "3.18",
+			name:           "short name with tag",
+			input:          "alpine:3.18",
+			wantString:     "docker.io/library/alpine:3.18",
+			wantRepository: "docker.io/library/alpine",
 		},
 		{
-			name:     "name without tag (should add latest)",
-			input:    "alpine",
-			wantRepo: "docker.io/library/alpine",
-			wantTag:  "latest",
+			name:           "short name without tag is tagged latest",
+			input:          "alpine",
+			wantString:     "docker.io/library/alpine:latest",
+			wantRepository: "docker.io/library/alpine",
 		},
 		{
-			name:     "fully qualified with tag",
-			input:    "docker.io/library/alpine:3.18",
-			wantRepo: "docker.io/library/alpine",
-			wantTag:  "3.18",
+			name:           "fully qualified with tag",
+			input:          "docker.io/library/alpine:3.18",
+			wantString:     "docker.io/library/alpine:3.18",
+			wantRepository: "docker.io/library/alpine",
 		},
 		{
-			name:       "with digest",
-			input:      "alpine@sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-			wantRepo:   "docker.io/library/alpine",
-			wantDigest: "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+			name:           "digest",
+			input:          "alpine@" + testDigest,
+			wantString:     "docker.io/library/alpine@" + testDigest,
+			wantRepository: "docker.io/library/alpine",
+			wantDigest:     testDigest,
 		},
 		{
-			name:     "custom registry",
-			input:    "gcr.io/my-project/my-image:v1.0.0",
-			wantRepo: "gcr.io/my-project/my-image",
-			wantTag:  "v1.0.0",
+			name:           "custom registry",
+			input:          "gcr.io/my-project/my-image:v1.0.0",
+			wantString:     "gcr.io/my-project/my-image:v1.0.0",
+			wantRepository: "gcr.io/my-project/my-image",
 		},
 		{
-			name:     "localhost registry",
-			input:    "localhost:5000/test:latest",
-			wantRepo: "localhost:5000/test",
-			wantTag:  "latest",
+			name:           "localhost registry",
+			input:          "localhost:5000/test:latest",
+			wantString:     "localhost:5000/test:latest",
+			wantRepository: "localhost:5000/test",
 		},
-		{
-			name:    "invalid reference",
-			input:   "INVALID::**",
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ref, err := Parse(tt.input)
-			if tt.wantErr {
-				if err == nil {
-					t.Error("Parse() should return error")
-				}
-				return
-			}
-
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ref, err := Parse(tc.input)
 			if err != nil {
-				t.Fatalf("Parse() error = %v", err)
+				t.Fatalf("Parse: %v", err)
 			}
 
-			if ref.Repository() != tt.wantRepo {
-				t.Errorf("Repository() = %v, want %v", ref.Repository(), tt.wantRepo)
+			if got := ref.String(); got != tc.wantString {
+				t.Errorf("String() = %q, want %q", got, tc.wantString)
 			}
-
-			if tt.wantTag != "" && ref.Tag() != tt.wantTag {
-				t.Errorf("Tag() = %v, want %v", ref.Tag(), tt.wantTag)
+			if got := ref.Repository(); got != tc.wantRepository {
+				t.Errorf("Repository() = %q, want %q", got, tc.wantRepository)
 			}
-
-			if tt.wantDigest != "" && ref.Digest() != tt.wantDigest {
-				t.Errorf("Digest() = %v, want %v", ref.Digest(), tt.wantDigest)
+			if got := ref.Digest(); got != tc.wantDigest {
+				t.Errorf("Digest() = %q, want %q", got, tc.wantDigest)
 			}
-
-			if ref.String() == "" {
-				t.Error("String() returned empty string")
+			if got, want := ref.HasDigest(), tc.wantDigest != ""; got != want {
+				t.Errorf("HasDigest() = %t, want %t", got, want)
 			}
 		})
 	}
 }
 
-func TestRef_HasDigest(t *testing.T) {
-	tests := []struct {
-		input string
-		want  bool
-	}{
-		{"alpine:latest", false},
-		{"alpine@sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", true},
-		{"gcr.io/project/image:v1", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			ref, err := Parse(tt.input)
-			if err != nil {
-				t.Fatalf("Parse() error = %v", err)
-			}
-
-			if got := ref.HasDigest(); got != tt.want {
-				t.Errorf("HasDigest() = %v, want %v", got, tt.want)
-			}
-		})
+func TestParseRejectsInvalidReference(t *testing.T) {
+	if _, err := Parse("INVALID::**"); err == nil {
+		t.Error("Parse accepted an invalid reference")
 	}
 }
 
-func TestRef_DigestHex(t *testing.T) {
-	tests := []struct {
-		input   string
-		wantHex string
+func TestFamiliarStringShortensReferences(t *testing.T) {
+	for _, tc := range []struct {
+		input, want string
 	}{
-		{"alpine:latest", ""},
-		{"alpine@sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			ref, err := Parse(tt.input)
-			if err != nil {
-				t.Fatalf("Parse() error = %v", err)
-			}
-
-			if got := ref.DigestHex(); got != tt.wantHex {
-				t.Errorf("DigestHex() = %v, want %v", got, tt.wantHex)
-			}
-		})
+		{"docker.io/library/busybox:latest", "busybox:latest"},
+		{"gcr.io/project/image:v1", "gcr.io/project/image:v1"},
+		{"INVALID::**", "INVALID::**"},
+	} {
+		if got := FamiliarString(tc.input); got != tc.want {
+			t.Errorf("FamiliarString(%q) = %q, want %q", tc.input, got, tc.want)
+		}
 	}
 }
 
-func TestShortDigest(t *testing.T) {
+func TestShortDigestAbbreviatesLongDigests(t *testing.T) {
 	for _, tc := range []struct {
 		digest, want string
 	}{

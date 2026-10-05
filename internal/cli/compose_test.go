@@ -4,10 +4,8 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"maps"
-	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -76,29 +74,29 @@ func (d *composeDaemon) CreateInstance(
 	d.record("create " + req.GetName())
 	d.created = req
 
-	inst := &dicerdv1.Instance{
+	instance := &dicerdv1.Instance{
 		Id: "id-" + req.GetName(), Name: req.GetName(), ImageRef: req.GetImageRef(), State: stateStopped,
 		Labels: req.GetLabels(), NetworkName: req.GetNetworkName(), Mounts: req.GetMounts(),
 		Ports: req.GetPorts(), HealthCheck: req.GetHealthCheck(), Env: req.GetEnv(),
 	}
-	d.instances[inst.GetName()] = inst
+	d.instances[instance.GetName()] = instance
 	if req.GetStart() {
-		d.start(inst)
+		d.start(instance)
 	}
-	return reply(inst, nil)
+	return reply(instance, nil)
 }
 
 // start runs an instance, as the daemon would.
-func (d *composeDaemon) start(inst *dicerdv1.Instance) {
-	name := inst.GetName()
-	inst.State, inst.Ip, inst.ExitCode = stateRunning, "10.0.0.9", nil
+func (d *composeDaemon) start(instance *dicerdv1.Instance) {
+	name := instance.GetName()
+	instance.State, instance.Ip, instance.ExitCode = stateRunning, "10.0.0.9", nil
 	d.ran[name] = true
 	d.console[name] = "booted " + name + "\r\n"
-	if inst.GetHealthCheck() != nil {
-		inst.Health = &dicerdv1.Health{Status: healthStarting}
+	if instance.GetHealthCheck() != nil {
+		instance.Health = &dicerdv1.Health{Status: healthStarting}
 	}
 	if code, ok := d.exits[name]; ok {
-		inst.State, inst.ExitCode = stateStopped, &code
+		instance.State, instance.ExitCode = stateStopped, &code
 		d.console[name] += "done\n"
 	}
 }
@@ -109,13 +107,13 @@ func (d *composeDaemon) StartInstance(
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	inst, err := d.get(req.GetName())
+	instance, err := d.get(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 	d.record("start " + req.GetName())
-	d.start(inst)
-	return reply(inst, nil)
+	d.start(instance)
+	return reply(instance, nil)
 }
 
 // GetInstance makes a checked instance healthy once it has been looked at
@@ -124,18 +122,18 @@ func (d *composeDaemon) GetInstance(_ context.Context, req *dicerdv1.GetInstance
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	inst, err := d.get(req.GetName())
+	instance, err := d.get(req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	if inst.GetHealth().GetStatus() == healthStarting {
-		d.looks[inst.GetName()]++
-		if d.looks[inst.GetName()] > d.healthyAfter {
-			inst.Health.Status = healthHealthy
-			d.record("healthy " + inst.GetName())
+	if instance.GetHealth().GetStatus() == healthStarting {
+		d.looks[instance.GetName()]++
+		if d.looks[instance.GetName()] > d.healthyAfter {
+			instance.Health.Status = healthHealthy
+			d.record("healthy " + instance.GetName())
 		}
 	}
-	return reply(inst, nil)
+	return reply(instance, nil)
 }
 
 func (d *composeDaemon) GetNetwork(_ context.Context, req *dicerdv1.GetNetworkRequest) (*dicerdv1.Network, error) {
@@ -239,29 +237,11 @@ func (d *composeDaemon) calledWith() []string {
 	return slices.Clone(d.calls)
 }
 
-// serveComposeDaemon serves d on a socket and aims dicer compose at it.
+// serveComposeDaemon serves d and aims dicer compose at it, which looks at
+// instances as often as a test can bear.
 func serveComposeDaemon(t *testing.T, d *composeDaemon) {
 	t.Helper()
-	isolateConfig(t)
-
-	dir, err := os.MkdirTemp("", "dicer")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-
-	socket := filepath.Join(dir, "d.sock")
-	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	server := newTestServer()
-	dicerdv1.RegisterDaemonServiceServer(server, d)
-	go func() { _ = server.Serve(listener) }()
-	t.Cleanup(server.Stop)
-
-	t.Setenv(remoteEnv, "unix://"+socket)
+	serveFakeDaemon(t, d)
 
 	poll := composePollInterval
 	composePollInterval = time.Millisecond
@@ -290,14 +270,7 @@ func runCompose(t *testing.T, file string, args ...string) (string, error) {
 	t.Setenv(composeFileEnv, "")
 	t.Setenv(composeProjectEnv, "")
 
-	cmd := NewCommand()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs(append([]string{"compose", "-f", file}, args...))
-
-	err := cmd.ExecuteContext(t.Context())
-	return out.String(), err
+	return run(t, append([]string{"compose", "-f", file}, args...)...)
 }
 
 // shopFile is a small project: a database others wait on to be healthy, an
@@ -563,9 +536,9 @@ func TestComposeProjectsGetNetworksOfTheirOwn(t *testing.T) {
 		t.Errorf("networks = %v, want a free subnet each", got)
 	}
 	for project, network := range map[string]string{"shop-db": "shop-default", "blog-db": "blog-default"} {
-		inst := d.instances[project]
-		if inst.GetNetworkName() != network {
-			t.Errorf("%s is on %q, want %q", project, inst.GetNetworkName(), network)
+		instance := d.instances[project]
+		if instance.GetNetworkName() != network {
+			t.Errorf("%s is on %q, want %q", project, instance.GetNetworkName(), network)
 		}
 	}
 	if created := d.created; created.GetHostname() != "db" {

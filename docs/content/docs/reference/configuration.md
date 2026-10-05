@@ -177,7 +177,7 @@ The daemon's own settings. The sections after them are the API, resources, netwo
 
 *integer*
 
-`uplink_capacity_bps` is the uplink's capacity in bits per second, the ceiling for per-instance bandwidth shaping. Unset sets no ceiling.
+`uplink_capacity_bps` is the uplink's capacity in bytes per second, not bits, the ceiling for per-instance bandwidth shaping. Unset sets up no shaping.
 
 ### `network.upload_burst_multiplier` {#network-upload-burst-multiplier}
 

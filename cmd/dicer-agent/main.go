@@ -3,8 +3,9 @@
 
 //go:build linux
 
-// Command dicer-agent serves exec requests inside a Dicer guest. The implementation
-// lives in internal/guest/agent.
+// Command dicer-agent serves the host's exec, copy, probe, process listing
+// and shutdown requests inside a Dicer guest. The implementation lives in
+// internal/guest/agent.
 package main
 
 import (

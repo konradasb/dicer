@@ -91,7 +91,9 @@ func WithTLS(cfg *tls.Config) Option {
 // A connection over a Unix socket is never pinged: the kernel closes it if
 // the daemon goes.
 func WithKeepalive(interval, timeout time.Duration) Option {
-	return func(o *options) { o.keepaliveInterval, o.keepaliveTimeout = interval, timeout }
+	return func(o *options) {
+		o.keepaliveInterval, o.keepaliveTimeout = interval, timeout
+	}
 }
 
 // WithDialOptions adds gRPC dial options, such as interceptors. They are
@@ -133,7 +135,11 @@ func NewClient(opts ...Option) (*Client, error) {
 
 	var dialOptions []grpc.DialOption
 	if o.keepaliveInterval > 0 && !isSocket(o.address) {
-		dialOptions = append(dialOptions, grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: o.keepaliveInterval, Timeout: cmp.Or(o.keepaliveTimeout, DefaultKeepaliveTimeout), PermitWithoutStream: true}))
+		dialOptions = append(dialOptions, grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                o.keepaliveInterval,
+			Timeout:             cmp.Or(o.keepaliveTimeout, DefaultKeepaliveTimeout),
+			PermitWithoutStream: true,
+		}))
 	}
 
 	dialOptions = append(dialOptions, o.dialOptions...)

@@ -25,18 +25,18 @@ const (
 // setup is everything Firecracker is told about a guest before it boots.
 // Each field maps to one pre-boot API resource.
 type setup struct {
-	boot    bootSource
-	machine machineConfig
-	drives  []drive
-	nics    []networkInterface
-	vsock   *vsock
-	hotplug *memoryHotplugConfig
-	serial  *serialDevice
+	boot              bootSource
+	machine           machineConfig
+	drives            []drive
+	networkInterfaces []networkInterface
+	vsock             *vsock
+	hotplug           *memoryHotplugConfig
+	serial            *serialDevice
 }
 
 // newSetup translates a Dicer VM specification into Firecracker's terms,
 // rejecting what Firecracker cannot do rather than silently dropping it.
-func newSetup(spec hypervisor.VirtualMachine) (*setup, error) {
+func newSetup(spec hypervisor.VMSpec) (*setup, error) {
 	if err := checkSupported(spec); err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func newSetup(spec hypervisor.VirtualMachine) (*setup, error) {
 		},
 		machine: machineConfig{
 			VCPUCount:  spec.CPU.Count,
-			MemSizeMiB: ceilDiv(spec.Memory.SizeBytes, mib),
+			MemSizeMiB: divideRoundingUp(spec.Memory.SizeBytes, mib),
 		},
 	}
 
@@ -64,21 +64,21 @@ func newSetup(spec hypervisor.VirtualMachine) (*setup, error) {
 		})
 	}
 
-	for i, n := range spec.NICs {
-		s.nics = append(s.nics, networkInterface{
+	for i, n := range spec.NetworkInterfaces {
+		s.networkInterfaces = append(s.networkInterfaces, networkInterface{
 			IfaceID:     fmt.Sprintf("eth%d", i),
-			HostDevName: n.TapDevice,
+			HostDevName: n.TAPDevice,
 			GuestMAC:    n.MAC,
 			MTU:         n.MTU,
 		})
 	}
 
 	if spec.Vsock != nil {
-		s.vsock = &vsock{GuestCID: spec.Vsock.CID, UDSPath: spec.Vsock.Socket}
+		s.vsock = &vsock{GuestCID: spec.Vsock.CID, UDSPath: spec.Vsock.SocketPath}
 	}
 
 	if spec.Memory.HotplugBytes > 0 {
-		slots := ceilDiv(spec.Memory.HotplugBytes, hotplugSlotMiB*mib)
+		slots := divideRoundingUp(spec.Memory.HotplugBytes, hotplugSlotMiB*mib)
 		s.hotplug = &memoryHotplugConfig{TotalSizeMiB: slots * hotplugSlotMiB}
 	}
 
@@ -91,7 +91,7 @@ func newSetup(spec hypervisor.VirtualMachine) (*setup, error) {
 
 // checkSupported rejects the parts of a specification Firecracker has no
 // equivalent for.
-func checkSupported(spec hypervisor.VirtualMachine) error {
+func checkSupported(spec hypervisor.VMSpec) error {
 	switch {
 	case spec.CPU.Count < 1 || spec.CPU.Count > maxVCPUs:
 		return fmt.Errorf("firecracker supports 1 to %d vCPUs, not %d", maxVCPUs, spec.CPU.Count)
@@ -101,7 +101,7 @@ func checkSupported(spec hypervisor.VirtualMachine) error {
 		return fmt.Errorf("firecracker: CPU topology: %w", errors.ErrUnsupported)
 	case len(spec.CPU.Affinity) > 0:
 		return fmt.Errorf("firecracker: CPU affinity: %w", errors.ErrUnsupported)
-	case len(spec.Devices) > 0:
+	case len(spec.PCIDevices) > 0:
 		return fmt.Errorf("firecracker: PCI passthrough: %w", errors.ErrUnsupported)
 	case spec.GPU != nil:
 		return fmt.Errorf("firecracker: GPU: %w", errors.ErrUnsupported)
@@ -112,16 +112,16 @@ func checkSupported(spec hypervisor.VirtualMachine) error {
 }
 
 // diskRateLimiter converts a disk's byte rate limit into Firecracker's token
-// bucket: RateLimitBps tokens refilled every second, plus the burst above
-// the rate as a one-off allowance.
+// bucket: the rate in tokens refilled every second, plus the burst above the
+// rate as a one-time allowance. An unlimited disk has none.
 func diskRateLimiter(d hypervisor.DiskConfig) *rateLimiter {
-	if d.RateLimitBps <= 0 {
+	if d.RateLimitBytesPerSecond <= 0 {
 		return nil
 	}
 
-	bucket := &tokenBucket{Size: d.RateLimitBps, RefillTime: 1000}
-	if d.RateLimitBurstBps > d.RateLimitBps {
-		bucket.OneTimeBurst = d.RateLimitBurstBps - d.RateLimitBps
+	bucket := &tokenBucket{Size: d.RateLimitBytesPerSecond, RefillTime: 1000}
+	if d.RateLimitBurstBytesPerSecond > d.RateLimitBytesPerSecond {
+		bucket.OneTimeBurst = d.RateLimitBurstBytesPerSecond - d.RateLimitBytesPerSecond
 	}
 	return &rateLimiter{Bandwidth: bucket}
 }
@@ -139,7 +139,7 @@ func (s *setup) apply(ctx context.Context, c *client) error {
 			return err
 		}
 	}
-	for _, n := range s.nics {
+	for _, n := range s.networkInterfaces {
 		if err := c.put(ctx, "/network-interfaces/"+n.IfaceID, n); err != nil {
 			return err
 		}
@@ -162,7 +162,7 @@ func (s *setup) apply(ctx context.Context, c *client) error {
 	return nil
 }
 
-// ceilDiv returns n/d rounded up, as an int.
-func ceilDiv(n, d int64) int {
+// divideRoundingUp returns n/d rounded up, as an int.
+func divideRoundingUp(n, d int64) int {
 	return int((n + d - 1) / d)
 }

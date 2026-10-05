@@ -209,6 +209,7 @@ type KeepaliveConfig struct {
 	MinClientInterval time.Duration `yaml:"min_client_interval,omitempty"`
 }
 
+// validate reports whether the keepalive settings are usable.
 func (k *KeepaliveConfig) validate() error {
 	switch {
 	case k.Interval <= 0:
@@ -267,6 +268,11 @@ type TCPConfig struct {
 	TLS TLSConfig `yaml:"tls"`
 }
 
+// Enabled reports whether the API is served over TCP.
+func (t TCPConfig) Enabled() bool {
+	return t.Listen != ""
+}
+
 // TLSConfig configures TLS on the network listener. The certificate and key
 // are reloaded when they change on disk; the client CA is read at startup.
 type TLSConfig struct {
@@ -310,11 +316,6 @@ func (t TLSConfig) validate() error {
 	}
 
 	return nil
-}
-
-// Enabled reports whether the API is served over TCP.
-func (t TCPConfig) Enabled() bool {
-	return t.Listen != ""
 }
 
 // ResourcesConfig sets how much of the host instances may be given: host
@@ -372,8 +373,9 @@ type NetworkConfig struct {
 	// it from the default route.
 	UplinkInterface string `yaml:"uplink_interface,omitempty"`
 
-	// UplinkCapacityBps is the uplink's capacity in bits per second, the
-	// ceiling for per-instance bandwidth shaping. Unset sets no ceiling.
+	// UplinkCapacityBps is the uplink's capacity in bytes per second, not
+	// bits, the ceiling for per-instance bandwidth shaping. Unset sets up no
+	// shaping.
 	UplinkCapacityBps int64 `yaml:"uplink_capacity_bps,omitempty"`
 
 	// UploadBurstMultiplier is how far an instance may briefly exceed its
@@ -445,6 +447,7 @@ type ImagesConfig struct {
 	GCInterval time.Duration `yaml:"gc_interval,omitempty"`
 }
 
+// validate reports whether the garbage collection settings are usable.
 func (i *ImagesConfig) validate() error {
 	switch {
 	case i.GCMaxUnusedAge < 0:
@@ -466,6 +469,7 @@ func (i *ImagesConfig) gcPolicy() image.GCPolicy {
 // such as 50GiB.
 type byteSize int64
 
+// UnmarshalYAML reads a number of bytes, or a size with a unit.
 func (b *byteSize) UnmarshalYAML(value *yaml.Node) error {
 	var n int64
 	if value.Decode(&n) == nil {
@@ -491,6 +495,7 @@ type EventsConfig struct {
 	MaxAge time.Duration `yaml:"max_age,omitempty"`
 }
 
+// validate reports whether the events log's bounds are usable.
 func (e *EventsConfig) validate() error {
 	switch {
 	case e.MaxCount <= 0:

@@ -98,11 +98,11 @@ func TestGetEventsBatchesTheHistory(t *testing.T) {
 		t.Errorf("empty history sent %v, want one empty batch, caught up", sent)
 	}
 
-	for range eventBatch + 1 {
+	for range eventBatchSize + 1 {
 		log.Record(events.Event{Kind: events.KindInstance, Name: "web", Action: events.ActionStarted})
 	}
 	sent := history(t, h, &dicerdv1.GetEventsRequest{})
-	if len(sent) != 2 || len(sent[0].GetEvents()) != eventBatch || sent[0].GetCaughtUp() ||
+	if len(sent) != 2 || len(sent[0].GetEvents()) != eventBatchSize || sent[0].GetCaughtUp() ||
 		len(sent[1].GetEvents()) != 1 || !sent[1].GetCaughtUp() {
 		t.Errorf("sent %d batches, want a full one, then the last one caught up", len(sent))
 	}

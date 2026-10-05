@@ -15,7 +15,7 @@ import (
 func TestRename(t *testing.T) {
 	h := newHarness(t)
 
-	renamed, err := h.mgr.Rename(t.Context(), h.inst, "web-2")
+	renamed, err := h.manager.Rename(t.Context(), h.instance, "web-2")
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
@@ -26,14 +26,14 @@ func TestRename(t *testing.T) {
 	// The ID is what everything else is derived from, so a rename that
 	// changed it would orphan the instance's runtime directory, its TAP
 	// device and its address.
-	if renamed.ID != h.inst.ID {
-		t.Errorf("ID = %q, want it unchanged (%q)", renamed.ID, h.inst.ID)
+	if renamed.ID != h.instance.ID {
+		t.Errorf("ID = %q, want it unchanged (%q)", renamed.ID, h.instance.ID)
 	}
 
-	if _, err := h.definitions.GetInstance("web"); !errors.Is(err, errdefs.ErrNotFound) {
+	if _, err := h.definitions.Instance("web"); !errors.Is(err, errdefs.ErrNotFound) {
 		t.Errorf("the old name still resolves: %v", err)
 	}
-	stored, err := h.definitions.GetInstance("web-2")
+	stored, err := h.definitions.Instance("web-2")
 	if err != nil {
 		t.Fatalf("the new name does not resolve: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestRename(t *testing.T) {
 	}
 
 	// Looking it up by ID finds it under its new name.
-	byID, err := h.definitions.GetInstance(h.inst.ID)
+	byID, err := h.definitions.Instance(h.instance.ID)
 	if err != nil || byID.Name != "web-2" {
 		t.Errorf("by ID = %+v, %v; want the renamed instance", byID, err)
 	}
@@ -51,7 +51,7 @@ func TestRename(t *testing.T) {
 func TestRenameRecordsAnEvent(t *testing.T) {
 	h := newHarness(t)
 
-	if _, err := h.mgr.Rename(t.Context(), h.inst, "web-2"); err != nil {
+	if _, err := h.manager.Rename(t.Context(), h.instance, "web-2"); err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
 
@@ -73,12 +73,12 @@ func TestRenameAllowsAFailedInstance(t *testing.T) {
 	h := newHarness(t)
 	h.start(t)
 	h.exit(t, 1)
-	h.waitForState(t, types.StateFailed)
+	h.waitForState(t, types.InstanceStateFailed)
 
-	if _, err := h.mgr.Rename(t.Context(), h.inst, "web-2"); err != nil {
+	if _, err := h.manager.Rename(t.Context(), h.instance, "web-2"); err != nil {
 		t.Fatalf("Rename of a failed instance: %v", err)
 	}
-	if _, err := h.definitions.GetInstance("web-2"); err != nil {
+	if _, err := h.definitions.Instance("web-2"); err != nil {
 		t.Errorf("the failed instance was not renamed: %v", err)
 	}
 }
@@ -87,12 +87,12 @@ func TestRenameRefusesARunningInstance(t *testing.T) {
 	h := newHarness(t)
 	h.start(t)
 
-	_, err := h.mgr.Rename(t.Context(), h.inst, "web-2")
+	_, err := h.manager.Rename(t.Context(), h.instance, "web-2")
 	if !errors.Is(err, errdefs.ErrInvalidState) {
 		t.Errorf("Rename of a running instance = %v, want an invalid state", err)
 	}
 
-	if _, err := h.definitions.GetInstance("web"); err != nil {
+	if _, err := h.definitions.Instance("web"); err != nil {
 		t.Errorf("the refused rename moved the instance anyway: %v", err)
 	}
 }
@@ -101,7 +101,7 @@ func TestRenameRefusesANameInUse(t *testing.T) {
 	h := newHarness(t)
 	seedInstance(t, h.definitions, "taken")
 
-	if _, err := h.mgr.Rename(t.Context(), h.inst, "taken"); !errors.Is(err, errdefs.ErrExists) {
+	if _, err := h.manager.Rename(t.Context(), h.instance, "taken"); !errors.Is(err, errdefs.ErrExists) {
 		t.Errorf("Rename onto a taken name = %v, want an already-exists error", err)
 	}
 }
@@ -111,11 +111,11 @@ func TestRenameRefusesANameInUse(t *testing.T) {
 func TestRenameToTheSameNameDoesNothing(t *testing.T) {
 	h := newHarness(t)
 
-	renamed, err := h.mgr.Rename(t.Context(), h.inst, h.inst.Name)
+	renamed, err := h.manager.Rename(t.Context(), h.instance, h.instance.Name)
 	if err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
-	if renamed.Name != h.inst.Name {
+	if renamed.Name != h.instance.Name {
 		t.Errorf("name = %q, want it unchanged", renamed.Name)
 	}
 	if _, ok := h.events.last(events.ActionRenamed); ok {

@@ -41,7 +41,7 @@ func LogPath(socketPath string) string {
 // killed and the error includes its log.
 func StartProcess(ctx context.Context, socketPath, binaryPath string, args ...string) (*process.Process, error) {
 	if socketInUse(socketPath) {
-		return nil, fmt.Errorf("socket %s is already in use; is a VMM already running?", socketPath)
+		return nil, fmt.Errorf("socket %s is already in use; is a hypervisor already running?", socketPath)
 	}
 
 	// A stale socket from a VMM that died would make the new one fail to
@@ -54,7 +54,7 @@ func StartProcess(ctx context.Context, socketPath, binaryPath string, args ...st
 	}
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("open vmm log: %w", err)
+		return nil, fmt.Errorf("open hypervisor log: %w", err)
 	}
 	// The child holds its own copy of the descriptor once started.
 	defer func() { _ = logFile.Close() }()
@@ -77,7 +77,7 @@ func StartProcess(ctx context.Context, socketPath, binaryPath string, args ...st
 	if err := waitForSocket(waitCtx, socketPath, p.Done()); err != nil {
 		p.Terminate()
 		if log, readErr := os.ReadFile(logPath); readErr == nil && len(log) > 0 {
-			return nil, fmt.Errorf("%w: vmm log: %s", err, log)
+			return nil, fmt.Errorf("%w: hypervisor log: %s", err, log)
 		}
 		return nil, err
 	}
@@ -105,10 +105,10 @@ func waitForSocket(ctx context.Context, path string, exited <-chan struct{}) err
 	for {
 		select {
 		case <-exited:
-			return errors.New("the VMM exited before serving its API")
+			return errors.New("the hypervisor exited before serving its API")
 		case <-ctx.Done():
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return errors.New("timed out waiting for the VMM API socket")
+				return errors.New("timed out waiting for the hypervisor API socket")
 			}
 			return ctx.Err()
 		case <-ticker.C:

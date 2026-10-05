@@ -18,37 +18,38 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// netAdminProcAttr propagates CAP_NET_ADMIN to child processes.
-// Required for iptables and ip commands.
+// netAdminProcAttr passes CAP_NET_ADMIN on to iptables, which needs it.
 var netAdminProcAttr = &syscall.SysProcAttr{
 	AmbientCaps: []uintptr{unix.CAP_NET_ADMIN},
 }
 
-// iptablesCmd builds an iptables invocation bound to ctx that waits for the
-// xtables lock.
-func iptablesCmd(ctx context.Context, args ...string) *exec.Cmd {
+// iptablesCommand returns an iptables command, bound to ctx, that waits for
+// the xtables lock.
+func iptablesCommand(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "iptables", slices.Concat([]string{"-w"}, args)...)
 	cmd.SysProcAttr = netAdminProcAttr
 
 	return cmd
 }
 
-// Custom chain names. The FORWARD chain only contains jumps to these chains,
-// keeping it clean and avoiding position-dependent insertion issues.
+// Dicer's chains. FORWARD only jumps to them, so their rules need no
+// position in it. Their names, like the comments on Dicer's rules, are
+// what Dicer finds its rules by on hosts it set up before: they must not
+// change.
 //
 // Evaluation order in FORWARD:
 //  1. DICER-USER              — admin-defined overrides (empty by default)
 //  2. DICER-ISOLATION-STAGE-1 — inter-network isolation (two-stage, like Docker)
 //  3. DICER-FORWARD           — per-bridge ACCEPT rules (ICC + NAT forwarding)
 //
-// The INPUT chain jump is separate from FORWARD because it applies to traffic
-// destined for the host (e.g. gateway IP), not traffic being forwarded through it.
+// DICER-INPUT is jumped to from INPUT, as it filters traffic to the host
+// itself, such as to a gateway address, rather than through it.
 const (
-	chainDicerUser       = "DICER-USER"
-	chainIsolationStage1 = "DICER-ISOLATION-STAGE-1"
-	chainIsolationStage2 = "DICER-ISOLATION-STAGE-2"
-	chainDicerForward    = "DICER-FORWARD"
-	chainDicerInput      = "DICER-INPUT"
+	chainDicerUser            = "DICER-USER"
+	chainDicerIsolationStage1 = "DICER-ISOLATION-STAGE-1"
+	chainDicerIsolationStage2 = "DICER-ISOLATION-STAGE-2"
+	chainDicerForward         = "DICER-FORWARD"
+	chainDicerInput           = "DICER-INPUT"
 )
 
 const (
@@ -58,45 +59,44 @@ const (
 	commentJumpInput     = "dicer-jump-input"
 )
 
-// chainJump maps a comment tag to its target chain and the parent chain it
-// is inserted into (e.g. FORWARD or INPUT).
+// chainJump is a rule in a built-in parent chain, such as FORWARD or INPUT,
+// tagged with comment, that jumps to one of Dicer's chains.
 type chainJump struct {
 	parent  string
 	comment string
 	target  string
 }
 
-// dicerJumps defines all built-in chain jumps grouped by parent chain.
-// Within the same parent chain the evaluation order matches slice order.
+// dicerJumps are the jumps to Dicer's filter chains. Jumps from the same
+// parent chain are evaluated in slice order.
 var dicerJumps = []chainJump{
 	{"FORWARD", commentJumpUser, chainDicerUser},
-	{"FORWARD", commentJumpIsolation, chainIsolationStage1},
+	{"FORWARD", commentJumpIsolation, chainDicerIsolationStage1},
 	{"FORWARD", commentJumpForward, chainDicerForward},
 	{"INPUT", commentJumpInput, chainDicerInput},
 }
 
-// dicerChains lists all custom chains we manage.
+// dicerChains are Dicer's chains in the filter table.
 var dicerChains = []string{
 	chainDicerUser,
-	chainIsolationStage1,
-	chainIsolationStage2,
+	chainDicerIsolationStage1,
+	chainDicerIsolationStage2,
 	chainDicerForward,
 	chainDicerInput,
 }
 
-// Per-bridge comment helpers.
-func natComment(bridge string) string         { return "dicer-nat-" + bridge }
-func fwdOutComment(bridge string) string      { return "dicer-fwd-out-" + bridge }
-func fwdInComment(bridge string) string       { return "dicer-fwd-in-" + bridge }
-func iccComment(bridge string) string         { return "dicer-icc-" + bridge }
-func isolationS1Comment(bridge string) string { return "dicer-isolation-s1-" + bridge }
-func isolationS2Comment(bridge string) string { return "dicer-isolation-s2-" + bridge }
-func inputAcceptComment(bridge string) string { return "dicer-input-accept-" + bridge }
-func inputDropComment(bridge string) string   { return "dicer-input-drop-" + bridge }
+// These return the comments that tag a bridge's rules.
+func natComment(bridge string) string             { return "dicer-nat-" + bridge }
+func forwardOutComment(bridge string) string      { return "dicer-fwd-out-" + bridge }
+func forwardInComment(bridge string) string       { return "dicer-fwd-in-" + bridge }
+func iccComment(bridge string) string             { return "dicer-icc-" + bridge }
+func isolationStage1Comment(bridge string) string { return "dicer-isolation-s1-" + bridge }
+func isolationStage2Comment(bridge string) string { return "dicer-isolation-s2-" + bridge }
+func inputAcceptComment(bridge string) string     { return "dicer-input-accept-" + bridge }
+func inputDropComment(bridge string) string       { return "dicer-input-drop-" + bridge }
 
-// setupIPTables ensures NAT, forwarding and isolation rules are in place for
-// the given bridge and subnet. Input rules are gateway access's: see
-// ensureGatewayAccess.
+// setupIPTables ensures the NAT, forwarding and isolation rules of a bridge
+// and its subnet. Input rules are gateway access's: see ensureGatewayAccess.
 func (h *Host) setupIPTables(ctx context.Context, bridge, subnetCIDR string) error {
 	h.rulesMu.Lock()
 	defer h.rulesMu.Unlock()
@@ -109,32 +109,33 @@ func (h *Host) setupIPTables(ctx context.Context, bridge, subnetCIDR string) err
 		return ErrForwardingDisabled
 	}
 
-	uplink, err := h.resolveUplink()
+	uplink, err := h.uplink()
 	if err != nil {
 		return err
 	}
-	h.logger.InfoContext(ctx, "uplink detected", "interface", uplink)
 
 	if err := ensureDicerChains(ctx); err != nil {
-		return fmt.Errorf("setup dicer chains: %w", err)
+		return fmt.Errorf("set up Dicer's chains: %w", err)
 	}
-	if err := ensureNATRule(ctx, subnetCIDR, uplink, natComment(bridge)); err != nil {
-		return fmt.Errorf("setup NAT: %w", err)
+	if err := ensureRule(ctx, "nat", "POSTROUTING", natComment(bridge),
+		"-s", subnetCIDR, "-o", uplink,
+		"-j", "MASQUERADE"); err != nil {
+		return fmt.Errorf("set up NAT: %w", err)
 	}
 	if err := ensureForwardRules(ctx, bridge, uplink); err != nil {
-		return fmt.Errorf("setup forward rules: %w", err)
+		return fmt.Errorf("set up forward rules: %w", err)
 	}
 	if err := ensureIsolationRules(ctx, bridge); err != nil {
-		return fmt.Errorf("setup isolation rules: %w", err)
+		return fmt.Errorf("set up isolation rules: %w", err)
 	}
 
 	h.logger.InfoContext(ctx, "iptables configured",
-		"subnet", subnetCIDR, "uplink", uplink)
+		"bridge", bridge, "subnet", subnetCIDR, "uplink", uplink)
 	return nil
 }
 
-// teardownIPTables removes all iptables rules for a specific bridge/subnet.
-// Best-effort: logs failures but does not abort on individual rule removal errors.
+// teardownIPTables removes the rules setupIPTables ensures for a bridge.
+// Best-effort: it logs failures rather than returning them.
 func (h *Host) teardownIPTables(ctx context.Context, bridge string) {
 	h.rulesMu.Lock()
 	defer h.rulesMu.Unlock()
@@ -149,51 +150,37 @@ func (h *Host) teardownIPTables(ctx context.Context, bridge string) {
 		h.logger.WarnContext(ctx, "failed to remove isolation rules", "bridge", bridge, "error", err)
 	}
 
-	h.logger.DebugContext(ctx, "iptables rules removed",
-		"bridge", bridge)
+	h.logger.DebugContext(ctx, "iptables rules removed", "bridge", bridge)
 }
 
-// ensureDicerChains creates all custom chains and inserts FORWARD jumps in the
-// correct evaluation order (idempotent).
+// ensureDicerChains creates Dicer's chains and the jumps to them, putting
+// the jumps from each parent chain back in order if any is missing.
 func ensureDicerChains(ctx context.Context) error {
 	for _, chain := range dicerChains {
-		cmd := iptablesCmd(ctx, "-N", chain)
-		_ = cmd.Run() // fails if the chain already exists, which is fine
+		_ = iptablesCommand(ctx, "-N", chain).Run() // fails if the chain already exists, which is fine
 	}
 
-	// Group jumps by parent chain, preserving slice order within each group.
-	groups := make(map[string][]chainJump)
+	jumpsByParent := make(map[string][]chainJump)
 	for _, j := range dicerJumps {
-		groups[j.parent] = append(groups[j.parent], j)
+		jumpsByParent[j.parent] = append(jumpsByParent[j.parent], j)
 	}
 
-	for parent, jumps := range groups {
-		// Check if all jumps for this parent are present.
-		allPresent := true
-		for _, j := range jumps {
-			check := iptablesCmd(ctx, "-C", parent,
-				"-m", "comment", "--comment", j.comment,
-				"-j", j.target)
-			if check.Run() != nil {
-				allPresent = false
-				break
-			}
-		}
-		if allPresent {
+	for parent, jumps := range jumpsByParent {
+		anyMissing := slices.ContainsFunc(jumps, func(j chainJump) bool {
+			return !ruleExists(ctx, "filter", parent, jumpRule(j))
+		})
+		if !anyMissing {
 			continue
 		}
 
-		// Remove stale jumps and re-insert in correct order.
 		for _, j := range jumps {
 			_ = deleteRulesWithComment(ctx, "filter", parent, j.comment)
 		}
-		// Insert in reverse so they end up in the correct order at position 1.
+		// Each is inserted first, so in reverse they end up in order.
 		for _, j := range slices.Backward(jumps) {
-			cmd := iptablesCmd(ctx, "-I", parent, "1",
-				"-m", "comment", "--comment", j.comment,
-				"-j", j.target)
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("insert %s jump to %s: %w", parent, j.target, err)
+			args := slices.Concat([]string{"-I", parent, "1"}, jumpRule(j))
+			if out, err := iptablesCommand(ctx, args...).CombinedOutput(); err != nil {
+				return fmt.Errorf("insert %s jump to %s: %w: %s", parent, j.target, err, out)
 			}
 		}
 	}
@@ -201,41 +188,24 @@ func ensureDicerChains(ctx context.Context) error {
 	return nil
 }
 
-// ensureNATRule adds a MASQUERADE rule for the given subnet if not present.
-func ensureNATRule(ctx context.Context, subnetCIDR, uplink, comment string) error {
-	check := iptablesCmd(ctx, "-t", "nat", "-C", "POSTROUTING",
-		"-s", subnetCIDR, "-o", uplink,
-		"-m", "comment", "--comment", comment,
-		"-j", "MASQUERADE")
-	if check.Run() == nil {
-		return nil // already present
-	}
-
-	// Remove any stale rule with our comment (handles uplink renames).
-	_ = deleteRulesWithComment(ctx, "nat", "POSTROUTING", comment)
-
-	add := iptablesCmd(ctx, "-t", "nat", "-A", "POSTROUTING",
-		"-s", subnetCIDR, "-o", uplink,
-		"-m", "comment", "--comment", comment,
-		"-j", "MASQUERADE")
-	if err := add.Run(); err != nil {
-		return fmt.Errorf("add MASQUERADE: %w", err)
-	}
-	return nil
+// jumpRule returns the rule arguments of a jump.
+func jumpRule(j chainJump) []string {
+	return commented(j.comment, []string{"-j", j.target})
 }
 
 // ensureForwardRules adds ICC, outbound, and inbound ACCEPT rules to
 // the DICER-FORWARD chain for the given bridge (idempotent).
 func ensureForwardRules(ctx context.Context, bridge, uplink string) error {
-	// ICC: allow traffic within the same bridge (inter-container communication).
-	if err := appendChainRule(ctx, chainDicerForward, iccComment(bridge),
+	// ICC (inter-container communication): instances on the bridge reach
+	// each other.
+	if err := ensureRule(ctx, "filter", chainDicerForward, iccComment(bridge),
 		"-i", bridge, "-o", bridge,
 		"-j", "ACCEPT"); err != nil {
 		return fmt.Errorf("add ICC rule for %s: %w", bridge, err)
 	}
 
 	// Outbound: bridge → uplink.
-	if err := appendChainRule(ctx, chainDicerForward, fwdOutComment(bridge),
+	if err := ensureRule(ctx, "filter", chainDicerForward, forwardOutComment(bridge),
 		"-i", bridge, "-o", uplink,
 		"-m", "conntrack", "--ctstate", "NEW,RELATED,ESTABLISHED",
 		"-j", "ACCEPT"); err != nil {
@@ -243,7 +213,7 @@ func ensureForwardRules(ctx context.Context, bridge, uplink string) error {
 	}
 
 	// Inbound: uplink → bridge (return traffic only).
-	if err := appendChainRule(ctx, chainDicerForward, fwdInComment(bridge),
+	if err := ensureRule(ctx, "filter", chainDicerForward, forwardInComment(bridge),
 		"-i", uplink, "-o", bridge,
 		"-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED",
 		"-j", "ACCEPT"); err != nil {
@@ -258,8 +228,8 @@ func removeForwardRules(ctx context.Context, bridge string) error {
 	var errs []error
 	for _, comment := range []string{
 		iccComment(bridge),
-		fwdOutComment(bridge),
-		fwdInComment(bridge),
+		forwardOutComment(bridge),
+		forwardInComment(bridge),
 	} {
 		if err := deleteRulesWithComment(ctx, "filter", chainDicerForward, comment); err != nil {
 			errs = append(errs, err)
@@ -272,13 +242,13 @@ func removeForwardRules(ctx context.Context, bridge string) error {
 // Stage 1: traffic leaving this bridge (not staying on it) → jump to stage 2.
 // Stage 2: traffic destined for this bridge → DROP.
 func ensureIsolationRules(ctx context.Context, bridge string) error {
-	if err := appendChainRule(ctx, chainIsolationStage1, isolationS1Comment(bridge),
+	if err := ensureRule(ctx, "filter", chainDicerIsolationStage1, isolationStage1Comment(bridge),
 		"-i", bridge, "!", "-o", bridge,
-		"-j", chainIsolationStage2); err != nil {
+		"-j", chainDicerIsolationStage2); err != nil {
 		return fmt.Errorf("add isolation stage-1 rule for %s: %w", bridge, err)
 	}
 
-	if err := appendChainRule(ctx, chainIsolationStage2, isolationS2Comment(bridge),
+	if err := ensureRule(ctx, "filter", chainDicerIsolationStage2, isolationStage2Comment(bridge),
 		"-o", bridge,
 		"-j", "DROP"); err != nil {
 		return fmt.Errorf("add isolation stage-2 rule for %s: %w", bridge, err)
@@ -291,8 +261,8 @@ func ensureIsolationRules(ctx context.Context, bridge string) error {
 func removeIsolationRules(ctx context.Context, bridge string) error {
 	var errs []error
 	for _, pair := range []struct{ chain, comment string }{
-		{chainIsolationStage1, isolationS1Comment(bridge)},
-		{chainIsolationStage2, isolationS2Comment(bridge)},
+		{chainDicerIsolationStage1, isolationStage1Comment(bridge)},
+		{chainDicerIsolationStage2, isolationStage2Comment(bridge)},
 	} {
 		if err := deleteRulesWithComment(ctx, "filter", pair.chain, pair.comment); err != nil {
 			errs = append(errs, err)
@@ -302,20 +272,20 @@ func removeIsolationRules(ctx context.Context, bridge string) error {
 }
 
 // ensureInputRules accepts traffic to a bridge's gateway IP only from that
-// bridge, so VMs cannot reach another network's gateway. The ACCEPT and DROP
+// bridge, so instances cannot reach another network's gateway. The ACCEPT and DROP
 // rules are replaced together to keep their order.
 func ensureInputRules(ctx context.Context, bridge, gatewayIP string) error {
 	accept := commented(inputAcceptComment(bridge), []string{"-i", bridge, "-d", gatewayIP, "-j", "ACCEPT"})
 	drop := commented(inputDropComment(bridge), []string{"-d", gatewayIP, "-j", "DROP"})
-	if ruleExists(ctx, chainDicerInput, accept) && ruleExists(ctx, chainDicerInput, drop) {
+	if ruleExists(ctx, "filter", chainDicerInput, accept) && ruleExists(ctx, "filter", chainDicerInput, drop) {
 		return nil
 	}
 
 	_ = removeInputRules(ctx, bridge)
-	if err := appendRule(ctx, chainDicerInput, accept); err != nil {
+	if err := appendRule(ctx, "filter", chainDicerInput, accept); err != nil {
 		return fmt.Errorf("add input accept rule for %s: %w", bridge, err)
 	}
-	if err := appendRule(ctx, chainDicerInput, drop); err != nil {
+	if err := appendRule(ctx, "filter", chainDicerInput, drop); err != nil {
 		return fmt.Errorf("add input drop rule for %s: %w", bridge, err)
 	}
 	return nil
@@ -335,16 +305,16 @@ func removeInputRules(ctx context.Context, bridge string) error {
 	return errors.Join(errs...)
 }
 
-// appendChainRule appends a rule to the given chain unless it is already
-// there (idempotent). A rule with the same comment that differs -- one naming
-// the uplink the host had before -- is replaced.
-func appendChainRule(ctx context.Context, chain, comment string, args ...string) error {
+// ensureRule appends a rule, tagged with comment, to a chain unless it is
+// already there. A rule with the same comment that differs -- one naming the
+// uplink the host had before -- is replaced.
+func ensureRule(ctx context.Context, table, chain, comment string, args ...string) error {
 	rule := commented(comment, args)
-	if ruleExists(ctx, chain, rule) {
+	if ruleExists(ctx, table, chain, rule) {
 		return nil
 	}
-	_ = deleteRulesWithComment(ctx, "filter", chain, comment)
-	return appendRule(ctx, chain, rule)
+	_ = deleteRulesWithComment(ctx, table, chain, comment)
+	return appendRule(ctx, table, chain, rule)
 }
 
 // commented returns the rule args with a match on comment before its
@@ -357,22 +327,23 @@ func commented(comment string, args []string) []string {
 	return rule
 }
 
-// ruleExists reports whether chain holds rule, in the filter table.
-func ruleExists(ctx context.Context, chain string, rule []string) bool {
-	return iptablesCmd(ctx, slices.Concat([]string{"-C", chain}, rule)...).Run() == nil
+// ruleExists reports whether chain, in table, holds rule.
+func ruleExists(ctx context.Context, table, chain string, rule []string) bool {
+	return iptablesCommand(ctx, slices.Concat([]string{"-t", table, "-C", chain}, rule)...).Run() == nil
 }
 
-// appendRule appends rule to chain, in the filter table.
-func appendRule(ctx context.Context, chain string, rule []string) error {
-	if out, err := iptablesCmd(ctx, slices.Concat([]string{"-A", chain}, rule)...).CombinedOutput(); err != nil {
-		return fmt.Errorf("append rule to %s: %w: %s", chain, err, out)
+// appendRule appends rule to chain, in table.
+func appendRule(ctx context.Context, table, chain string, rule []string) error {
+	args := slices.Concat([]string{"-t", table, "-A", chain}, rule)
+	if out, err := iptablesCommand(ctx, args...).CombinedOutput(); err != nil {
+		return fmt.Errorf("append rule to %s/%s: %w: %s", table, chain, err, out)
 	}
 	return nil
 }
 
-// specComment returns the comment of a rule as `iptables -S` prints it, or
+// ruleComment returns the comment of a rule as `iptables -S` prints it, or
 // "" if it has none.
-func specComment(line string) string {
+func ruleComment(line string) string {
 	fields := strings.Fields(line)
 	for i, f := range fields[:max(len(fields)-1, 0)] {
 		if f == "--comment" {
@@ -385,14 +356,14 @@ func specComment(line string) string {
 // deleteRulesWithComment removes all rules in table/chain with the given
 // comment, by specification rather than position.
 func deleteRulesWithComment(ctx context.Context, table, chain, comment string) error {
-	out, err := iptablesCmd(ctx, "-t", table, "-S", chain).Output()
+	out, err := iptablesCommand(ctx, "-t", table, "-S", chain).Output()
 	if err != nil {
-		return err
+		return fmt.Errorf("list rules in %s/%s: %w", table, chain, err)
 	}
 
 	var errs []error
 	for line := range strings.SplitSeq(string(out), "\n") {
-		if specComment(line) != comment {
+		if ruleComment(line) != comment {
 			continue
 		}
 		// "-A CHAIN ..." is deleted as "-D CHAIN ...". The rules carrying
@@ -403,7 +374,7 @@ func deleteRulesWithComment(ctx context.Context, table, chain, comment string) e
 		for i, a := range args {
 			args[i] = strings.Trim(a, `"`)
 		}
-		if out, err := iptablesCmd(ctx, slices.Concat([]string{"-t", table}, args)...).CombinedOutput(); err != nil {
+		if out, err := iptablesCommand(ctx, slices.Concat([]string{"-t", table}, args)...).CombinedOutput(); err != nil {
 			errs = append(errs, fmt.Errorf("delete rule %q in %s/%s: %w: %s", line, table, chain, err, out))
 		}
 	}

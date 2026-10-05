@@ -20,11 +20,7 @@ import (
 // Stats returns what the VMM of each running or paused instance uses of the
 // host now, in name order. An instance whose VMM cannot be read is left out.
 func (m *Manager) Stats() []types.InstanceStats {
-	instances, err := m.definitions.ListInstances()
-	if err != nil {
-		m.logger.Warn("cannot list instances for stats", "error", err)
-		return nil
-	}
+	instances := m.definitions.Instances()
 
 	proc, err := procfs.NewFS(m.procDir)
 	if err != nil {
@@ -38,13 +34,13 @@ func (m *Manager) Stats() []types.InstanceStats {
 	}
 
 	var stats []types.InstanceStats
-	for _, inst := range instances {
-		vmm := m.vmm(inst.ID)
+	for _, instance := range instances {
+		vmm := m.vmm(instance.ID)
 		if vmm == nil {
 			continue
 		}
 
-		s, err := m.readStats(proc, devices, inst, vmm.PID())
+		instanceStats, err := m.readStats(proc, devices, instance, vmm.PID())
 
 		// Once the VMM has exited its PID may be another process's, so
 		// what was read cannot be trusted, nor is it missed.
@@ -54,53 +50,53 @@ func (m *Manager) Stats() []types.InstanceStats {
 		default:
 		}
 		if err != nil {
-			m.logger.Warn("cannot read instance stats", "instance_id", inst.ID, "error", err)
+			m.logger.Warn("cannot read instance stats", "instance_id", instance.ID, "error", err)
 			continue
 		}
 
-		stats = append(stats, s)
+		stats = append(stats, instanceStats)
 	}
 
 	return stats
 }
 
-// readStats reads what the VMM at pid uses of the host for inst.
+// readStats reads what the VMM at pid uses of the host for instance.
 func (m *Manager) readStats(
-	proc procfs.FS, devices procfs.NetDev, inst types.InstanceSpec, pid int,
+	proc procfs.FS, devices procfs.NetDev, instance types.InstanceSpec, pid int,
 ) (types.InstanceStats, error) {
-	rt, err := m.Runtime(inst)
+	status, err := m.Status(instance)
 	if err != nil {
 		return types.InstanceStats{}, err
 	}
 
-	p, err := proc.Proc(pid)
+	process, err := proc.Proc(pid)
 	if err != nil {
-		return types.InstanceStats{}, fmt.Errorf("read VMM process %d: %w", pid, err)
+		return types.InstanceStats{}, fmt.Errorf("read hypervisor process %d: %w", pid, err)
 	}
-	stat, err := p.Stat()
+	stat, err := process.Stat()
 	if err != nil {
-		return types.InstanceStats{}, fmt.Errorf("read VMM process %d: %w", pid, err)
+		return types.InstanceStats{}, fmt.Errorf("read hypervisor process %d: %w", pid, err)
 	}
-	io, err := p.IO()
+	processIO, err := process.IO()
 	if err != nil {
-		return types.InstanceStats{}, fmt.Errorf("read VMM process %d: %w", pid, err)
+		return types.InstanceStats{}, fmt.Errorf("read hypervisor process %d: %w", pid, err)
 	}
 
 	// The TAP device is the host's end of the guest's interface: what it
 	// transmits, the guest receives, and what it fails to transmit, the
 	// guest never receives.
-	tap := devices[network.TAPName(inst.ID)]
+	tap := devices[network.TAPName(instance.ID)]
 
 	return types.InstanceStats{
-		InstanceID:             inst.ID,
-		Name:                   inst.Name,
-		StartedAt:              rt.StartedAt,
+		InstanceID:             instance.ID,
+		Name:                   instance.Name,
+		StartedAt:              status.StartedAt,
 		ReadAt:                 time.Now(),
-		Committed:              rt.Held(),
+		Committed:              status.HeldResources(),
 		CPUTime:                time.Duration(stat.CPUTime() * float64(time.Second)),
 		ResidentMemoryBytes:    int64(stat.ResidentMemory()),
-		DiskReadBytes:          int64(io.ReadBytes),
-		DiskWrittenBytes:       int64(io.WriteBytes),
+		DiskReadBytes:          int64(processIO.ReadBytes),
+		DiskWrittenBytes:       int64(processIO.WriteBytes),
 		NetworkReceiveBytes:    int64(tap.TxBytes),
 		NetworkTransmitBytes:   int64(tap.RxBytes),
 		NetworkReceivePackets:  int64(tap.TxPackets),

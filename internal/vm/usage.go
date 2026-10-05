@@ -6,7 +6,7 @@ package vm
 import "github.com/konradasb/dicer/internal/types"
 
 // Usage returns what the instances on this host hold now. An instance whose
-// runtime state cannot be read counts as Failed.
+// status cannot be read counts as Failed.
 func (m *Manager) Usage() types.Usage {
 	usage := types.Usage{
 		ByState:  make(map[types.InstanceState]int, len(types.InstanceStates())),
@@ -16,33 +16,29 @@ func (m *Manager) Usage() types.Usage {
 	for _, state := range types.InstanceStates() {
 		usage.ByState[state] = 0
 	}
-	for _, status := range types.HealthStatuses() {
-		usage.ByHealth[status] = 0
+	for _, healthStatus := range types.HealthStatuses() {
+		usage.ByHealth[healthStatus] = 0
 	}
 
-	instances, err := m.definitions.ListInstances()
-	if err != nil {
-		m.logger.Warn("cannot list instances for usage", "error", err)
-		return usage
-	}
+	instances := m.definitions.Instances()
 
-	for _, inst := range instances {
-		rt, err := m.Runtime(inst)
+	for _, instance := range instances {
+		status, err := m.Status(instance)
 		if err != nil {
-			rt = types.InstanceStatus{State: types.StateFailed}
+			status = types.InstanceStatus{State: types.InstanceStateFailed}
 		}
 
-		usage.ByState[rt.State]++
-		if _, state, ok := m.Health(inst); ok {
-			usage.ByHealth[state.Status]++
+		usage.ByState[status.State]++
+		if _, health, ok := m.Health(instance); ok {
+			usage.ByHealth[health.Status]++
 		}
 
-		if !rt.State.HoldsResources() {
+		if !status.State.HoldsResources() {
 			continue
 		}
-		held := rt.Held()
+		held := status.HeldResources()
 		usage.Allocated = usage.Allocated.Add(held)
-		usage.Holders = append(usage.Holders, types.Holder{Name: inst.Name, State: rt.State, Resources: held})
+		usage.Instances = append(usage.Instances, types.InstanceResources{Name: instance.Name, State: status.State, Resources: held})
 	}
 
 	return usage

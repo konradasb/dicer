@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"strings"
@@ -19,14 +20,14 @@ type printableNetwork struct {
 	Networks []*dicerdv1.Network
 }
 
-func (p *printableNetwork) Cols() []string {
+func (p *printableNetwork) Columns() []string {
 	return []string{"ID", "Name", "Subnet", "Gateway", "Bridge", "Nameservers", "MTU", "Isolated", "Usage", "Created"}
 }
 
-func (p *printableNetwork) KV() []map[string]any {
-	kv := make([]map[string]any, 0, len(p.Networks))
+func (p *printableNetwork) Rows() []map[string]any {
+	rows := make([]map[string]any, 0, len(p.Networks))
 	for _, n := range p.Networks {
-		kv = append(kv, map[string]any{
+		rows = append(rows, map[string]any{
 			"ID":          n.GetId(),
 			"Name":        n.GetName(),
 			"Subnet":      n.GetSubnet(),
@@ -39,7 +40,7 @@ func (p *printableNetwork) KV() []map[string]any {
 			"Created":     age(timeOf(n.GetCreateTime())),
 		})
 	}
-	return kv
+	return rows
 }
 
 // formatIPUsage renders address usage as "used/total (percent%)".
@@ -188,28 +189,23 @@ type printableNetworkAllocation struct {
 	Allocations []*dicerdv1.NetworkAllocation
 }
 
-func (p *printableNetworkAllocation) Cols() []string {
+func (p *printableNetworkAllocation) Columns() []string {
 	return []string{"Instance", "IP", "MAC", "TAP"}
 }
 
-func (p *printableNetworkAllocation) KV() []map[string]any {
-	kv := make([]map[string]any, 0, len(p.Allocations))
+func (p *printableNetworkAllocation) Rows() []map[string]any {
+	rows := make([]map[string]any, 0, len(p.Allocations))
 	for _, a := range p.Allocations {
-		// The daemon resolves instance names; fall back to the ID for an
-		// allocation whose instance has since been removed.
-		instance := a.GetInstanceName()
-		if instance == "" {
-			instance = a.GetInstanceId()
-		}
-
-		kv = append(kv, map[string]any{
-			"Instance": instance,
+		rows = append(rows, map[string]any{
+			// The daemon resolves instance names; an allocation whose
+			// instance has since been deleted shows its ID.
+			"Instance": cmp.Or(a.GetInstanceName(), a.GetInstanceId()),
 			"IP":       a.GetIp(),
 			"MAC":      a.GetMac(),
 			"TAP":      a.GetTapDevice(),
 		})
 	}
-	return kv
+	return rows
 }
 
 func newNetworkAllocationCommand() *cobra.Command {

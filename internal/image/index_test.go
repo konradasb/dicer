@@ -13,10 +13,10 @@ import (
 )
 
 func TestIndex_CreateAndGet(t *testing.T) {
-	s := newIndex()
+	x := newIndex()
 
 	pulled := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
-	img := &types.Image{
+	image := &types.Image{
 		Name:      "docker.io/library/alpine:latest",
 		Digest:    "sha256:abc123",
 		CreatedAt: pulled,
@@ -24,79 +24,79 @@ func TestIndex_CreateAndGet(t *testing.T) {
 	}
 
 	// Create image
-	if err := s.create(img); err != nil {
+	if err := x.create(image); err != nil {
 		t.Fatalf("create failed: %v", err)
 	}
 
 	// The times are the image's own, from when it was pulled: an image
 	// indexed again when the daemon starts is not pulled anew.
-	if !img.CreatedAt.Equal(pulled) || !img.UpdatedAt.Equal(pulled) {
-		t.Errorf("times = %v, %v; want the pull's, %v", img.CreatedAt, img.UpdatedAt, pulled)
+	if !image.CreatedAt.Equal(pulled) || !image.UpdatedAt.Equal(pulled) {
+		t.Errorf("times = %v, %v; want the pull's, %v", image.CreatedAt, image.UpdatedAt, pulled)
 	}
 
 	// Get image
-	got, ok := s.get("sha256:abc123")
+	got, ok := x.get("sha256:abc123")
 	if !ok {
 		t.Fatal("get failed: image not found")
 	}
 
-	if got.Name != img.Name {
-		t.Errorf("Name = %v, want %v", got.Name, img.Name)
+	if got.Name != image.Name {
+		t.Errorf("Name = %v, want %v", got.Name, image.Name)
 	}
-	if got.Digest != img.Digest {
-		t.Errorf("Digest = %v, want %v", got.Digest, img.Digest)
+	if got.Digest != image.Digest {
+		t.Errorf("Digest = %v, want %v", got.Digest, image.Digest)
 	}
 }
 
 func TestIndex_CreateDuplicate(t *testing.T) {
-	s := newIndex()
+	x := newIndex()
 
-	img := &types.Image{
+	image := &types.Image{
 		Name:   "test",
 		Digest: "sha256:abc",
 	}
 
-	if err := s.create(img); err != nil {
+	if err := x.create(image); err != nil {
 		t.Fatalf("first create failed: %v", err)
 	}
 
 	// Second create should fail
-	if err := s.create(img); !errors.Is(err, errdefs.ErrExists) {
+	if err := x.create(image); !errors.Is(err, errdefs.ErrExists) {
 		t.Errorf("create duplicate = %v, want %v", err, errdefs.ErrExists)
 	}
 }
 
 func TestIndex_Delete(t *testing.T) {
-	s := newIndex()
+	x := newIndex()
 
-	img := &types.Image{
+	image := &types.Image{
 		Name:   "test",
 		Digest: "sha256:abc",
 	}
 
-	if err := s.create(img); err != nil {
+	if err := x.create(image); err != nil {
 		t.Fatalf("create failed: %v", err)
 	}
 
-	if err := s.delete("sha256:abc"); err != nil {
+	if err := x.delete("sha256:abc"); err != nil {
 		t.Fatalf("delete failed: %v", err)
 	}
 
-	if _, ok := s.get("sha256:abc"); ok {
+	if _, ok := x.get("sha256:abc"); ok {
 		t.Error("image still exists after delete")
 	}
 }
 
 func TestIndex_DeleteNotFound(t *testing.T) {
-	s := newIndex()
+	x := newIndex()
 
-	if err := s.delete("sha256:notfound"); !errors.Is(err, errdefs.ErrNotFound) {
+	if err := x.delete("sha256:notfound"); !errors.Is(err, errdefs.ErrNotFound) {
 		t.Errorf("delete non-existent = %v, want %v", err, errdefs.ErrNotFound)
 	}
 }
 
 func TestIndex_List(t *testing.T) {
-	s := newIndex()
+	x := newIndex()
 
 	images := []*types.Image{
 		{Name: "img1", Digest: "sha256:abc"},
@@ -104,34 +104,34 @@ func TestIndex_List(t *testing.T) {
 		{Name: "img3", Digest: "sha256:ghi"},
 	}
 
-	for _, img := range images {
-		if err := s.create(img); err != nil {
+	for _, image := range images {
+		if err := x.create(image); err != nil {
 			t.Fatalf("create failed: %v", err)
 		}
 	}
 
-	got := s.list()
+	got := x.list()
 	if len(got) != 3 {
 		t.Fatalf("list length = %d, want 3", len(got))
 	}
 
 	// Verify all images present
 	digests := make(map[string]bool)
-	for _, img := range got {
-		digests[img.Digest] = true
+	for _, image := range got {
+		digests[image.Digest] = true
 	}
 
-	for _, img := range images {
-		if !digests[img.Digest] {
-			t.Errorf("image %s not in list", img.Digest)
+	for _, image := range images {
+		if !digests[image.Digest] {
+			t.Errorf("image %s not in list", image.Digest)
 		}
 	}
 }
 
 func TestIndex_ListEmpty(t *testing.T) {
-	s := newIndex()
+	x := newIndex()
 
-	got := s.list()
+	got := x.list()
 	if len(got) != 0 {
 		t.Errorf("list length = %d, want 0", len(got))
 	}
@@ -139,22 +139,22 @@ func TestIndex_ListEmpty(t *testing.T) {
 
 // A tag that moved upstream and was pulled again names two images; the one
 // pulled last is what the tag means on this host.
-func TestFindByNameReturnsTheLatestPull(t *testing.T) {
+func TestLatestByNameReturnsTheLatestPull(t *testing.T) {
 	x := newIndex()
 	now := time.Now()
 	older := &types.Image{Name: "docker.io/library/alpine:3.21", Digest: "sha256:old", CreatedAt: now.Add(-time.Hour)}
 	newer := &types.Image{Name: "docker.io/library/alpine:3.21", Digest: "sha256:new", CreatedAt: now}
 	// Indexed newest first, as a restart may load them: the pull times
 	// decide, not the order they are indexed in.
-	for _, img := range []*types.Image{newer, older} {
-		if err := x.create(img); err != nil {
+	for _, image := range []*types.Image{newer, older} {
+		if err := x.create(image); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	got, ok := x.findByName("docker.io/library/alpine:3.21")
+	got, ok := x.latestByName("docker.io/library/alpine:3.21")
 	if !ok || got.Digest != newer.Digest {
-		t.Errorf("findByName = %v, want the latest pull %s", got, newer.Digest)
+		t.Errorf("latestByName = %v, want the latest pull %s", got, newer.Digest)
 	}
 }
 

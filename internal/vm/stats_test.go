@@ -19,12 +19,12 @@ import (
 // fakeProc is a procfs tree for a test Manager to read stats from.
 type fakeProc struct{ dir string }
 
-// newFakeProc points mgr at an empty procfs tree.
-func newFakeProc(t *testing.T, mgr *Manager) fakeProc {
+// newFakeProc points manager at an empty procfs tree.
+func newFakeProc(t *testing.T, manager *Manager) fakeProc {
 	t.Helper()
 
 	p := fakeProc{dir: t.TempDir()}
-	mgr.procDir = p.dir
+	manager.procDir = p.dir
 	p.write(t, "net/dev", netDevHeader)
 
 	return p
@@ -36,7 +36,7 @@ const netDevHeader = "Inter-|   Receive                                         
 
 // process writes the stat and io of the process pid: CPU time in clock
 // ticks of 1/100s, resident memory in pages.
-func (p fakeProc) process(t *testing.T, pid int, utime, stime, rssPages, readBytes, writeBytes uint64) {
+func (p fakeProc) process(t *testing.T, pid int, userTicks, systemTicks, residentPages, readBytes, writeBytes uint64) {
 	t.Helper()
 
 	// The 42 fields after the command name, all zero but those set.
@@ -45,8 +45,8 @@ func (p fakeProc) process(t *testing.T, pid int, utime, stime, rssPages, readByt
 		fields[i] = "0"
 	}
 	fields[0] = "S"
-	fields[11], fields[12] = strconv.FormatUint(utime, 10), strconv.FormatUint(stime, 10)
-	fields[21] = strconv.FormatUint(rssPages, 10)
+	fields[11], fields[12] = strconv.FormatUint(userTicks, 10), strconv.FormatUint(systemTicks, 10)
+	fields[21] = strconv.FormatUint(residentPages, 10)
 
 	dir := strconv.Itoa(pid)
 	p.write(t, filepath.Join(dir, "stat"), fmt.Sprintf("%d (cloud-hypervisor) %s\n", pid, strings.Join(fields, " ")))
@@ -61,7 +61,7 @@ type deviceCounters struct {
 }
 
 // device adds a network device's counters to net/dev.
-func (p fakeProc) device(t *testing.T, name string, rx, tx deviceCounters) {
+func (p fakeProc) device(t *testing.T, name string, received, transmitted deviceCounters) {
 	t.Helper()
 
 	f, err := os.OpenFile(filepath.Join(p.dir, "net", "dev"), os.O_APPEND|os.O_WRONLY, 0)
@@ -72,7 +72,8 @@ func (p fakeProc) device(t *testing.T, name string, rx, tx deviceCounters) {
 
 	// Each direction is bytes, packets, errs, drop, fifo and three more.
 	if _, err := fmt.Fprintf(f, "%s: %d %d %d %d 0 0 0 0 %d %d %d %d 0 0 0 0\n",
-		name, rx.bytes, rx.packets, rx.errors, rx.drops, tx.bytes, tx.packets, tx.errors, tx.drops); err != nil {
+		name, received.bytes, received.packets, received.errors, received.drops,
+		transmitted.bytes, transmitted.packets, transmitted.errors, transmitted.drops); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -91,29 +92,29 @@ func (p fakeProc) write(t *testing.T, name, content string) {
 
 func TestStatsAreReadFromTheVMMAndItsTAPDevice(t *testing.T) {
 	h := newHarness(t)
-	h.inst.MemoryBytes = 1 << 30
-	h.definitions.instances[h.inst.Name] = h.inst
+	h.instance.MemoryBytes = 1 << 30
+	h.definitions.instances[h.instance.Name] = h.instance
 	h.start(t)
 
-	proc := newFakeProc(t, h.mgr)
+	proc := newFakeProc(t, h.manager)
 	proc.process(t, h.starter.vmm().PID(), 250, 50, 1000, 4096, 8192)
 	proc.device(t, "lo", deviceCounters{bytes: 1}, deviceCounters{bytes: 1})
 	// What the host's end of the TAP receives, the guest transmitted.
-	proc.device(t, network.TAPName(h.inst.ID),
+	proc.device(t, network.TAPName(h.instance.ID),
 		deviceCounters{bytes: 300, packets: 5, errors: 1, drops: 2},
 		deviceCounters{bytes: 700, packets: 9, errors: 3, drops: 4})
 
 	before := time.Now()
-	stats := h.mgr.Stats()
+	stats := h.manager.Stats()
 	if len(stats) != 1 {
 		t.Fatalf("Stats() = %+v, want the one running instance", stats)
 	}
 	got := stats[0]
 
 	want := types.InstanceStats{
-		InstanceID:             h.inst.ID,
-		Name:                   h.inst.Name,
-		StartedAt:              h.runtime(t).StartedAt,
+		InstanceID:             h.instance.ID,
+		Name:                   h.instance.Name,
+		StartedAt:              h.status(t).StartedAt,
 		ReadAt:                 got.ReadAt,
 		Committed:              types.Resources{VCPUs: 1, MemoryBytes: 1 << 30},
 		CPUTime:                3 * time.Second,
@@ -143,12 +144,12 @@ func TestStatsAreReadFromTheVMMAndItsTAPDevice(t *testing.T) {
 
 func TestStatsLeaveOutInstancesWithNoVMM(t *testing.T) {
 	h := newHarness(t)
-	newFakeProc(t, h.mgr)
+	newFakeProc(t, h.manager)
 
 	// Recorded as running, but no VMM was started, as for a stopped one.
 	h.running(t)
 
-	if stats := h.mgr.Stats(); len(stats) != 0 {
+	if stats := h.manager.Stats(); len(stats) != 0 {
 		t.Errorf("Stats() = %+v, want none without a VMM", stats)
 	}
 }
@@ -156,9 +157,9 @@ func TestStatsLeaveOutInstancesWithNoVMM(t *testing.T) {
 func TestStatsLeaveOutAVMMThatCannotBeRead(t *testing.T) {
 	h := newHarness(t)
 	h.start(t)
-	newFakeProc(t, h.mgr)
+	newFakeProc(t, h.manager)
 
-	if stats := h.mgr.Stats(); len(stats) != 0 {
+	if stats := h.manager.Stats(); len(stats) != 0 {
 		t.Errorf("Stats() = %+v, want none for a VMM with nothing in /proc", stats)
 	}
 }
@@ -168,15 +169,15 @@ func TestStatsLeaveOutAVMMThatHasExited(t *testing.T) {
 	h.start(t)
 
 	vmm := h.starter.vmm()
-	proc := newFakeProc(t, h.mgr)
+	proc := newFakeProc(t, h.manager)
 	proc.process(t, vmm.PID(), 1, 1, 1, 0, 0)
 
 	// The supervisor has not yet noticed the exit, but the PID may already
 	// be another process's.
-	h.mgr.Close()
+	h.manager.Close()
 	vmm.Terminate()
 
-	if stats := h.mgr.Stats(); len(stats) != 0 {
+	if stats := h.manager.Stats(); len(stats) != 0 {
 		t.Errorf("Stats() = %+v, want none for a VMM that has exited", stats)
 	}
 }

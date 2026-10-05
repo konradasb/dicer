@@ -6,9 +6,6 @@ package cli
 import (
 	"context"
 	"maps"
-	"net"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -148,34 +145,9 @@ func (d *storeDaemon) DeleteSnapshot(_ context.Context, req *dicerdv1.DeleteSnap
 	return &emptypb.Empty{}, nil
 }
 
-// serveFake serves srv on a socket and aims commands at it.
-func serveFake(t *testing.T, srv dicerdv1.DaemonServiceServer) {
-	t.Helper()
-	isolateConfig(t)
-
-	dir, err := os.MkdirTemp("", "dicer")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-
-	socket := filepath.Join(dir, "d.sock")
-	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	server := newTestServer()
-	dicerdv1.RegisterDaemonServiceServer(server, srv)
-	go func() { _ = server.Serve(listener) }()
-	t.Cleanup(server.Stop)
-
-	t.Setenv(remoteEnv, "unix://"+socket)
-}
-
 func TestDeleteAllInstances(t *testing.T) {
 	d := newStoreDaemon(fakeInstances()...) // web running, db stopped, cache paused
-	serveFake(t, d)
+	serveFakeDaemon(t, d)
 
 	// Without -f, the running one is refused; the rest go all the same.
 	out, err := run(t, "rm", "--all")
@@ -203,7 +175,7 @@ func TestDeleteAllInstances(t *testing.T) {
 }
 
 func TestDeleteAllNeedsNamesOrAll(t *testing.T) {
-	serveFake(t, newStoreDaemon(fakeInstances()...))
+	serveFakeDaemon(t, newStoreDaemon(fakeInstances()...))
 
 	for _, args := range [][]string{{"rm", "web", "--all"}, {"network", "rm", "default", "-A"}} {
 		if _, err := run(t, args...); err == nil || !strings.Contains(err.Error(), "names or --all, not both") {
@@ -238,7 +210,7 @@ func TestDeleteAllResources(t *testing.T) {
 	}
 	d.inUse["default"] = true
 	d.inUse["linux-6.18"] = true
-	serveFake(t, d)
+	serveFakeDaemon(t, d)
 
 	tests := []struct {
 		args []string
@@ -265,7 +237,7 @@ func TestDeleteAllImages(t *testing.T) {
 	d.imageSet["nginx:1.27"] = true
 	d.imageSet["postgres:17"] = true
 	d.inUse["nginx:1.27"] = true
-	serveFake(t, d)
+	serveFakeDaemon(t, d)
 
 	out, err := run(t, "rmi", "--all")
 	if err == nil || !strings.Contains(out, "use -f to delete it anyway") {
@@ -287,7 +259,7 @@ func TestDeleteAllSnapshots(t *testing.T) {
 	d := newStoreDaemon(fakeInstances()...)
 	d.snapshots["web"] = []string{"a", "b"}
 	d.snapshots["db"] = []string{"c"}
-	serveFake(t, d)
+	serveFakeDaemon(t, d)
 
 	if out, err := run(t, "instance", "snapshot", "delete", "web", "--all"); err != nil {
 		t.Fatalf("snapshot delete web --all: %v\n%s", err, out)

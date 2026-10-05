@@ -61,18 +61,18 @@ type kernelCollector struct {
 	source func() KernelSummary
 
 	count *prometheus.Desc
-	bytes *prometheus.Desc
+	disk  *prometheus.Desc
 }
 
 func (m *Metrics) newKernelCollector(source func() KernelSummary) *kernelCollector {
 	return &kernelCollector{
 		source: source,
-		count: m.desc(Description{
+		count: m.descriptor(Description{
 			Name:  "dicer_kernels",
 			Help:  "Kernels defined on this host.",
 			Group: GroupKernels,
 		}),
-		bytes: m.desc(Description{
+		disk: m.descriptor(Description{
 			Name:  "dicer_kernel_disk_bytes",
 			Help:  "Total size of those kernels fetched to this host's disk.",
 			Doc:   "A kernel not yet fetched counts as 0.",
@@ -83,12 +83,12 @@ func (m *Metrics) newKernelCollector(source func() KernelSummary) *kernelCollect
 
 func (c *kernelCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.count
-	ch <- c.bytes
+	ch <- c.disk
 }
 
 func (c *kernelCollector) Collect(ch chan<- prometheus.Metric) {
 	summary := c.source()
 
-	ch <- gauge(c.count, float64(summary.Count))
-	ch <- gauge(c.bytes, float64(summary.DiskBytes))
+	ch <- gaugeReading(c.count, float64(summary.Count))
+	ch <- gaugeReading(c.disk, float64(summary.DiskBytes))
 }

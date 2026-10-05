@@ -9,6 +9,7 @@
 package compose
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -130,9 +131,9 @@ type rawService struct {
 	// see [Restarts]({{< relref "/docs/guides/restarts" >}}). Unset is `no`.
 	Restart string `yaml:"restart"`
 
-	// Healthcheck is how the workload's health is checked: see [Health
+	// HealthCheck is how the workload's health is checked: see [Health
 	// checks]({{< relref "/docs/guides/health-checks" >}}).
-	Healthcheck *rawHealthcheck `yaml:"healthcheck"`
+	HealthCheck *rawHealthCheck `yaml:"healthcheck"`
 
 	// CPUs is taken for `vcpus`, if it is a whole number.
 	CPUs *float64 `yaml:"cpus"`
@@ -163,9 +164,9 @@ type rawService struct {
 	// `dicer run --hypervisor-type`. Unset is `cloud-hypervisor`.
 	Hypervisor string `yaml:"hypervisor"`
 
-	// HypervisorVer is a version of the hypervisor the daemon ships, as
+	// HypervisorVersion is a version of the hypervisor the daemon ships, as
 	// `dicer run --hypervisor-version`. Unset is the newest.
-	HypervisorVer string `yaml:"hypervisor_version"`
+	HypervisorVersion string `yaml:"hypervisor_version"`
 
 	// InitMode is `auto`, `exec` or `systemd`, as `dicer run --init-mode`: see
 	// [Init modes]({{< relref "/docs/concepts/init-modes" >}}). Unset is `auto`.
@@ -236,14 +237,14 @@ type rawVolume struct {
 	Size *byteSize `yaml:"size"`
 }
 
-// rawHealthcheck is a service's healthcheck: Docker's, with http and tcp for
+// rawHealthCheck is a service's healthcheck: Docker's, with http and tcp for
 // the probes the guest agent runs itself. Exactly one of test, http and tcp
 // is given.
-type rawHealthcheck struct {
+type rawHealthCheck struct {
 	// Test is a command to check health with: `["CMD", ARG...]` runs a
 	// command; `["CMD-SHELL", LINE]`, or a string, runs a line with
 	// `/bin/sh`; `["NONE"]` checks nothing, not even as the image says to.
-	Test *healthTest `yaml:"test"`
+	Test *healthCheckTest `yaml:"test"`
 
 	// HTTP is `PORT[/path]`: healthy when a GET in the guest answers 2xx or
 	// 3xx. It suits an image with no shell.
@@ -308,6 +309,68 @@ func (c *shellCommand) UnmarshalYAML(n *yaml.Node) error {
 	}
 	*c = list
 	return nil
+}
+
+// splitShellWords splits a command line into arguments as a shell would,
+// honouring single and double quotes and backslash escapes. It expands
+// nothing.
+func splitShellWords(s string) ([]string, error) {
+	var (
+		args    []string
+		word    strings.Builder
+		inWord  bool
+		quote   byte
+		escaped bool
+	)
+
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case escaped:
+			word.WriteByte(c)
+			escaped = false
+		case quote == '\'':
+			if c == '\'' {
+				quote = 0
+			} else {
+				word.WriteByte(c)
+			}
+		case quote == '"':
+			switch {
+			case c == '"':
+				quote = 0
+			case c == '\\' && i+1 < len(s) && strings.IndexByte(`"\$`+"`", s[i+1]) >= 0:
+				word.WriteByte(s[i+1])
+				i++
+			default:
+				word.WriteByte(c)
+			}
+		case c == '\\':
+			escaped, inWord = true, true
+		case c == '\'' || c == '"':
+			quote, inWord = c, true
+		case c == ' ' || c == '\t' || c == '\n':
+			if inWord {
+				args = append(args, word.String())
+				word.Reset()
+				inWord = false
+			}
+		default:
+			word.WriteByte(c)
+			inWord = true
+		}
+	}
+
+	if quote != 0 {
+		return nil, fmt.Errorf("unterminated %c quote in %q", quote, s)
+	}
+	if escaped {
+		return nil, errors.New("a command cannot end in a backslash")
+	}
+	if inWord {
+		args = append(args, word.String())
+	}
+	return args, nil
 }
 
 // keyValues is a map of strings, written as a map or as a list of KEY=VALUE.
@@ -378,6 +441,7 @@ func (b *byteSize) UnmarshalYAML(n *yaml.Node) error {
 // rawPort is a published port: "[HOST_IP:]HOST_PORT:GUEST_PORT[/PROTOCOL]",
 // or Docker's long form.
 type rawPort struct {
+	// Short is the entry as written, if it was written as a string.
 	Short string `yaml:"-"`
 
 	// Target is the guest's port. Required.
@@ -418,6 +482,7 @@ func (p *rawPort) UnmarshalYAML(n *yaml.Node) error {
 // rawMount is an entry under a service's volumes:
 // "SOURCE:TARGET[:ro|rw]", or Docker's long form.
 type rawMount struct {
+	// Short is the entry as written, if it was written as a string.
 	Short string `yaml:"-"`
 
 	// Type is `volume`, `bind`, for a host file, or `tmpfs`. Required.
@@ -538,14 +603,14 @@ func (d *dependsOn) UnmarshalYAML(n *yaml.Node) error {
 	return nil
 }
 
-// healthTest is Docker's healthcheck test: ["CMD", arg...],
+// healthCheckTest is Docker's healthcheck test: ["CMD", arg...],
 // ["CMD-SHELL", command], ["NONE"], or a string run by the shell.
-type healthTest struct {
+type healthCheckTest struct {
 	args []string
 	line int
 }
 
-func (t *healthTest) UnmarshalYAML(n *yaml.Node) error {
+func (t *healthCheckTest) UnmarshalYAML(n *yaml.Node) error {
 	t.line = n.Line
 	if n.Kind == yaml.ScalarNode {
 		t.args = []string{"CMD-SHELL", n.Value}

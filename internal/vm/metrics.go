@@ -17,14 +17,14 @@ type Metrics interface {
 
 // The operation names reported to Metrics.
 const (
-	opStart           = "start"
-	opStop            = "stop"
-	opPause           = "pause"
-	opResume          = "resume"
-	opDelete          = "delete"
-	opCreateSnapshot  = "create_snapshot"
-	opRestoreSnapshot = "restore_snapshot"
-	opDeleteSnapshot  = "delete_snapshot"
+	operationStart           = "start"
+	operationStop            = "stop"
+	operationPause           = "pause"
+	operationResume          = "resume"
+	operationDelete          = "delete"
+	operationCreateSnapshot  = "create_snapshot"
+	operationRestoreSnapshot = "restore_snapshot"
+	operationDeleteSnapshot  = "delete_snapshot"
 )
 
 // discardMetrics is the Metrics used when none is configured.
@@ -33,8 +33,8 @@ type discardMetrics struct{}
 func (discardMetrics) RecordInstanceOperation(string, error, time.Duration) {}
 func (discardMetrics) RecordInstanceRestart()                               {}
 
-// observe records a finished lifecycle operation. Call it deferred, over the
-// operation's named error result.
-func (m *Manager) observe(operation string, started time.Time, err error) {
+// observeOperation records a finished lifecycle operation. Call it deferred,
+// over the operation's named error result.
+func (m *Manager) observeOperation(operation string, started time.Time, err error) {
 	m.metrics.RecordInstanceOperation(operation, err, time.Since(started))
 }

@@ -4,26 +4,27 @@
 package types
 
 import (
-	"fmt"
 	"path"
 	"strings"
+
+	"github.com/konradasb/dicer/internal/errdefs"
 )
 
 // MountType is what a Mount attaches.
 type MountType string
 
 const (
-	// MountVolume attaches a named volume: persistent storage that outlives
+	// MountTypeVolume attaches a named volume: persistent storage that outlives
 	// the instance, as a disk of its own.
-	MountVolume MountType = "volume"
+	MountTypeVolume MountType = "volume"
 
-	// MountFile copies a host file into the guest. The file is read at each
+	// MountTypeFile copies a host file into the guest. The file is read at each
 	// start, so a change on the host reaches the guest at its next start,
 	// and whatever the guest writes to its copy is lost at its next start.
-	MountFile MountType = "file"
+	MountTypeFile MountType = "file"
 
-	// MountTmpfs is an empty in-memory filesystem, lost when the guest stops.
-	MountTmpfs MountType = "tmpfs"
+	// MountTypeTmpfs is an empty in-memory filesystem, lost when the guest stops.
+	MountTypeTmpfs MountType = "tmpfs"
 )
 
 // Mount attaches a volume, a host file or a tmpfs at Target in the guest.
@@ -52,12 +53,14 @@ func (m Mount) String() string {
 	if m.ReadOnly {
 		parts = append(parts, "readonly")
 	}
+
 	return strings.Join(parts, ",")
 }
 
 // ValidateMounts checks what can be checked of mounts without the host: each
 // has a known type, the source it needs, and an absolute target no other
-// mount has. It returns the mounts with their targets cleaned.
+// mount has. It returns the mounts with their targets cleaned, or an invalid
+// argument error.
 func ValidateMounts(mounts []Mount) ([]Mount, error) {
 	out := make([]Mount, 0, len(mounts))
 	targets := make(map[string]struct{}, len(mounts))
@@ -70,13 +73,13 @@ func ValidateMounts(mounts []Mount) ([]Mount, error) {
 		m.Target = path.Clean(m.Target)
 
 		if _, dup := targets[m.Target]; dup {
-			return nil, fmt.Errorf("two mounts have the target %q", m.Target)
+			return nil, errdefs.InvalidArgument("two mounts have the target %q", m.Target)
 		}
 		targets[m.Target] = struct{}{}
 
-		if m.Type == MountVolume {
+		if m.Type == MountTypeVolume {
 			if _, dup := volumes[m.Source]; dup {
-				return nil, fmt.Errorf("volume %q is mounted twice", m.Source)
+				return nil, errdefs.InvalidArgument("volume %q is mounted twice", m.Source)
 			}
 			volumes[m.Source] = struct{}{}
 		}
@@ -90,44 +93,33 @@ func ValidateMounts(mounts []Mount) ([]Mount, error) {
 func (m Mount) validate() error {
 	switch {
 	case m.Target == "":
-		return fmt.Errorf("mount %s: it needs a target", m)
+		return errdefs.InvalidArgument("mount %s: it needs a target", m)
 	case !path.IsAbs(m.Target):
-		return fmt.Errorf("mount %s: the target %q must be absolute, e.g. /data", m, m.Target)
+		return errdefs.InvalidArgument("mount %s: the target %q must be absolute, e.g. /data", m, m.Target)
 	case path.Clean(m.Target) == "/":
-		return fmt.Errorf("mount %s: nothing can be mounted over the root filesystem", m)
+		return errdefs.InvalidArgument("mount %s: nothing can be mounted over the root filesystem", m)
 	}
 
 	switch m.Type {
-	case MountVolume:
+	case MountTypeVolume:
 		if m.Source == "" {
-			return fmt.Errorf("mount %s: a volume mount needs the volume's name as its source", m)
+			return errdefs.InvalidArgument("mount %s: a volume mount needs the volume's name as its source", m)
 		}
-	case MountFile:
+	case MountTypeFile:
 		if !path.IsAbs(m.Source) {
-			return fmt.Errorf("mount %s: a file mount needs an absolute host path as its source", m)
+			return errdefs.InvalidArgument("mount %s: a file mount needs an absolute host path as its source", m)
 		}
-	case MountTmpfs:
+	case MountTypeTmpfs:
 		if m.Source != "" {
-			return fmt.Errorf("mount %s: a tmpfs has no source", m)
+			return errdefs.InvalidArgument("mount %s: a tmpfs has no source", m)
 		}
 		if m.ReadOnly {
-			return fmt.Errorf("mount %s: a read-only tmpfs would always be empty", m)
+			return errdefs.InvalidArgument("mount %s: a read-only tmpfs would always be empty", m)
 		}
 	default:
-		return fmt.Errorf("mount %s: unknown type %q: want %s, %s or %s",
-			m, m.Type, MountVolume, MountFile, MountTmpfs)
+		return errdefs.InvalidArgument("mount %s: unknown type %q: want %s, %s or %s",
+			m, m.Type, MountTypeVolume, MountTypeFile, MountTypeTmpfs)
 	}
 
 	return nil
-}
-
-// MountsVolume returns the mount by which the instance attaches the named
-// volume, if it does.
-func (s InstanceSpec) MountsVolume(name string) (Mount, bool) {
-	for _, m := range s.Mounts {
-		if m.Type == MountVolume && m.Source == name {
-			return m, true
-		}
-	}
-	return Mount{}, false
 }

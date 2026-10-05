@@ -16,7 +16,8 @@ import (
 // started by a previous daemon.
 var ErrExitStatusUnknown = errors.New("exit status unavailable for an adopted process")
 
-// Process is a handle on a supervised process.
+// Process is a handle on a supervised process. Its methods are safe for
+// concurrent use.
 type Process struct {
 	pid  int
 	done chan struct{}

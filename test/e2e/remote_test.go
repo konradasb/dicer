@@ -19,9 +19,9 @@ import (
 // configuration -- agents, jump hosts, per-host keys -- instead of being
 // reimplemented here badly.
 type host struct {
-	addr string
-	user string
-	key  string
+	address string
+	user    string
+	key     string
 }
 
 // sshArgs returns the options common to every ssh and scp invocation.
@@ -44,7 +44,7 @@ func (h *host) sshArgs() []string {
 
 // target is the user@address ssh connects to.
 func (h *host) target() string {
-	return h.user + "@" + h.addr
+	return h.user + "@" + h.address
 }
 
 // run executes a command on the host and returns its combined output.

@@ -77,6 +77,7 @@ type paths struct {
 	api string
 }
 
+// newPaths returns the paths of this run's own prefix.
 func newPaths() paths {
 	const root = "/opt/dicer-e2e"
 
@@ -110,17 +111,17 @@ type environment struct {
 var env *environment
 
 func TestMain(m *testing.M) {
-	addr := os.Getenv(hostEnv)
-	if addr == "" {
+	address := os.Getenv(hostEnv)
+	if address == "" {
 		fmt.Fprintf(os.Stderr, "%s is not set; skipping the end-to-end tests\n", hostEnv)
 		os.Exit(0)
 	}
 
 	env = &environment{
 		host: &host{
-			addr: addr,
-			user: envOr(userEnv, defaultUser),
-			key:  os.Getenv(keyEnv),
+			address: address,
+			user:    envOr(userEnv, defaultUser),
+			key:     os.Getenv(keyEnv),
 		},
 		paths: newPaths(),
 		keep:  os.Getenv(keepEnv) != "",
@@ -348,7 +349,7 @@ func (e *environment) provision(ctx context.Context) error {
 // more interesting one.
 func (e *environment) teardown(ctx context.Context) {
 	if e.keep {
-		fmt.Fprintf(os.Stderr, "%s is set; leaving the daemon on %s running\n", keepEnv, e.host.addr)
+		fmt.Fprintf(os.Stderr, "%s is set; leaving the daemon on %s running\n", keepEnv, e.host.address)
 		return
 	}
 
@@ -373,7 +374,7 @@ func (e *environment) teardown(ctx context.Context) {
 // hypervisors, and reproducing that here would be a second build system that
 // drifts from the first.
 func build(ctx context.Context, arch string) (string, error) {
-	root, err := repoRoot()
+	root, err := repositoryRoot()
 	if err != nil {
 		return "", err
 	}
@@ -389,9 +390,9 @@ func build(ctx context.Context, arch string) (string, error) {
 	return filepath.Join(root, "bin"), nil
 }
 
-// repoRoot returns the repository root, derived from this file's own path so
-// that the tests do not care what directory they are run from.
-func repoRoot() (string, error) {
+// repositoryRoot returns the repository's root, derived from this file's own
+// path so that the tests do not care what directory they are run from.
+func repositoryRoot() (string, error) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		return "", errors.New("cannot locate the test source")

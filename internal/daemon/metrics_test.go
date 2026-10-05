@@ -48,7 +48,7 @@ func TestServeMetricsServesMetricsPath(t *testing.T) {
 	stopped := make(chan error, 1)
 	go func() { stopped <- d.serveMetrics(ctx) }()
 
-	body := get(t, "http://"+addr+metricsPath)
+	body := scrape(t, "http://"+addr+metricsPath)
 	if !strings.Contains(body, "dicer_build_info") {
 		t.Errorf("scrape is missing this daemon's metrics:\n%s", body)
 	}
@@ -121,8 +121,8 @@ func reserve(t *testing.T) net.Listener {
 	return listener
 }
 
-// get reads a URL, retrying until the server is accepting connections.
-func get(t *testing.T, url string) string {
+// scrape reads a URL, retrying until the server is accepting connections.
+func scrape(t *testing.T, url string) string {
 	t.Helper()
 
 	deadline := time.Now().Add(5 * time.Second)
@@ -151,7 +151,7 @@ func get(t *testing.T, url string) string {
 
 func TestNetworkSummariesJoinsDefinitionsAndAllocations(t *testing.T) {
 	d := newTestDaemon(t, MetricsConfig{})
-	openTestStores(t, d)
+	openTestDefinitionsAndAllocations(t, d)
 
 	// A /24 has 256 addresses, of which the network, broadcast and gateway
 	// addresses are not assignable: 253 can be handed out.
@@ -189,30 +189,30 @@ func TestNetworkSummariesJoinsDefinitionsAndAllocations(t *testing.T) {
 // A host with no networks reports none, rather than an error or a series.
 func TestNetworkSummariesWithNoNetworks(t *testing.T) {
 	d := newTestDaemon(t, MetricsConfig{})
-	openTestStores(t, d)
+	openTestDefinitionsAndAllocations(t, d)
 
 	if stats := d.networkSummaries(); len(stats) != 0 {
 		t.Errorf("networkSummaries() = %+v, want none", stats)
 	}
 }
 
-// The sources are registered before the stores are opened, so they have to
-// cope with being called first.
-func TestNetworkSummariesBeforeTheStoresExist(t *testing.T) {
+// The sources are registered before definitions and allocations are opened,
+// so they have to cope with being called first.
+func TestNetworkSummariesBeforeDefinitionsAndAllocationsAreOpened(t *testing.T) {
 	d := newTestDaemon(t, MetricsConfig{})
 
 	if stats := d.networkSummaries(); stats != nil {
-		t.Errorf("networkSummaries() = %+v, want nil before the stores are opened", stats)
+		t.Errorf("networkSummaries() = %+v, want nil before definitions and allocations are opened", stats)
 	}
 }
 
-// openTestStores gives a daemon a definition store and address manager rooted in a
-// temporary directory, as openDefinitions does at startup.
-func openTestStores(t *testing.T, d *daemon) {
+// openTestDefinitionsAndAllocations gives a daemon definitions and a network manager rooted in a
+// temporary directory, as openDefinitionsAndAllocations does at startup.
+func openTestDefinitionsAndAllocations(t *testing.T, d *daemon) {
 	t.Helper()
 
 	d.cfg.DataDir = t.TempDir()
-	if err := d.openDefinitions(); err != nil {
-		t.Fatalf("open stores: %v", err)
+	if err := d.openDefinitionsAndAllocations(); err != nil {
+		t.Fatalf("open definitions and allocations: %v", err)
 	}
 }

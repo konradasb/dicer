@@ -39,27 +39,27 @@ func (s *server) ListProcesses(
 		return nil, status.Errorf(codes.Internal, "read /proc: %v", err)
 	}
 
-	processes, err := processes(proc)
+	processes, err := processesIn(proc)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &diceragentv1.ListProcessesResponse{Processes: processes}, nil
 }
 
-// processes reads the processes in proc, other than kernel threads, in PID
-// order. A process that exits while it is read is left out.
-func processes(proc procfs.FS) ([]*diceragentv1.Process, error) {
-	all, err := proc.AllProcs()
+// processesIn reads the processes in proc, other than kernel threads, in
+// PID order. A process that exits while it is read is left out.
+func processesIn(proc procfs.FS) ([]*diceragentv1.Process, error) {
+	procfsProcesses, err := proc.AllProcs()
 	if err != nil {
 		return nil, fmt.Errorf("list processes: %w", err)
 	}
-	slices.SortFunc(all, func(a, b procfs.Proc) int { return cmp.Compare(a.PID, b.PID) })
+	slices.SortFunc(procfsProcesses, func(a, b procfs.Proc) int { return cmp.Compare(a.PID, b.PID) })
 
-	users := make(map[uint64]string)
-	processes := make([]*diceragentv1.Process, 0, len(all))
-	for _, p := range all {
+	userNames := make(map[uint64]string)
+	processes := make([]*diceragentv1.Process, 0, len(procfsProcesses))
+	for _, p := range procfsProcesses {
 		stat, err := p.Stat()
-		if exited(err) {
+		if processExited(err) {
 			continue
 		}
 		if err != nil {
@@ -69,8 +69,8 @@ func processes(proc procfs.FS) ([]*diceragentv1.Process, error) {
 			continue
 		}
 
-		process, err := readProcess(p, stat, users)
-		if exited(err) {
+		process, err := processOf(p, stat, userNames)
+		if processExited(err) {
 			continue
 		}
 		if err != nil {
@@ -81,9 +81,9 @@ func processes(proc procfs.FS) ([]*diceragentv1.Process, error) {
 	return processes, nil
 }
 
-// readProcess reads what stat leaves out of the process p. users caches
-// user names by UID.
-func readProcess(p procfs.Proc, stat procfs.ProcStat, users map[uint64]string) (*diceragentv1.Process, error) {
+// processOf returns the process p, whose stat has already been read, reading
+// what stat leaves out. userNames caches user names by UID.
+func processOf(p procfs.Proc, stat procfs.ProcStat, userNames map[uint64]string) (*diceragentv1.Process, error) {
 	command, err := p.CmdLine()
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func readProcess(p procfs.Proc, stat procfs.ProcStat, users map[uint64]string) (
 	return &diceragentv1.Process{
 		Pid:                 int32(stat.PID),
 		Ppid:                int32(stat.PPID),
-		User:                userName(procStatus.UIDs[1], users),
+		User:                userName(procStatus.UIDs[1], userNames),
 		State:               stat.State,
 		Name:                stat.Comm,
 		Command:             command,
@@ -111,9 +111,9 @@ func readProcess(p procfs.Proc, stat procfs.ProcStat, users map[uint64]string) (
 }
 
 // userName returns the name of the user uid in the guest's user database,
-// or the UID itself if it has none.
-func userName(uid uint64, users map[uint64]string) string {
-	if name, ok := users[uid]; ok {
+// or the UID itself if it has none. userNames caches the answer.
+func userName(uid uint64, userNames map[uint64]string) string {
+	if name, ok := userNames[uid]; ok {
 		return name
 	}
 
@@ -122,11 +122,12 @@ func userName(uid uint64, users map[uint64]string) string {
 	if u, err := user.LookupId(id); err == nil {
 		name = u.Username
 	}
-	users[uid] = name
+	userNames[uid] = name
 	return name
 }
 
-// exited reports whether err is from reading a process that has exited.
-func exited(err error) bool {
+// processExited reports whether err is from reading a process that has
+// exited.
+func processExited(err error) bool {
 	return errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH)
 }

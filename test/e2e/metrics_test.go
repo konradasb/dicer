@@ -20,35 +20,35 @@ import (
 func TestMetricsReportWhatIsRunning(t *testing.T) {
 	name := instanceName(t)
 
-	before := env.gauge(t, `dicer_instances{state="running"}`)
-	allocatedBefore := env.gauge(t, `dicer_network_addresses_allocated{network="`+networkName+`"}`)
+	before := env.seriesValue(t, `dicer_instances{state="running"}`)
+	allocatedBefore := env.seriesValue(t, `dicer_network_addresses_allocated{network="`+networkName+`"}`)
 
 	env.createInstance(t, name)
 	env.startInstance(t, name)
 
-	if got := env.gauge(t, `dicer_instances{state="running"}`); got != before+1 {
+	if got := env.seriesValue(t, `dicer_instances{state="running"}`); got != before+1 {
 		t.Errorf("running instances = %v after starting one, want %v", got, before+1)
 	}
-	if got := env.gauge(t, `dicer_network_addresses_allocated{network="`+networkName+`"}`); got != allocatedBefore+1 {
+	if got := env.seriesValue(t, `dicer_network_addresses_allocated{network="`+networkName+`"}`); got != allocatedBefore+1 {
 		t.Errorf("allocated addresses = %v, want %v", got, allocatedBefore+1)
 	}
 
 	// A running guest has its memory committed on the host, so the gauge
 	// has to be at least the one instance's worth.
-	if got := env.gauge(t, "dicer_instances_memory_bytes"); got < 512<<20 {
+	if got := env.seriesValue(t, "dicer_instances_memory_bytes"); got < 512<<20 {
 		t.Errorf("committed memory = %v, want at least the running instance's 512MiB", got)
 	}
 
 	env.dicer(t, "instance", "stop", name)
 	env.waitForState(t, name, "Stopped")
 
-	if got := env.gauge(t, `dicer_instances{state="running"}`); got != before {
+	if got := env.seriesValue(t, `dicer_instances{state="running"}`); got != before {
 		t.Errorf("running instances = %v after stopping it again, want %v", got, before)
 	}
 
 	// The address outlives the stop, and the gauge has to agree with the
 	// address manager rather than with the instance's state.
-	if got := env.gauge(t, `dicer_network_addresses_allocated{network="`+networkName+`"}`); got != allocatedBefore+1 {
+	if got := env.seriesValue(t, `dicer_network_addresses_allocated{network="`+networkName+`"}`); got != allocatedBefore+1 {
 		t.Errorf("allocated addresses = %v after a stop, want %v", got, allocatedBefore+1)
 	}
 }
@@ -63,8 +63,8 @@ func TestMetricsCountLifecycleOperations(t *testing.T) {
 		failed = `dicer_instance_operations_total{operation="pause",outcome="error"}`
 	)
 
-	startsBefore := env.gauge(t, starts)
-	failedBefore := env.gauge(t, failed)
+	startsBefore := env.seriesValue(t, starts)
+	failedBefore := env.seriesValue(t, failed)
 
 	env.createInstance(t, name)
 
@@ -73,21 +73,21 @@ func TestMetricsCountLifecycleOperations(t *testing.T) {
 	if _, err := env.tryDicer(t, "instance", "pause", name); err == nil {
 		t.Fatal("pausing a stopped instance should fail")
 	}
-	if got := env.gauge(t, failed); got != failedBefore+1 {
+	if got := env.seriesValue(t, failed); got != failedBefore+1 {
 		t.Errorf("failed pauses = %v, want %v", got, failedBefore+1)
 	}
 
 	env.startInstance(t, name)
 
-	if got := env.gauge(t, starts); got != startsBefore+1 {
+	if got := env.seriesValue(t, starts); got != startsBefore+1 {
 		t.Errorf("successful starts = %v, want %v", got, startsBefore+1)
 	}
 }
 
-// gauge scrapes the metrics endpoint and returns one series' value. A series
-// that is absent reads as zero, which is what a counter that has never been
-// incremented means.
-func (e *environment) gauge(t *testing.T, series string) float64 {
+// seriesValue scrapes the metrics endpoint and returns one series' value. A
+// series that is absent reads as zero, which is what a counter that has never
+// been incremented means.
+func (e *environment) seriesValue(t *testing.T, series string) float64 {
 	t.Helper()
 
 	ctx, cancel := commandContext(t)

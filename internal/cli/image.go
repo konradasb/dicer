@@ -21,22 +21,22 @@ type printableImage struct {
 	Images []*dicerdv1.Image
 }
 
-func (p *printableImage) Cols() []string {
+func (p *printableImage) Columns() []string {
 	return []string{"Name", "Digest", "Size", "Created", "Last used"}
 }
 
-func (p *printableImage) KV() []map[string]any {
-	kv := make([]map[string]any, 0, len(p.Images))
-	for _, img := range p.Images {
-		kv = append(kv, map[string]any{
-			"Name":      img.GetName(),
-			"Digest":    img.GetDigest(),
-			"Size":      humanize.Bytes(img.GetSizeBytes()),
-			"Created":   age(timeOf(img.GetCreateTime())),
-			"Last used": age(timeOf(img.GetLastUsedTime())),
+func (p *printableImage) Rows() []map[string]any {
+	rows := make([]map[string]any, 0, len(p.Images))
+	for _, image := range p.Images {
+		rows = append(rows, map[string]any{
+			"Name":      image.GetName(),
+			"Digest":    image.GetDigest(),
+			"Size":      humanize.Bytes(image.GetSizeBytes()),
+			"Created":   age(timeOf(image.GetCreateTime())),
+			"Last used": age(timeOf(image.GetLastUsedTime())),
 		})
 	}
-	return kv
+	return rows
 }
 
 func newImageCommand() *cobra.Command {
@@ -74,19 +74,19 @@ func newImagePullCommand() *cobra.Command {
 			defer reporter.done()
 
 			start := time.Now()
-			img, err := pullImage(cmd.Context(), client, args[0], reporter.report)
+			image, err := pullImage(cmd.Context(), client, args[0], reporter.report)
 			if err != nil {
 				return err
 			}
 			reporter.done()
 
 			if !reporter.fetched {
-				succeeded(cmd, "Image %s is up to date (%s)", img.GetName(), reference.ShortDigest(img.GetDigest()))
+				succeeded(cmd, "Image %s is up to date (%s)", image.GetName(), reference.ShortDigest(image.GetDigest()))
 
 				return nil
 			}
-			succeeded(cmd, "Image %s pulled in %s (%s, %s)", img.GetName(),
-				humanize.Duration(time.Since(start)), reference.ShortDigest(img.GetDigest()), humanize.Bytes(img.GetSizeBytes()))
+			succeeded(cmd, "Image %s pulled in %s (%s, %s)", image.GetName(),
+				humanize.Duration(time.Since(start)), reference.ShortDigest(image.GetDigest()), humanize.Bytes(image.GetSizeBytes()))
 
 			return nil
 		},
@@ -190,8 +190,8 @@ func newImagePruneCommand() *cobra.Command {
 				return err
 			}
 
-			for _, img := range result.GetImages() {
-				succeeded(cmd, "Deleted %s", img.GetName())
+			for _, image := range result.GetImages() {
+				succeeded(cmd, "Deleted %s", image.GetName())
 			}
 			succeeded(cmd, "Reclaimed %s from %d image(s)",
 				humanize.Bytes(result.GetReclaimedBytes()), len(result.GetImages()))

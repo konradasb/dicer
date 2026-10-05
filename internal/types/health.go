@@ -14,9 +14,9 @@ import (
 
 // The defaults an unset health check timing takes.
 const (
-	DefaultHealthInterval = 10 * time.Second
-	DefaultHealthTimeout  = 5 * time.Second
-	DefaultHealthRetries  = 3
+	DefaultHealthCheckInterval = 10 * time.Second
+	DefaultHealthCheckTimeout  = 5 * time.Second
+	DefaultHealthCheckRetries  = 3
 )
 
 // HealthCheck is how an instance's health is checked: one probe, run inside
@@ -57,7 +57,8 @@ type TCPProbe struct {
 	Port int `yaml:"port" json:"port"`
 }
 
-// Validate reports whether the check is one the agent can run.
+// Validate returns an invalid argument error if the check is not one the
+// agent can run.
 func (c HealthCheck) Validate() error {
 	if c.Disabled {
 		return nil
@@ -69,7 +70,7 @@ func (c HealthCheck) Validate() error {
 	}
 	if c.HTTP != nil {
 		probes++
-		if err := validHealthPort(c.HTTP.Port); err != nil {
+		if err := validateHealthCheckPort(c.HTTP.Port); err != nil {
 			return err
 		}
 		if c.HTTP.Path != "" && !strings.HasPrefix(c.HTTP.Path, "/") {
@@ -78,7 +79,7 @@ func (c HealthCheck) Validate() error {
 	}
 	if c.TCP != nil {
 		probes++
-		if err := validHealthPort(c.TCP.Port); err != nil {
+		if err := validateHealthCheckPort(c.TCP.Port); err != nil {
 			return err
 		}
 	}
@@ -99,19 +100,19 @@ func (c HealthCheck) Validate() error {
 // WithDefaults returns the check with its unset timings filled in.
 func (c HealthCheck) WithDefaults() HealthCheck {
 	if c.Interval == 0 {
-		c.Interval = DefaultHealthInterval
+		c.Interval = DefaultHealthCheckInterval
 	}
 	if c.Timeout == 0 {
-		c.Timeout = DefaultHealthTimeout
+		c.Timeout = DefaultHealthCheckTimeout
 	}
 	if c.Retries == 0 {
-		c.Retries = DefaultHealthRetries
+		c.Retries = DefaultHealthCheckRetries
 	}
 
 	return c
 }
 
-func validHealthPort(port int) error {
+func validateHealthCheckPort(port int) error {
 	if port < 1 || port > 65535 {
 		return errdefs.InvalidArgument("health check port %d is not between 1 and 65535", port)
 	}
@@ -157,20 +158,22 @@ func EffectiveHealthCheck(instance, image *HealthCheck) *HealthCheck {
 type HealthStatus string
 
 const (
-	// HealthStarting means the check has not yet reached a verdict: the
+	// HealthStatusStarting means the check has not yet reached a verdict: the
 	// workload is still in its start period, or has not been probed.
-	HealthStarting HealthStatus = "starting"
+	HealthStatusStarting HealthStatus = "starting"
 
-	// HealthHealthy means the last probe passed.
-	HealthHealthy HealthStatus = "healthy"
+	// HealthStatusHealthy means the last probe passed.
+	HealthStatusHealthy HealthStatus = "healthy"
 
-	// HealthUnhealthy means the check's retries have failed in a row.
-	HealthUnhealthy HealthStatus = "unhealthy"
+	// HealthStatusUnhealthy means the check's retries have failed in a row.
+	HealthStatusUnhealthy HealthStatus = "unhealthy"
 )
 
 // HealthStatuses returns every health status.
 func HealthStatuses() []HealthStatus {
-	return []HealthStatus{HealthStarting, HealthHealthy, HealthUnhealthy}
+	return []HealthStatus{
+		HealthStatusStarting, HealthStatusHealthy, HealthStatusUnhealthy,
+	}
 }
 
 // Health is what the health check of a running instance has found.
@@ -189,4 +192,4 @@ type Health struct {
 
 // NewHealth returns the health of a check that has not yet reached a
 // verdict.
-func NewHealth() Health { return Health{Status: HealthStarting} }
+func NewHealth() Health { return Health{Status: HealthStatusStarting} }

@@ -31,6 +31,8 @@ type networkHandler struct {
 	events      recorder
 }
 
+// CreateNetwork records a network, refusing a subnet another network or
+// the host is on. Unset gateway, MTU and nameservers take their defaults.
 func (h *networkHandler) CreateNetwork(
 	_ context.Context, req *dicerdv1.CreateNetworkRequest,
 ) (*dicerdv1.Network, error) {
@@ -41,19 +43,19 @@ func (h *networkHandler) CreateNetwork(
 		return nil, errdefs.InvalidArgument("subnet is required")
 	}
 
-	if _, err := h.definitions.GetNetwork(req.GetName()); err == nil {
+	if _, err := h.definitions.Network(req.GetName()); err == nil {
 		return nil, errdefs.Exists("network %q already exists", req.GetName())
 	}
 
-	ipNet, err := network.ParseSubnet(req.GetSubnet())
+	subnet, err := network.ParseSubnet(req.GetSubnet())
 	if err != nil {
 		return nil, err
 	}
-	gateway, err := networkGateway(ipNet, req.GetGateway())
+	gateway, err := networkGateway(subnet, req.GetGateway())
 	if err != nil {
 		return nil, err
 	}
-	if err := h.checkSubnetOverlap(ipNet); err != nil {
+	if err := h.checkSubnetOverlap(subnet); err != nil {
 		return nil, err
 	}
 	mtu, err := networkMTU(req.GetMtu())
@@ -69,7 +71,7 @@ func (h *networkHandler) CreateNetwork(
 	n := types.Network{
 		ID:          cuid2.Generate(),
 		Name:        req.GetName(),
-		Subnet:      ipNet.String(),
+		Subnet:      subnet.String(),
 		Gateway:     gateway,
 		Bridge:      network.BridgeName(req.GetName()),
 		MTU:         mtu,
@@ -94,17 +96,17 @@ func (h *networkHandler) CreateNetwork(
 
 // networkGateway returns the requested gateway, or the subnet's first
 // address.
-func networkGateway(ipNet *net.IPNet, want string) (string, error) {
+func networkGateway(subnet *net.IPNet, want string) (string, error) {
 	if want == "" {
-		first := slices.Clone(ipNet.IP.To4())
+		first := slices.Clone(subnet.IP.To4())
 		first[len(first)-1]++
 		return first.String(), nil
 	}
 
 	gateway := net.ParseIP(want)
-	if gateway == nil || !network.Assignable(ipNet, gateway) {
+	if gateway == nil || !network.Assignable(subnet, gateway) {
 		return "", errdefs.InvalidArgument(
-			"gateway %q is not an assignable address in subnet %s", want, ipNet)
+			"gateway %q is not an assignable address in subnet %s", want, subnet)
 	}
 	return gateway.To4().String(), nil
 }
@@ -131,9 +133,9 @@ func networkNameservers(want []string) ([]string, error) {
 	if len(want) == 0 {
 		return []string{network.DefaultNameserver}, nil
 	}
-	for _, ns := range want {
-		if net.ParseIP(ns) == nil {
-			return nil, errdefs.InvalidArgument("nameserver %q is not an IP address", ns)
+	for _, nameserver := range want {
+		if net.ParseIP(nameserver) == nil {
+			return nil, errdefs.InvalidArgument("nameserver %q is not an IP address", nameserver)
 		}
 	}
 	return want, nil
@@ -142,12 +144,7 @@ func networkNameservers(want []string) ([]string, error) {
 // checkSubnetOverlap rejects a subnet that overlaps an existing network, or
 // one the host is on, whose addresses the network's would hide.
 func (h *networkHandler) checkSubnetOverlap(want *net.IPNet) error {
-	networks, err := h.definitions.ListNetworks()
-	if err != nil {
-		return err
-	}
-
-	for _, existing := range networks {
+	for _, existing := range h.definitions.Networks() {
 		_, have, err := net.ParseCIDR(existing.Subnet)
 		if err != nil {
 			continue
@@ -176,53 +173,54 @@ func (h *networkHandler) checkSubnetOverlap(want *net.IPNet) error {
 	return nil
 }
 
+// ListNetworks lists the networks with their address usage, sorted by name.
 func (h *networkHandler) ListNetworks(
 	_ context.Context, _ *dicerdv1.ListNetworksRequest,
 ) (*dicerdv1.ListNetworksResponse, error) {
-	networks, err := h.definitions.ListNetworks()
-	if err != nil {
-		return nil, err
-	}
+	networks := h.definitions.Networks()
 
 	resp := &dicerdv1.ListNetworksResponse{
 		Networks: make([]*dicerdv1.Network, 0, len(networks)),
 	}
 	for _, n := range networks {
-		allocs, err := h.networks.List(n.Name)
+		allocations, err := h.networks.List(n.Name)
 		if err != nil {
 			return nil, err
 		}
-		resp.Networks = append(resp.Networks, networkToProto(n, len(allocs)))
+		resp.Networks = append(resp.Networks, networkToProto(n, len(allocations)))
 	}
 
 	return resp, nil
 }
 
+// GetNetwork returns a network with its address usage.
 func (h *networkHandler) GetNetwork(
 	_ context.Context, req *dicerdv1.GetNetworkRequest,
 ) (*dicerdv1.Network, error) {
-	n, err := h.definitions.GetNetwork(req.GetName())
+	n, err := h.definitions.Network(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	allocs, err := h.networks.List(n.Name)
+	allocations, err := h.networks.List(n.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	return networkToProto(n, len(allocs)), nil
+	return networkToProto(n, len(allocations)), nil
 }
 
+// DeleteNetwork removes a network and its allocations, refusing one an
+// instance is on.
 func (h *networkHandler) DeleteNetwork(
 	_ context.Context, req *dicerdv1.DeleteNetworkRequest,
 ) (*emptypb.Empty, error) {
-	n, err := h.definitions.GetNetwork(req.GetName())
+	n, err := h.definitions.Network(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	inUse := func(inst types.InstanceSpec) bool { return inst.NetworkName == n.Name }
+	inUse := func(instance types.InstanceSpec) bool { return instance.NetworkName == n.Name }
 	if err := refuseInUse(h.definitions, fmt.Sprintf("network %q is in use", n.Name), inUse); err != nil {
 		return nil, err
 	}
@@ -232,7 +230,6 @@ func (h *networkHandler) DeleteNetwork(
 	}
 	h.record(n, events.ActionDeleted, "Deleted network with subnet "+n.Subnet)
 
-	// Drop the network's address table.
 	if err := h.networks.Forget(n.Name); err != nil {
 		return nil, fmt.Errorf("discard allocations: %w", err)
 	}
@@ -253,32 +250,30 @@ func (h *networkHandler) record(n types.Network, action events.Action, message s
 	})
 }
 
+// ListNetworkAllocations lists the addresses a network has allocated.
 func (h *networkHandler) ListNetworkAllocations(
 	_ context.Context, req *dicerdv1.ListNetworkAllocationsRequest,
 ) (*dicerdv1.ListNetworkAllocationsResponse, error) {
-	n, err := h.definitions.GetNetwork(req.GetName())
+	n, err := h.definitions.Network(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	allocs, err := h.networks.List(n.Name)
+	allocations, err := h.networks.List(n.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	instances, err := h.definitions.ListInstances()
-	if err != nil {
-		return nil, err
-	}
+	instances := h.definitions.Instances()
 	nameByID := make(map[string]string, len(instances))
-	for _, inst := range instances {
-		nameByID[inst.ID] = inst.Name
+	for _, instance := range instances {
+		nameByID[instance.ID] = instance.Name
 	}
 
 	resp := &dicerdv1.ListNetworkAllocationsResponse{
-		Allocations: make([]*dicerdv1.NetworkAllocation, 0, len(allocs)),
+		Allocations: make([]*dicerdv1.NetworkAllocation, 0, len(allocations)),
 	}
-	for _, a := range allocs {
+	for _, a := range allocations {
 		resp.Allocations = append(resp.Allocations, allocationToProto(a, nameByID[a.InstanceID]))
 	}
 

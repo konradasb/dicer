@@ -20,6 +20,8 @@ type hostHandler struct {
 	defaults    defaultResolver
 }
 
+// GetHostInfo reports the daemon's version, hostname, hypervisors, API
+// addresses and default kernel and network.
 func (h *hostHandler) GetHostInfo(
 	_ context.Context, _ *dicerdv1.GetHostInfoRequest,
 ) (*dicerdv1.GetHostInfoResponse, error) {
@@ -28,19 +30,19 @@ func (h *hostHandler) GetHostInfo(
 	return &dicerdv1.GetHostInfoResponse{
 		Version:        h.version,
 		Hostname:       hostname,
-		Hypervisors:    h.hypervisorInfo(),
+		Hypervisors:    h.hypervisorInfos(),
 		ApiAddresses:   h.apiAddresses(),
 		DefaultKernel:  h.defaults.kernel(),
 		DefaultNetwork: h.defaults.network(),
 	}, nil
 }
 
-// hypervisorInfo lists the available hypervisors, the default first.
-func (h *hostHandler) hypervisorInfo() []*dicerdv1.HypervisorInfo {
+// hypervisorInfos describes the available hypervisors, the default first.
+func (h *hostHandler) hypervisorInfos() []*dicerdv1.HypervisorInfo {
 	out := make([]*dicerdv1.HypervisorInfo, 0, len(h.hypervisors))
 
-	for i, hvType := range types.HypervisorTypes() {
-		starters, ok := h.hypervisors[hvType]
+	for i, hypervisorType := range types.HypervisorTypes() {
+		starters, ok := h.hypervisors[hypervisorType]
 		if !ok {
 			continue
 		}
@@ -51,7 +53,7 @@ func (h *hostHandler) hypervisorInfo() []*dicerdv1.HypervisorInfo {
 		}
 
 		out = append(out, &dicerdv1.HypervisorInfo{
-			Type:      hypervisorTypes.toProto(hvType),
+			Type:      hypervisorTypes.toProto(hypervisorType),
 			Versions:  versions,
 			IsDefault: i == 0,
 		})

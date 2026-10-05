@@ -1,8 +1,8 @@
 // Copyright 2026 Dicer Authors
 // SPDX-License-Identifier: MIT
 
-// Package diskfile makes and measures disk files: the sparse files that
-// hold a guest's disks on the host.
+// Package diskfile makes, copies and measures disk files: the sparse files
+// that hold a guest's disks on the host.
 package diskfile
 
 import (
@@ -34,17 +34,17 @@ func CreateExt4From(ctx context.Context, path string, sizeBytes int64, dir strin
 // create makes the disk file at path, filled from dir unless dir is empty.
 func create(ctx context.Context, path string, sizeBytes int64, dir string) (err error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
+		return fmt.Errorf("create disk directory: %w", err)
 	}
 
 	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {
 		return fmt.Errorf("create disk file: %w", err)
 	}
-	tmp := f.Name()
+	partial := f.Name()
 	defer func() {
 		if err != nil {
-			_ = os.Remove(tmp)
+			_ = os.Remove(partial)
 		}
 	}()
 
@@ -53,18 +53,18 @@ func create(ctx context.Context, path string, sizeBytes int64, dir string) (err 
 		return fmt.Errorf("allocate disk: %w", err)
 	}
 	if err := f.Close(); err != nil {
-		return err
+		return fmt.Errorf("close disk file: %w", err)
 	}
 
 	args := []string{"-t", "ext4", "-F", "-q"}
 	if dir != "" {
 		args = append(args, "-d", dir)
 	}
-	if out, err := exec.CommandContext(ctx, "mke2fs", append(args, tmp)...).CombinedOutput(); err != nil {
+	if out, err := exec.CommandContext(ctx, "mke2fs", append(args, partial)...).CombinedOutput(); err != nil {
 		return fmt.Errorf("format disk: %w: %s", err, out)
 	}
 
-	if err := os.Rename(tmp, path); err != nil {
+	if err := os.Rename(partial, path); err != nil {
 		return fmt.Errorf("install disk: %w", err)
 	}
 	return nil
@@ -77,8 +77,23 @@ func AllocatedBytes(path string) int64 {
 	if err != nil {
 		return 0
 	}
-	if st, ok := info.Sys().(*syscall.Stat_t); ok {
-		return st.Blocks * statBlockSize
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		return stat.Blocks * statBlockSize
 	}
 	return info.Size()
+}
+
+// AllocatedBytesUnder returns the space the files in the directory tree at
+// dir take up on the host, by AllocatedBytes. It returns what it counted
+// with the first error met walking the tree.
+func AllocatedBytesUnder(dir string) (int64, error) {
+	var total int64
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		total += AllocatedBytes(path)
+		return nil
+	})
+	return total, err
 }

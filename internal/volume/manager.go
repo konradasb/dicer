@@ -24,13 +24,13 @@ import (
 type Config struct {
 	// DataDir is the directory volume disks are kept under.
 	DataDir string
-
+	// Logger is where the Manager logs. Nil is slog.Default().
 	Logger *slog.Logger
 }
 
 // Manager owns the disk files that back volumes. It records no metadata: the
-// types.Volume definition lives in the definition store, and its disk is found by
-// ID.
+// types.Volume definition is kept with the others, by filestore.Manager, and
+// its disk is found by ID.
 type Manager struct {
 	dataDir string
 	logger  *slog.Logger
@@ -57,6 +57,7 @@ func (m *Manager) Path(id string) string {
 	return filepath.Join(m.volumeDir(id), "disk.raw")
 }
 
+// volumeDir returns the directory holding a volume's disk file.
 func (m *Manager) volumeDir(id string) string {
 	return filepath.Join(m.dataDir, "volumes", id)
 }
@@ -76,7 +77,7 @@ func (m *Manager) Create(ctx context.Context, name string, sizeBytes int64) (*ty
 	}
 
 	now := time.Now()
-	vol := types.Volume{
+	volume := types.Volume{
 		ID:        id,
 		Name:      name,
 		Path:      m.Path(id),
@@ -85,9 +86,9 @@ func (m *Manager) Create(ctx context.Context, name string, sizeBytes int64) (*ty
 		UpdatedAt: now,
 	}
 
-	m.logger.InfoContext(ctx, "volume created", "id", id, "name", name, "size_bytes", sizeBytes)
+	m.logger.InfoContext(ctx, "volume created", "volume_id", id, "name", name, "size_bytes", sizeBytes)
 
-	return &vol, nil
+	return &volume, nil
 }
 
 // DiskBytes returns the disk a volume's file takes up, which for a sparse
@@ -96,7 +97,8 @@ func (m *Manager) DiskBytes(id string) int64 {
 	return diskfile.AllocatedBytes(m.Path(id))
 }
 
-// Delete removes a volume's disk.
+// Delete removes a volume's disk. Deleting a volume with none is not an
+// error.
 func (m *Manager) Delete(id string) error {
 	return os.RemoveAll(m.volumeDir(id))
 }

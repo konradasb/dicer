@@ -27,7 +27,7 @@ func (h *Host) SetupBridge(ctx context.Context, nw *types.Network) error {
 	}
 
 	if err := h.ensureBridge(ctx, nw, ipNet); err != nil {
-		return fmt.Errorf("create bridge: %w", err)
+		return err
 	}
 
 	h.mu.Lock()
@@ -35,7 +35,7 @@ func (h *Host) SetupBridge(ctx context.Context, nw *types.Network) error {
 	h.mu.Unlock()
 
 	if err := h.setupIPTables(ctx, nw.Bridge, nw.Subnet); err != nil {
-		return fmt.Errorf("setup iptables: %w", err)
+		return fmt.Errorf("set up iptables rules: %w", err)
 	}
 
 	if err := h.ensureGatewayAccess(ctx, nw); err != nil {
@@ -43,14 +43,15 @@ func (h *Host) SetupBridge(ctx context.Context, nw *types.Network) error {
 	}
 
 	if err := ensureBridgeQdisc(nw.Bridge, h.config.UplinkCapacityBps); err != nil {
-		return fmt.Errorf("setup bridge qdisc: %w", err)
+		return fmt.Errorf("set up bridge qdisc: %w", err)
 	}
 
 	return nil
 }
 
-// TeardownBridge removes the bridge, iptables rules, and qdisc for a network.
-// Best-effort: logs failures but does not return an error.
+// TeardownBridge removes a network's bridge, with its qdisc, its iptables
+// rules and its gateway access. Best-effort: it logs failures rather than
+// returning them.
 func (h *Host) TeardownBridge(ctx context.Context, nw *types.Network) {
 	h.mu.Lock()
 	delete(h.networks, nw.Bridge)
@@ -75,26 +76,27 @@ func (h *Host) ensureBridge(ctx context.Context, nw *types.Network, ipNet *net.I
 		h.logger.InfoContext(ctx, "setting up bridge", "network_id", nw.ID, "bridge", nw.Bridge)
 		br = &netlink.Bridge{LinkAttrs: netlink.LinkAttrs{Name: nw.Bridge}}
 		if err := netlink.LinkAdd(br); err != nil {
-			return fmt.Errorf("create bridge: %w", err)
+			return fmt.Errorf("create bridge %s: %w", nw.Bridge, err)
 		}
 	case err != nil:
 		return fmt.Errorf("look up bridge %s: %w", nw.Bridge, err)
 	}
 
 	if err := netlink.LinkSetUp(br); err != nil {
-		return fmt.Errorf("set bridge up: %w", err)
+		return fmt.Errorf("set bridge %s up: %w", nw.Bridge, err)
 	}
 
 	addr := &netlink.Addr{
 		IPNet: &net.IPNet{IP: net.ParseIP(nw.Gateway), Mask: ipNet.Mask},
 	}
 	if err := netlink.AddrReplace(br, addr); err != nil {
-		return fmt.Errorf("add gateway to bridge: %w", err)
+		return fmt.Errorf("add gateway to bridge %s: %w", nw.Bridge, err)
 	}
 
 	return nil
 }
 
+// deleteBridge deletes the named bridge, if it exists.
 func deleteBridge(name string) error {
 	link, err := netlink.LinkByName(name)
 	if err != nil {

@@ -21,6 +21,8 @@ import (
 	diceragentv1 "github.com/konradasb/dicer/proto/diceragent/v1"
 )
 
+// probe runs req, with a timeout of 5s if it has none, and returns the
+// response.
 func probe(t *testing.T, req *diceragentv1.ProbeRequest) *diceragentv1.ProbeResponse {
 	t.Helper()
 
@@ -34,26 +36,27 @@ func probe(t *testing.T, req *diceragentv1.ProbeRequest) *diceragentv1.ProbeResp
 	return resp
 }
 
-func execProbe(command ...string) *diceragentv1.ProbeRequest {
+// execProbeRequest returns a request for an exec probe of command.
+func execProbeRequest(command ...string) *diceragentv1.ProbeRequest {
 	return &diceragentv1.ProbeRequest{Probe: &diceragentv1.ProbeRequest_Exec{
 		Exec: &diceragentv1.ExecProbe{Command: command},
 	}}
 }
 
-func TestExecProbe(t *testing.T) {
+func TestExecProbeReportsHowTheCommandEnded(t *testing.T) {
 	tests := []struct {
 		name    string
 		req     *diceragentv1.ProbeRequest
 		healthy bool
 		output  string
 	}{
-		{"exit 0", execProbe("sh", "-c", "echo ready"), true, "ready"},
-		{"exit 1", execProbe("sh", "-c", "echo not yet >&2; exit 1"), false, "not yet\nexited with code 1"},
-		{"not found", execProbe("/no/such/command"), false, "no such file"},
+		{"exit 0", execProbeRequest("sh", "-c", "echo ready"), true, "ready"},
+		{"exit 1", execProbeRequest("sh", "-c", "echo not yet >&2; exit 1"), false, "not yet\nexited with code 1"},
+		{"not found", execProbeRequest("/no/such/command"), false, "no such file"},
 		{
 			"overruns its timeout",
 			&diceragentv1.ProbeRequest{
-				Probe:   execProbe("sleep", "10").GetProbe(),
+				Probe:   execProbeRequest("sleep", "10").GetProbe(),
 				Timeout: durationpb.New(100 * time.Millisecond),
 			},
 			false, "timed out after 100ms",
@@ -73,9 +76,10 @@ func TestExecProbe(t *testing.T) {
 
 // A health command that prints without end is cut off, not buffered.
 func TestExecProbeBoundsOutput(t *testing.T) {
-	resp := probe(t, execProbe("sh", "-c", "head -c 100000 /dev/zero | tr '\\0' x"))
+	resp := probe(t, execProbeRequest("sh", "-c", "head -c 100000 /dev/zero | tr '\\0' x"))
 	if !resp.GetHealthy() || len(resp.GetOutput()) > guest.MaxProbeOutput {
-		t.Errorf("Probe = healthy %v, %d bytes; want healthy, at most %d", resp.GetHealthy(), len(resp.GetOutput()), guest.MaxProbeOutput)
+		t.Errorf("Probe = healthy %v, %d bytes; want healthy, at most %d",
+			resp.GetHealthy(), len(resp.GetOutput()), guest.MaxProbeOutput)
 	}
 }
 
@@ -83,15 +87,17 @@ func TestExecProbeBoundsOutput(t *testing.T) {
 func portOf(t *testing.T, addr string) uint32 {
 	t.Helper()
 
-	tcp, err := net.ResolveTCPAddr("tcp", addr)
+	address, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return uint32(tcp.Port)
+	return uint32(address.Port)
 }
 
-func TestHTTPProbe(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// An HTTP probe passes on a 2xx or 3xx status, without following a
+// redirect.
+func TestHTTPProbePassesOnSuccessOrRedirect(t *testing.T) {
+	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/ok":
 			w.WriteHeader(http.StatusOK)
@@ -102,8 +108,8 @@ func TestHTTPProbe(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
 	}))
-	defer srv.Close()
-	port := portOf(t, srv.Listener.Addr().String())
+	defer httpServer.Close()
+	port := portOf(t, httpServer.Listener.Addr().String())
 
 	tests := []struct {
 		path    string
@@ -115,33 +121,36 @@ func TestHTTPProbe(t *testing.T) {
 		{"/broken", false, "503 Service Unavailable"},
 	}
 	for _, tt := range tests {
-		resp := probe(t, &diceragentv1.ProbeRequest{Probe: &diceragentv1.ProbeRequest_Http{
-			Http: &diceragentv1.HTTPProbe{Port: port, Path: tt.path},
-		}})
-		if resp.GetHealthy() != tt.healthy || !strings.Contains(resp.GetOutput(), tt.output) {
-			t.Errorf("GET %s = healthy %v, %q; want %v, %q", tt.path, resp.GetHealthy(), resp.GetOutput(), tt.healthy, tt.output)
-		}
+		t.Run(tt.path, func(t *testing.T) {
+			resp := probe(t, &diceragentv1.ProbeRequest{Probe: &diceragentv1.ProbeRequest_Http{
+				Http: &diceragentv1.HTTPProbe{Port: port, Path: tt.path},
+			}})
+			if resp.GetHealthy() != tt.healthy || !strings.Contains(resp.GetOutput(), tt.output) {
+				t.Errorf("GET %s = healthy %v, %q; want %v, %q",
+					tt.path, resp.GetHealthy(), resp.GetOutput(), tt.healthy, tt.output)
+			}
+		})
 	}
 }
 
-func TestTCPProbe(t *testing.T) {
-	var lc net.ListenConfig
-	l, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+func TestTCPProbePassesOnlyWhileThePortIsOpen(t *testing.T) {
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	port := portOf(t, l.Addr().String())
+	port := portOf(t, listener.Addr().String())
 
-	tcp := func() *diceragentv1.ProbeRequest {
+	tcpProbeRequest := func() *diceragentv1.ProbeRequest {
 		return &diceragentv1.ProbeRequest{Probe: &diceragentv1.ProbeRequest_Tcp{Tcp: &diceragentv1.TCPProbe{Port: port}}}
 	}
 
-	if resp := probe(t, tcp()); !resp.GetHealthy() {
+	if resp := probe(t, tcpProbeRequest()); !resp.GetHealthy() {
 		t.Errorf("open port = %q, want healthy", resp.GetOutput())
 	}
 
-	_ = l.Close()
-	if resp := probe(t, tcp()); resp.GetHealthy() || !strings.Contains(resp.GetOutput(), "refused") {
+	_ = listener.Close()
+	if resp := probe(t, tcpProbeRequest()); resp.GetHealthy() || !strings.Contains(resp.GetOutput(), "refused") {
 		t.Errorf("closed port = healthy %v, %q; want a refusal", resp.GetHealthy(), resp.GetOutput())
 	}
 }
@@ -149,11 +158,13 @@ func TestTCPProbe(t *testing.T) {
 func TestProbeRejectsRequestsThatAreNotProbes(t *testing.T) {
 	for name, req := range map[string]*diceragentv1.ProbeRequest{
 		"no probe":   {Timeout: durationpb.New(time.Second)},
-		"no command": {Probe: execProbe().GetProbe(), Timeout: durationpb.New(time.Second)},
-		"no timeout": execProbe("true"),
+		"no command": {Probe: execProbeRequest().GetProbe(), Timeout: durationpb.New(time.Second)},
+		"no timeout": execProbeRequest("true"),
 	} {
-		if _, err := (&server{}).Probe(t.Context(), req); status.Code(err) != codes.InvalidArgument {
-			t.Errorf("%s: Probe = %v, want InvalidArgument", name, err)
-		}
+		t.Run(name, func(t *testing.T) {
+			if _, err := (&server{}).Probe(t.Context(), req); status.Code(err) != codes.InvalidArgument {
+				t.Errorf("Probe = %v, want InvalidArgument", err)
+			}
+		})
 	}
 }

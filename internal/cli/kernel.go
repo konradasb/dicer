@@ -17,14 +17,14 @@ type printableKernel struct {
 	Kernels []*dicerdv1.Kernel
 }
 
-func (p *printableKernel) Cols() []string {
+func (p *printableKernel) Columns() []string {
 	return []string{"ID", "Name", "Arch", "URL", "SHA256", "Created"}
 }
 
-func (p *printableKernel) KV() []map[string]any {
-	kv := make([]map[string]any, 0, len(p.Kernels))
+func (p *printableKernel) Rows() []map[string]any {
+	rows := make([]map[string]any, 0, len(p.Kernels))
 	for _, k := range p.Kernels {
-		kv = append(kv, map[string]any{
+		rows = append(rows, map[string]any{
 			"ID":      k.GetId(),
 			"Name":    k.GetName(),
 			"Arch":    archName(k.GetArch()),
@@ -33,7 +33,7 @@ func (p *printableKernel) KV() []map[string]any {
 			"Created": age(timeOf(k.GetCreateTime())),
 		})
 	}
-	return kv
+	return rows
 }
 
 func newKernelCommand() *cobra.Command {

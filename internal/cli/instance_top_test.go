@@ -41,11 +41,11 @@ func (d *fakeInstanceDaemon) ListInstanceProcesses(
 }
 
 func TestProcessRowsShowTheGuestsProcesses(t *testing.T) {
-	p := &printableProcesses{Processes: fakeProcesses()}
+	p := &printableProcess{Processes: fakeProcesses()}
 
-	rows := p.KV()
+	rows := p.Rows()
 	if len(rows) != 3 {
-		t.Fatalf("KV() has %d rows, want 3", len(rows))
+		t.Fatalf("Rows() has %d rows, want 3", len(rows))
 	}
 
 	want := map[string]any{
@@ -58,7 +58,7 @@ func TestProcessRowsShowTheGuestsProcesses(t *testing.T) {
 		"RSS":     "22 MiB",
 		"Command": "nginx -g daemon off;",
 	}
-	for _, col := range p.Cols() {
+	for _, col := range p.Columns() {
 		if rows[1][col] != want[col] {
 			t.Errorf("%s = %q, want %q", col, rows[1][col], want[col])
 		}
@@ -72,7 +72,7 @@ func TestProcessRowsShowTheGuestsProcesses(t *testing.T) {
 // TestTopTemplatesAndJSONUseTheColumnNames checks that the column names are
 // a --format template's fields and JSON's keys.
 func TestTopTemplatesAndJSONUseTheColumnNames(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon())
+	serveFakeDaemon(t, newFakeInstanceDaemon())
 
 	out, err := run(t, "top", "web", "--format", "{{.PID}} {{.Command}}")
 	if err != nil {

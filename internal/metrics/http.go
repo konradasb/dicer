@@ -25,6 +25,7 @@ type scrapeErrorLog struct {
 	logger *slog.Logger
 }
 
+// Println logs an error promhttp met serving a scrape.
 func (l scrapeErrorLog) Println(v ...any) {
 	l.logger.Error("serving scrape", "error", fmt.Sprint(v...))
 }

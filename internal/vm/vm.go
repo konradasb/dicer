@@ -28,27 +28,27 @@ import (
 
 // Definitions stores the instance, network, volume and kernel definitions.
 type Definitions interface {
-	CreateInstance(inst types.InstanceSpec) error
-	GetInstance(nameOrID string) (types.InstanceSpec, error)
-	ListInstances() ([]types.InstanceSpec, error)
+	CreateInstance(instance types.InstanceSpec) error
+	Instance(nameOrID string) (types.InstanceSpec, error)
+	Instances() []types.InstanceSpec
 	MatchingInstances(match func(types.InstanceSpec) bool) []types.InstanceSpec
-	UpdateInstance(inst types.InstanceSpec) error
+	UpdateInstance(instance types.InstanceSpec) error
 	RenameInstance(nameOrID string, renamed types.InstanceSpec) error
 	DeleteInstance(nameOrID string) error
 	// InstanceDir is the persistent directory holding an instance's
 	// definition and overlay disk.
 	InstanceDir(name string) string
 
-	GetNetwork(nameOrID string) (types.Network, error)
-	ListNetworks() ([]types.Network, error)
-	GetKernel(nameOrID string) (types.Kernel, error)
-	GetVolume(nameOrID string) (types.Volume, error)
+	Network(nameOrID string) (types.Network, error)
+	Networks() []types.Network
+	Kernel(nameOrID string) (types.Kernel, error)
+	Volume(nameOrID string) (types.Volume, error)
 }
 
 // Networks assigns and releases guest addresses.
 type Networks interface {
 	Allocate(n types.Network, instanceID, staticIP string) (types.NetworkAllocation, error)
-	Get(networkName, instanceID string) (types.NetworkAllocation, error)
+	Allocation(networkName, instanceID string) (types.NetworkAllocation, error)
 	InstanceAt(networkName, ip string) (instanceID string, ok bool)
 	Release(networkName, instanceID string) error
 	Reconcile(networks []string, live map[string]struct{}) (int, error)
@@ -56,7 +56,7 @@ type Networks interface {
 
 // Images provides the bootable disk for an image reference.
 type Images interface {
-	Get(ref string) (*types.Image, error)
+	Image(ref string) (*types.Image, error)
 	Ensure(ctx context.Context, ref string, policy types.PullPolicy) (*types.Image, error)
 }
 
@@ -78,13 +78,13 @@ type Initrds interface {
 // HostNetwork attaches an instance to its network on this host.
 type HostNetwork interface {
 	SetupBridge(ctx context.Context, nw *types.Network) error
-	CreateTAP(ctx context.Context, nw *types.Network, alloc *types.NetworkAllocation, bw network.Bandwidth) error
+	CreateTAP(ctx context.Context, nw *types.Network, allocation *types.NetworkAllocation, bandwidth network.Bandwidth) error
 	RemoveTAP(ctx context.Context, nw *types.Network, instanceID string)
 	TeardownBridge(ctx context.Context, nw *types.Network)
 
 	// PublishPorts forwards host ports to the instance's address, replacing
 	// any it already published.
-	PublishPorts(ctx context.Context, nw *types.Network, alloc *types.NetworkAllocation, ports []types.PortMapping) error
+	PublishPorts(ctx context.Context, nw *types.Network, allocation *types.NetworkAllocation, ports []types.PortMapping) error
 	// UnpublishPorts removes every port the instance published.
 	UnpublishPorts(ctx context.Context, instanceID string)
 }
@@ -125,12 +125,12 @@ type Config struct {
 
 	// Metrics, Events and Logger are optional.
 	Metrics Metrics
-	Events  Events
+	Events  Recorder
 	Logger  *slog.Logger
 }
 
-// Manager drives instance lifecycle operations and owns the runtime state
-// that describes them.
+// Manager drives instance lifecycle operations and owns the status that
+// describes them.
 type Manager struct {
 	definitions Definitions
 	networks    Networks
@@ -144,7 +144,7 @@ type Manager struct {
 	dnsServers  DNSServers
 	capacity    types.Capacity
 	metrics     Metrics
-	events      Events
+	events      Recorder
 	logger      *slog.Logger
 
 	// procDir is where procfs is mounted, from which stats are read.
@@ -164,7 +164,7 @@ type Manager struct {
 	// stopGracePeriod is how long a guest asked to shut down has to do it.
 	stopGracePeriod time.Duration
 
-	// admissionMu serialises admission. See resources.go.
+	// admissionMu serialises admission. See admission.go.
 	admissionMu sync.Mutex
 
 	// locks holds a mutex per instance ID. Locks are never removed, since
@@ -209,7 +209,7 @@ func NewManager(cfg Config) *Manager {
 		cfg.Metrics = discardMetrics{}
 	}
 	if cfg.Events == nil {
-		cfg.Events = discardEvents{}
+		cfg.Events = discardRecorder{}
 	}
 
 	return &Manager{

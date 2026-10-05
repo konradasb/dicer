@@ -203,14 +203,14 @@ func (w *waiter) observe(e *dicerdv1.Event) {
 
 // status returns what the instance ended with, and whether it has ended.
 func (w *waiter) status(ctx context.Context, client *dicer.Client, name string) (int, bool, error) {
-	inst, err := client.GetInstance(ctx, &dicerdv1.GetInstanceRequest{Name: name})
+	instance, err := client.GetInstance(ctx, &dicerdv1.GetInstanceRequest{Name: name})
 	switch {
-	case err == nil && (w.id == "" || inst.GetId() == w.id):
-		w.id = inst.GetId()
-		return endedWith(inst)
+	case err == nil && (w.id == "" || instance.GetId() == w.id):
+		w.id = instance.GetId()
+		return endedWith(instance)
 	case err == nil, status.Code(err) == codes.NotFound:
 		// Gone, or the name another instance's now.
-		if code, ok := w.deleted(); ok {
+		if code, ok := w.deletedStatus(); ok {
 			return code, true, nil
 		}
 		if w.id != "" {
@@ -223,10 +223,10 @@ func (w *waiter) status(ctx context.Context, client *dicer.Client, name string) 
 	}
 }
 
-// deleted returns the status the instance waited for ended with, if its
-// events say it is deleted. Before the instance is known, it is the one that
-// had the name last.
-func (w *waiter) deleted() (int, bool) {
+// deletedStatus returns the status the instance waited for ended with, if
+// its events say it is deleted. Before the instance is known, it is the one
+// that had the name last.
+func (w *waiter) deletedStatus() (int, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -240,17 +240,17 @@ func (w *waiter) deleted() (int, bool) {
 
 // endedWith returns the status a stopped instance ended with, and whether it
 // has stopped.
-func endedWith(inst *dicerdv1.Instance) (int, bool, error) {
-	switch inst.GetState() {
+func endedWith(instance *dicerdv1.Instance) (int, bool, error) {
+	switch instance.GetState() {
 	case stateStopped, stateFailed:
 	default:
 		return 0, false, nil
 	}
 
 	switch {
-	case inst.ExitCode != nil:
-		return int(inst.GetExitCode()), true, nil
-	case inst.GetState() == stateFailed:
+	case instance.ExitCode != nil:
+		return int(instance.GetExitCode()), true, nil
+	case instance.GetState() == stateFailed:
 		return statusUnknown, true, nil
 	default:
 		return 0, true, nil

@@ -14,52 +14,53 @@ import (
 // called from the goroutine doing the pull, so it should not block for long.
 type ProgressFunc func(types.PullProgress)
 
-func (f ProgressFunc) send(p types.PullProgress) {
+// report passes p to f, unless f is nil.
+func (f ProgressFunc) report(p types.PullProgress) {
 	if f != nil {
 		f(p)
 	}
 }
 
-// fromRegistry adapts the registry's events, which know nothing of what
+// fromRegistry adapts the registry's progress, which knows nothing of what
 // happens to an image after it is fetched.
-func (f ProgressFunc) fromRegistry() registry.EventFunc {
+func (f ProgressFunc) fromRegistry() registry.ProgressFunc {
 	if f == nil {
 		return nil
 	}
 
-	return func(ev registry.Event) {
-		switch ev.Phase {
+	return func(p registry.Progress) {
+		switch p.Phase {
 		case registry.PhaseDownloading:
 			f(types.PullProgress{
-				Stage:           types.StageDownloading,
-				DownloadedBytes: ev.Downloaded,
-				TotalBytes:      ev.Total,
+				Stage:           types.PullStageDownloading,
+				DownloadedBytes: p.Downloaded,
+				TotalBytes:      p.Total,
 			})
 		case registry.PhaseUnpacking:
-			f(types.PullProgress{Stage: types.StageUnpacking})
+			f(types.PullProgress{Stage: types.PullStageUnpacking})
 		}
 	}
 }
 
 // downloadCounter keeps the highest cumulative byte count reported, since
-// events from parallel layer fetches can arrive out of order.
+// reports from parallel layer fetches can arrive out of order.
 type downloadCounter struct {
 	highest atomic.Int64
 }
 
-// tap returns an EventFunc that totals the bytes reported and then forwards
-// to next, which may be nil.
-func (c *downloadCounter) tap(next registry.EventFunc) registry.EventFunc {
-	return func(ev registry.Event) {
-		c.observe(ev.Downloaded)
+// tap returns a registry.ProgressFunc that totals the bytes reported, then
+// forwards the progress to next, which may be nil.
+func (c *downloadCounter) tap(next registry.ProgressFunc) registry.ProgressFunc {
+	return func(p registry.Progress) {
+		c.observe(p.Downloaded)
 
 		if next != nil {
-			next(ev)
+			next(p)
 		}
 	}
 }
 
-// observe records a cumulative byte count from one event.
+// observe records a cumulative byte count from one report.
 func (c *downloadCounter) observe(cumulative int64) {
 	for {
 		highest := c.highest.Load()

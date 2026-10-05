@@ -5,17 +5,18 @@ package cli
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/docker/go-units"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/konradasb/dicer/internal/cli/printer"
 )
@@ -79,15 +80,15 @@ func renderTo(cmd *cobra.Command, w io.Writer, p printer.Printable) error {
 // printNames writes what identifies each row -- its Name, or its first
 // column if it has none -- one a line, for 'dicer rm $(dicer ps -q)'.
 func printNames(w io.Writer, p printer.Printable) error {
-	key := p.Cols()[0]
-	for _, c := range p.Cols() {
+	key := p.Columns()[0]
+	for _, c := range p.Columns() {
 		if c == "Name" {
 			key = c
 			break
 		}
 	}
 
-	for _, row := range p.KV() {
+	for _, row := range p.Rows() {
 		if _, err := fmt.Fprintln(w, row[key]); err != nil {
 			return err
 		}
@@ -125,16 +126,49 @@ func age(t time.Time) string {
 	return units.HumanDuration(time.Since(t)) + " ago"
 }
 
-// formatNumber renders a number to at most one decimal place, dropping a
-// trailing ".0": 30.3, 1, 4.
-func formatNumber(f float64) string {
-	return strconv.FormatFloat(math.Round(f*10)/10, 'f', -1, 64)
-}
-
 // orDash renders an empty string as "-", so a table cell is never blank.
 func orDash(s string) string {
 	if s == "" {
 		return "-"
 	}
 	return s
+}
+
+// writeRecords writes messages as a JSON or YAML array, each as record
+// renders it.
+func writeRecords[M proto.Message](w io.Writer, format string, messages []M) error {
+	records := make([]any, 0, len(messages))
+	for _, m := range messages {
+		r, err := record(m)
+		if err != nil {
+			return err
+		}
+		records = append(records, r)
+	}
+
+	return writeStructured(w, format, records)
+}
+
+// record returns a message as JSON and YAML output show it: its fields as
+// the API names them, and its enums by name.
+func record(m proto.Message) (any, error) {
+	data, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+
+	var r any
+	if err := json.Unmarshal(data, &r); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// writeStructured writes v as JSON or YAML, as format asks, for a command
+// whose table is not a Printable's.
+func writeStructured(w io.Writer, format string, v any) error {
+	if !printer.IsStructured(format) {
+		return fmt.Errorf("unsupported format %q: want table, json or yaml", format)
+	}
+	return printer.PrintStructured(v, w, format)
 }

@@ -30,14 +30,14 @@ func (h *instanceHandler) GetInstanceStats(
 	// Names are resolved once, so a rename does not lose an instance.
 	var wanted map[string]bool
 	for _, name := range req.GetNames() {
-		inst, err := h.definitions.GetInstance(name)
+		instance, err := h.definitions.Instance(name)
 		if err != nil {
 			return err
 		}
 		if wanted == nil {
 			wanted = make(map[string]bool, len(req.GetNames()))
 		}
-		wanted[inst.ID] = true
+		wanted[instance.ID] = true
 	}
 
 	ticker := time.NewTicker(h.statsInterval)

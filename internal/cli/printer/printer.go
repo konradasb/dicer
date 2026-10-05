@@ -20,28 +20,26 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// outputType is a rendering Print supports.
-type outputType string
+// format is a rendering Print supports.
+type format string
 
 const (
-	tableType    outputType = "table"
-	jsonType     outputType = "json"
-	yamlType     outputType = "yaml"
-	templateType outputType = "template"
+	tableFormat    format = "table"
+	jsonFormat     format = "json"
+	yamlFormat     format = "yaml"
+	templateFormat format = "template"
 )
 
-// Printable is implemented by anything a command can print. Cols names the
-// columns in display order; KV returns one map per row, keyed by column.
+// Printable is implemented by anything a command can print. Columns names
+// the columns in display order; Rows returns one map per row, keyed by
+// column.
+//
+// A Printable with more columns than a table shows by default also has a
+// method DefaultColumns() []string. Asked for no columns in particular, a
+// table shows those; JSON, YAML and templates still have every column.
 type Printable interface {
-	Cols() []string
-	KV() []map[string]any
-}
-
-// Defaulted is implemented by a Printable with more columns than a table
-// shows by default. Asked for no columns in particular, a table shows these;
-// JSON, YAML and templates still have every column.
-type Defaulted interface {
-	DefaultCols() []string
+	Columns() []string
+	Rows() []map[string]any
 }
 
 // Options are how Print renders.
@@ -60,105 +58,125 @@ type Options struct {
 // Print writes item to out as opts say: a table, JSON, YAML, or a Go
 // template such as '{{.Name}} {{.State}}' applied to each row.
 func Print(item Printable, out io.Writer, opts Options) error {
-	outputFormat, err := parseFormat(opts.Format)
+	f, err := parseFormat(opts.Format)
 	if err != nil {
 		return err
 	}
 
-	switch outputFormat {
-	case jsonType:
+	switch f {
+	case jsonFormat:
 		return printJSON(item, out, opts.Columns)
-	case yamlType:
+	case yamlFormat:
 		return printYAML(item, out, opts.Columns)
-	case templateType:
+	case templateFormat:
 		return printTemplate(item, out, opts.Format)
-	case tableType:
-		cols := opts.Columns
-		if d, ok := item.(Defaulted); ok && len(cols) == 0 && !opts.AllColumns {
-			cols = d.DefaultCols()
+	case tableFormat:
+		columns := opts.Columns
+		defaulted, ok := item.(interface{ DefaultColumns() []string })
+		if ok && len(columns) == 0 && !opts.AllColumns {
+			columns = defaulted.DefaultColumns()
 		}
-		return printTable(item, out, cols)
+		return printTable(item, out, columns)
 	default:
 		return fmt.Errorf("unsupported format %q", opts.Format)
 	}
 }
 
-// IsStructured reports whether format asks for machine-readable output --
-// JSON or YAML -- rather than something for a person to read.
-func IsStructured(format string) bool {
-	t, err := parseFormat(format)
-	return err == nil && (t == jsonType || t == yamlType)
-}
-
-// IsYAML reports whether format asks for YAML.
-func IsYAML(format string) bool {
-	t, err := parseFormat(format)
-	return err == nil && t == yamlType
-}
-
-// parseFormat converts a format string to an outputType. Anything holding
-// "{{" is a template.
-func parseFormat(format string) (outputType, error) {
-	if strings.Contains(format, "{{") {
-		return templateType, nil
+// PrintStructured writes v to out as JSON or YAML, as the format s names.
+// It is for what is not a Printable: a whole record rather than rows. Any
+// other format is an error.
+func PrintStructured(v any, out io.Writer, s string) error {
+	f, err := parseFormat(s)
+	if err != nil {
+		return err
 	}
 
-	switch strings.ToLower(format) {
-	case "table", "text":
-		return tableType, nil
-	case "json":
-		return jsonType, nil
-	case "yaml", "yml":
-		return yamlType, nil
+	switch f {
+	case jsonFormat:
+		return encodeJSON(out, v)
+	case yamlFormat:
+		return encodeYAML(out, v)
 	default:
-		return "", fmt.Errorf("unsupported format %q: want table, json, yaml, or a Go template such as '{{.Name}}'",
-			format)
+		return fmt.Errorf("unsupported format %q: want json or yaml", s)
 	}
 }
 
-// validateColumns matches the requested columns case-insensitively and
-// returns them as Cols spells them.
-func validateColumns(item Printable, includeCols []string) ([]string, error) {
-	available := item.Cols()
-	if len(includeCols) == 0 || includeCols[0] == "" {
+// IsStructured reports whether the format s names is machine-readable --
+// JSON or YAML -- rather than something for a person to read.
+func IsStructured(s string) bool {
+	f, err := parseFormat(s)
+	return err == nil && (f == jsonFormat || f == yamlFormat)
+}
+
+// IsTable reports whether the format s names is a table.
+func IsTable(s string) bool {
+	f, err := parseFormat(s)
+	return err == nil && f == tableFormat
+}
+
+// parseFormat returns the format s names. Anything holding "{{" is a
+// template.
+func parseFormat(s string) (format, error) {
+	if strings.Contains(s, "{{") {
+		return templateFormat, nil
+	}
+
+	switch strings.ToLower(s) {
+	case "table", "text":
+		return tableFormat, nil
+	case "json":
+		return jsonFormat, nil
+	case "yaml", "yml":
+		return yamlFormat, nil
+	default:
+		return "", fmt.Errorf("unsupported format %q: want table, json, yaml, or a Go template such as '{{.Name}}'", s)
+	}
+}
+
+// selectedColumns returns the columns named, matched case-insensitively and
+// spelled as Columns spells them, or every column if none are named. Naming
+// a column item does not have is an error.
+func selectedColumns(item Printable, names []string) ([]string, error) {
+	available := item.Columns()
+	if len(names) == 0 || names[0] == "" {
 		return available, nil
 	}
 
-	cols := make([]string, 0, len(includeCols))
-	for _, c := range includeCols {
-		name := strings.TrimSpace(c)
-		i := slices.IndexFunc(available, func(a string) bool { return strings.EqualFold(a, name) })
+	columns := make([]string, 0, len(names))
+	for _, name := range names {
+		trimmed := strings.TrimSpace(name)
+		i := slices.IndexFunc(available, func(a string) bool { return strings.EqualFold(a, trimmed) })
 		if i < 0 {
-			return nil, fmt.Errorf("no column %q: want one of %s",
-				c, strings.Join(available, ", "))
+			return nil, fmt.Errorf("no column %q: want one of %s", name, strings.Join(available, ", "))
 		}
-		cols = append(cols, available[i])
+		columns = append(columns, available[i])
 	}
 
-	return cols, nil
+	return columns, nil
 }
 
-// printTable prints the chosen columns of item as an aligned, borderless
+// printTable prints the named columns of item as an aligned, borderless
 // table.
-func printTable(item Printable, out io.Writer, includeCols []string) error {
-	cols, err := validateColumns(item, includeCols)
+func printTable(item Printable, out io.Writer, names []string) error {
+	columns, err := selectedColumns(item, names)
 	if err != nil {
 		return err
 	}
 
 	// Headers are uppercased here rather than by tablewriter, whose own
-	// formatting splits them at digits and punctuation: SHA 256, ADDRESS  /  MASK.
-	headers := make([]string, len(cols))
-	for i, c := range cols {
-		headers[i] = strings.ToUpper(c)
+	// formatting splits them at digits and punctuation: SHA 256,
+	// ADDRESS  /  MASK.
+	headers := make([]any, len(columns))
+	for i, column := range columns {
+		headers[i] = strings.ToUpper(column)
 	}
 
 	table := newTable(out)
-	table.Header(toAny(headers)...)
-	for _, r := range item.KV() {
-		row := make([]string, len(cols))
-		for i, c := range cols {
-			row[i] = cell(r[c])
+	table.Header(headers...)
+	for _, values := range item.Rows() {
+		row := make([]string, len(columns))
+		for i, column := range columns {
+			row[i] = cell(values[column])
 		}
 		if err := table.Append(row); err != nil {
 			return fmt.Errorf("render table: %w", err)
@@ -209,45 +227,43 @@ func cell(v any) string {
 	}
 }
 
-// toAny converts a []string to a []any.
-func toAny(ss []string) []any {
-	out := make([]any, len(ss))
-	for i, s := range ss {
-		out[i] = s
-	}
-	return out
-}
-
-// selectRows returns the rows of item, holding only the chosen columns.
-func selectRows(item Printable, includeCols []string) ([]map[string]any, error) {
-	cols, err := validateColumns(item, includeCols)
+// selectedRows returns the rows of item holding only the named columns, as
+// selectedColumns picks them.
+func selectedRows(item Printable, names []string) ([]map[string]any, error) {
+	columns, err := selectedColumns(item, names)
 	if err != nil {
 		return nil, err
 	}
 
-	rows := item.KV()
-	result := make([]map[string]any, 0, len(rows))
-	for _, r := range rows {
-		row := make(map[string]any, len(cols))
-		for _, c := range cols {
-			row[c] = r[c]
+	rows := item.Rows()
+	selected := make([]map[string]any, 0, len(rows))
+	for _, values := range rows {
+		row := make(map[string]any, len(columns))
+		for _, column := range columns {
+			row[column] = values[column]
 		}
-		result = append(result, row)
+		selected = append(selected, row)
 	}
 
-	return result, nil
+	return selected, nil
 }
 
-// printYAML prints the output in YAML format.
-func printYAML(item Printable, out io.Writer, includeCols []string) error {
-	result, err := selectRows(item, includeCols)
+// printYAML prints the named columns of item as a YAML sequence of
+// mappings.
+func printYAML(item Printable, out io.Writer, names []string) error {
+	rows, err := selectedRows(item, names)
 	if err != nil {
 		return err
 	}
 
+	return encodeYAML(out, rows)
+}
+
+// encodeYAML writes v to out as YAML, indented by two spaces.
+func encodeYAML(out io.Writer, v any) error {
 	encoder := yaml.NewEncoder(out)
 	encoder.SetIndent(2)
-	if err := encoder.Encode(result); err != nil {
+	if err := encoder.Encode(v); err != nil {
 		return fmt.Errorf("encode YAML: %w", err)
 	}
 
@@ -260,24 +276,25 @@ var templateEscapes = strings.NewReplacer(`\t`, "\t", `\n`, "\n")
 
 // printTemplate executes a Go template once per row, each on its own line:
 // '{{.Name}}\t{{.IP}}' prints a name and an address a line, with the tabs
-// lined up into columns. A row's fields are its columns, as Cols names them.
-func printTemplate(item Printable, out io.Writer, format string) error {
-	tmpl, err := template.New("format").Funcs(templateFuncs).Parse(templateEscapes.Replace(format))
+// lined up into columns. A row's fields are its columns, as Columns names
+// them.
+func printTemplate(item Printable, out io.Writer, text string) error {
+	rowTemplate, err := template.New("format").Funcs(templateFuncs).Parse(templateEscapes.Replace(text))
 	if err != nil {
 		return fmt.Errorf("invalid format template: %w", err)
 	}
 
-	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	for _, row := range item.KV() {
-		if err := tmpl.Execute(tw, row); err != nil {
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	for _, row := range item.Rows() {
+		if err := rowTemplate.Execute(w, row); err != nil {
 			return fmt.Errorf("execute format template: %w", err)
 		}
-		if _, err := io.WriteString(tw, "\n"); err != nil {
+		if _, err := io.WriteString(w, "\n"); err != nil {
 			return err
 		}
 	}
 
-	return tw.Flush()
+	return w.Flush()
 }
 
 // templateFuncs are the functions a format template can call beyond the
@@ -299,16 +316,22 @@ var templateFuncs = template.FuncMap{
 	},
 }
 
-// printJSON prints the output in JSON format.
-func printJSON(item Printable, out io.Writer, includeCols []string) error {
-	result, err := selectRows(item, includeCols)
+// printJSON prints the named columns of item as an indented JSON array of
+// objects.
+func printJSON(item Printable, out io.Writer, names []string) error {
+	rows, err := selectedRows(item, names)
 	if err != nil {
 		return err
 	}
 
+	return encodeJSON(out, rows)
+}
+
+// encodeJSON writes v to out as JSON, indented by two spaces.
+func encodeJSON(out io.Writer, v any) error {
 	encoder := json.NewEncoder(out)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(result); err != nil {
+	if err := encoder.Encode(v); err != nil {
 		return fmt.Errorf("encode JSON: %w", err)
 	}
 

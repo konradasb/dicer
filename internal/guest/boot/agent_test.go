@@ -14,30 +14,35 @@ import (
 // An installed agent the same size as the initrd's is still replaced if it
 // differs: two builds are easily the same size, and an instance must get the
 // agent of the daemon that booted it.
-func TestSameContentsComparesBytesNotSizes(t *testing.T) {
-	dir := t.TempDir()
-	src := filepath.Join(dir, "new")
-	installed := filepath.Join(dir, "old")
+func TestHasContentsComparesBytesNotSizes(t *testing.T) {
+	want := []byte("agent v2")
+	installed := filepath.Join(t.TempDir(), "dicer-agent")
 
-	if err := os.WriteFile(src, []byte("agent v2"), 0o755); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name     string
+		contents []byte // nil for no installed file
+		want     bool
+	}{
+		{name: "same size, different bytes", contents: []byte("agent v1"), want: false},
+		{name: "identical", contents: want, want: true},
+		{name: "nothing installed", want: false},
 	}
-	if err := os.WriteFile(installed, []byte("agent v1"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = os.Remove(installed)
+			if tt.contents != nil {
+				if err := os.WriteFile(installed, tt.contents, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
 
-	if same, err := sameContents(src, installed); err != nil || same {
-		t.Errorf("sameContents of two same-sized agents = %v, %v; want false", same, err)
-	}
-
-	if err := os.WriteFile(installed, []byte("agent v2"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if same, err := sameContents(src, installed); err != nil || !same {
-		t.Errorf("sameContents of identical agents = %v, %v; want true", same, err)
-	}
-
-	if same, err := sameContents(src, filepath.Join(dir, "missing")); err != nil || same {
-		t.Errorf("sameContents with nothing installed = %v, %v; want false", same, err)
+			got, err := hasContents(installed, want)
+			if err != nil {
+				t.Fatalf("hasContents: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("hasContents = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

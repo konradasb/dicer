@@ -25,41 +25,41 @@ func TestDownloadCounterKeepsTheHighestCount(t *testing.T) {
 	}
 }
 
-func TestDownloadCounterTapForwardsEvents(t *testing.T) {
+func TestDownloadCounterTapForwardsProgress(t *testing.T) {
 	var (
 		c    downloadCounter
-		seen []registry.Event
+		seen []registry.Progress
 	)
 
-	tap := c.tap(func(ev registry.Event) { seen = append(seen, ev) })
+	tap := c.tap(func(p registry.Progress) { seen = append(seen, p) })
 
-	tap(registry.Event{Phase: registry.PhaseDownloading, Downloaded: 10, Total: 20})
-	tap(registry.Event{Phase: registry.PhaseUnpacking})
+	tap(registry.Progress{Phase: registry.PhaseDownloading, Downloaded: 10, Total: 20})
+	tap(registry.Progress{Phase: registry.PhaseUnpacking})
 
 	if len(seen) != 2 {
-		t.Fatalf("forwarded %d events, want 2", len(seen))
+		t.Fatalf("forwarded %d reports, want 2", len(seen))
 	}
 	if seen[0].Downloaded != 10 || seen[1].Phase != registry.PhaseUnpacking {
-		t.Errorf("events were altered in transit: %+v", seen)
+		t.Errorf("progress was altered in transit: %+v", seen)
 	}
 	if got := c.total(); got != 10 {
 		t.Errorf("total() = %d, want 10", got)
 	}
 }
 
-// types.PullProgress is optional, and a pull must be counted either way.
+// Listening to progress is optional, and a pull must be counted either way.
 func TestDownloadCounterTapWithoutAListener(t *testing.T) {
 	var c downloadCounter
 
 	tap := c.tap(nil)
-	tap(registry.Event{Phase: registry.PhaseDownloading, Downloaded: 42})
+	tap(registry.Progress{Phase: registry.PhaseDownloading, Downloaded: 42})
 
 	if got := c.total(); got != 42 {
 		t.Errorf("total() = %d, want 42", got)
 	}
 }
 
-func TestDownloadCounterIsSafeUnderConcurrentEvents(t *testing.T) {
+func TestDownloadCounterIsSafeUnderConcurrentReports(t *testing.T) {
 	var (
 		c  downloadCounter
 		wg sync.WaitGroup

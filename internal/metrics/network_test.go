@@ -9,7 +9,7 @@ import (
 )
 
 func TestNetworkGaugesAreReadPerScrape(t *testing.T) {
-	stats := []NetworkSummary{
+	summaries := []NetworkSummary{
 		{Name: "default", Allocated: 41, Available: 212},
 		{Name: "isolated", Allocated: 0, Available: 13},
 	}
@@ -18,7 +18,7 @@ func TestNetworkGaugesAreReadPerScrape(t *testing.T) {
 	m := New(Options{Sources: Sources{
 		Networks: func() []NetworkSummary {
 			reads++
-			return stats
+			return summaries
 		},
 	}})
 
@@ -39,7 +39,7 @@ func TestNetworkGaugesAreReadPerScrape(t *testing.T) {
 
 	// A filling subnet is the condition this exists to catch, so the gauges
 	// have to move with it rather than be sampled once at startup.
-	stats[0] = NetworkSummary{Name: "default", Allocated: 253, Available: 0}
+	summaries[0] = NetworkSummary{Name: "default", Allocated: 253, Available: 0}
 	if body := scrape(t, m); !strings.Contains(body, `dicer_network_addresses_available{network="default"} 0`) {
 		t.Errorf("second scrape did not pick up the exhausted pool:\n%s", body)
 	}

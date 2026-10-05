@@ -43,7 +43,7 @@ func newComposeUpCommand() *cobra.Command {
 			"  dicer compose up -d --wait\n" +
 			"  dicer compose up web\n" +
 			"  dicer compose up -d --force-recreate --remove-orphans",
-		ValidArgsFunction: serviceNames,
+		ValidArgsFunction: completeServices,
 		RunE:              runComposeUp,
 	}
 
@@ -98,7 +98,7 @@ func runComposeUp(cmd *cobra.Command, args []string) error {
 
 	u := &upper{
 		cmd: cmd, client: client, project: p, opts: opts, pull: opts.pull,
-		out: &lines{out: cmd.ErrOrStderr()},
+		out: &lineWriter{out: cmd.ErrOrStderr()},
 	}
 	if err := u.prepare(services); err != nil {
 		return err
@@ -113,7 +113,7 @@ func runComposeUp(cmd *cobra.Command, args []string) error {
 	case detach:
 		return nil
 	default:
-		return attach(cmd, client, u.out, services)
+		return attachServices(cmd, client, u.out, services)
 	}
 }
 
@@ -123,7 +123,7 @@ type upper struct {
 	client  *dicer.Client
 	project *compose.Project
 	opts    upOptions
-	out     *lines
+	out     *lineWriter
 
 	// pull is the pull policy instances are created with: --pull's, until
 	// ensureImages has pulled as it says.
@@ -132,8 +132,10 @@ type upper struct {
 	// existing are the project's instances before up began, by name.
 	existing map[string]*dicerdv1.Instance
 
-	// said are the lines once has written, by key.
-	mu   sync.Mutex
+	// mu guards said, which waits for services in parallel write to.
+	mu sync.Mutex
+
+	// said are the keys once has been given, so it writes each line once.
 	said map[string]bool
 }
 
@@ -147,7 +149,7 @@ func (u *upper) prepare(services []*compose.Service) error {
 		return err
 	}
 
-	if orphaned := orphans(u.project, u.existing); len(orphaned) > 0 {
+	if orphaned := orphanNames(u.project, u.existing); len(orphaned) > 0 {
 		if !u.opts.removeOrphans {
 			u.out.printf("Found instances of services no longer in the file: %s. "+
 				"Delete them with --remove-orphans.", andList(orphaned))
@@ -354,17 +356,17 @@ func (u *upper) converge(services []*compose.Service) error {
 // up brings one service's instance up to date and running.
 func (u *upper) up(s *compose.Service) error {
 	name := s.Instance.GetName()
-	inst, exists := u.existing[name]
+	instance, exists := u.existing[name]
 
 	// The service's instances under other names, from before its
 	// container_name changed: its old instance is replaced, as for any
 	// other change, and first, since it may hold ports and volumes the new
 	// one needs. With --no-recreate the old one is kept instead.
-	renamed := slices.DeleteFunc(instancesOf(s, u.existing), func(n string) bool { return n == name })
+	renamed := slices.DeleteFunc(serviceInstanceNames(s, u.existing), func(n string) bool { return n == name })
 	switch {
 	case len(renamed) == 0:
 	case u.opts.noRecreate && !exists:
-		name, inst, exists = renamed[0], u.existing[renamed[0]], true
+		name, instance, exists = renamed[0], u.existing[renamed[0]], true
 	case !u.opts.noRecreate:
 		for _, old := range renamed {
 			if _, err := u.client.DeleteInstance(u.ctx(), &dicerdv1.DeleteInstanceRequest{Name: old, Force: true}); err != nil {
@@ -387,7 +389,7 @@ func (u *upper) up(s *compose.Service) error {
 		return u.create(s, "started")
 	}
 
-	changed := inst.GetLabels()[compose.LabelConfigHash] != s.Instance.GetLabels()[compose.LabelConfigHash]
+	changed := instance.GetLabels()[compose.LabelConfigHash] != s.Instance.GetLabels()[compose.LabelConfigHash]
 	if u.opts.forceRecreate || (changed && !u.opts.noRecreate) {
 		if _, err := u.client.DeleteInstance(u.ctx(), &dicerdv1.DeleteInstanceRequest{Name: name, Force: true}); err != nil {
 			return fmt.Errorf("service %s: delete %s to recreate it: %w", s.Name, name, err)
@@ -395,7 +397,7 @@ func (u *upper) up(s *compose.Service) error {
 		return u.create(s, "recreated")
 	}
 
-	switch inst.GetState() {
+	switch instance.GetState() {
 	case stateRunning, statePaused, stateStarting, stateRestarting:
 		u.out.printf("Instance %s is up to date", name)
 		return nil
@@ -420,11 +422,11 @@ func (u *upper) create(s *compose.Service, done string) error {
 	req.PullPolicy = u.pull
 
 	start := time.Now()
-	inst, err := u.client.CreateInstance(u.ctx(), req)
+	instance, err := u.client.CreateInstance(u.ctx(), req)
 	if err != nil {
 		return fmt.Errorf("service %s: create %s: %w", s.Name, req.GetName(), err)
 	}
-	u.out.printf("Instance %s %s in %s (%s)", inst.GetName(), done, humanize.Duration(time.Since(start)), orDash(inst.GetIp()))
+	u.out.printf("Instance %s %s in %s (%s)", instance.GetName(), done, humanize.Duration(time.Since(start)), orDash(instance.GetIp()))
 	return nil
 }
 
@@ -443,8 +445,8 @@ func (u *upper) waitFor(s *compose.Service, condition compose.Condition) error {
 	}
 
 	waited := false
-	err := pollInstance(u.ctx(), u.client, name, func(inst *dicerdv1.Instance) (bool, error) {
-		ok, err := meets(inst, condition)
+	err := pollInstance(u.ctx(), u.client, name, func(instance *dicerdv1.Instance) (bool, error) {
+		ok, err := meets(instance, condition)
 		if !ok && err == nil && !waited {
 			waited = true
 			u.once("wait "+name+" "+string(condition), func() {
@@ -491,11 +493,11 @@ func (u *upper) once(key string, fn func()) {
 func (u *upper) checkHasHealthCheck(s *compose.Service) error {
 	check := s.Instance.GetHealthCheck()
 	if check == nil {
-		img, err := u.client.GetImage(u.ctx(), &dicerdv1.GetImageRequest{Ref: s.Instance.GetImageRef()})
+		image, err := u.client.GetImage(u.ctx(), &dicerdv1.GetImageRequest{Ref: s.Instance.GetImageRef()})
 		if err != nil {
 			return err
 		}
-		check = img.GetHealthCheck()
+		check = image.GetHealthCheck()
 	}
 	if check == nil || check.GetDisabled() {
 		return fmt.Errorf("service %s has no health check to wait for: give it a healthcheck", s.Name)
@@ -505,16 +507,16 @@ func (u *upper) checkHasHealthCheck(s *compose.Service) error {
 
 // meets reports whether an instance meets a condition yet, and fails if it
 // never will.
-func meets(inst *dicerdv1.Instance, condition compose.Condition) (bool, error) {
-	name, state := inst.GetName(), inst.GetState()
+func meets(instance *dicerdv1.Instance, condition compose.Condition) (bool, error) {
+	name, state := instance.GetName(), instance.GetState()
 
 	switch condition {
 	case compose.ConditionHealthy:
 		switch {
-		case inst.GetHealth().GetStatus() == healthHealthy:
+		case instance.GetHealth().GetStatus() == healthHealthy:
 			return true, nil
-		case inst.GetHealth().GetStatus() == healthUnhealthy:
-			return false, fmt.Errorf("instance %s is unhealthy: %s", name, firstLine(inst.GetHealth().GetLastOutput()))
+		case instance.GetHealth().GetStatus() == healthUnhealthy:
+			return false, fmt.Errorf("instance %s is unhealthy: %s", name, firstLine(instance.GetHealth().GetLastOutput()))
 		case state == stateStopped || state == stateFailed:
 			return false, fmt.Errorf("instance %s stopped before it was healthy", name)
 		}
@@ -522,11 +524,11 @@ func meets(inst *dicerdv1.Instance, condition compose.Condition) (bool, error) {
 	case compose.ConditionCompletedSuccessfully:
 		switch {
 		case state == stateFailed:
-			return false, fmt.Errorf("instance %s failed: %s", name, firstLine(inst.GetStateError()))
-		case state == stateStopped && inst.ExitCode != nil && inst.GetExitCode() == 0:
+			return false, fmt.Errorf("instance %s failed: %s", name, firstLine(instance.GetStateError()))
+		case state == stateStopped && instance.ExitCode != nil && instance.GetExitCode() == 0:
 			return true, nil
-		case state == stateStopped && inst.ExitCode != nil:
-			return false, fmt.Errorf("instance %s exited with code %d", name, inst.GetExitCode())
+		case state == stateStopped && instance.ExitCode != nil:
+			return false, fmt.Errorf("instance %s exited with code %d", name, instance.GetExitCode())
 		case state == stateStopped:
 			return false, fmt.Errorf("instance %s stopped without saying how it ended", name)
 		}
@@ -541,11 +543,11 @@ func pollInstance(
 	ctx context.Context, client *dicer.Client, name string, done func(*dicerdv1.Instance) (bool, error),
 ) error {
 	for {
-		inst, err := client.GetInstance(ctx, &dicerdv1.GetInstanceRequest{Name: name})
+		instance, err := client.GetInstance(ctx, &dicerdv1.GetInstanceRequest{Name: name})
 		if err != nil {
 			return err
 		}
-		ok, err := done(inst)
+		ok, err := done(instance)
 		if err != nil || ok {
 			return err
 		}
@@ -576,15 +578,15 @@ func (u *upper) waitReady(services []*compose.Service) error {
 		}
 		name := s.Instance.GetName()
 		checked := u.checkHasHealthCheck(s) == nil
-		err := pollInstance(u.ctx(), u.client, name, func(inst *dicerdv1.Instance) (bool, error) {
+		err := pollInstance(u.ctx(), u.client, name, func(instance *dicerdv1.Instance) (bool, error) {
 			if checked {
-				return meets(inst, compose.ConditionHealthy)
+				return meets(instance, compose.ConditionHealthy)
 			}
-			switch inst.GetState() {
+			switch instance.GetState() {
 			case stateRunning:
 				return true, nil
 			case stateStopped, stateFailed:
-				return false, fmt.Errorf("instance %s is %s", name, enumName(inst.GetState()))
+				return false, fmt.Errorf("instance %s is %s", name, enumName(instance.GetState()))
 			}
 			return false, nil
 		})
@@ -597,10 +599,10 @@ func (u *upper) waitReady(services []*compose.Service) error {
 	return nil
 }
 
-// attach writes the services' consoles, each line marked with its
+// attachServices writes the services' consoles, each line marked with its
 // instance's name, until they have all stopped. Ctrl+C stops them, in the
 // reverse of the order they started; a second stops waiting for them.
-func attach(cmd *cobra.Command, client *dicer.Client, out *lines, services []*compose.Service) error {
+func attachServices(cmd *cobra.Command, client *dicer.Client, out *lineWriter, services []*compose.Service) error {
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
 
@@ -609,7 +611,7 @@ func attach(cmd *cobra.Command, client *dicer.Client, out *lines, services []*co
 		names = append(names, s.Instance.GetName())
 	}
 	width := prefixWidth(names)
-	console := &lines{out: cmd.OutOrStdout()}
+	console := &lineWriter{out: cmd.OutOrStdout()}
 
 	var wg sync.WaitGroup
 	for i, name := range names {
@@ -664,14 +666,14 @@ func attach(cmd *cobra.Command, client *dicer.Client, out *lines, services []*co
 
 // endedLine says how an instance whose console has ended ended.
 func endedLine(ctx context.Context, client *dicer.Client, name string) string {
-	inst, err := client.GetInstance(ctx, &dicerdv1.GetInstanceRequest{Name: name})
+	instance, err := client.GetInstance(ctx, &dicerdv1.GetInstanceRequest{Name: name})
 	switch {
 	case err != nil:
 		return fmt.Sprintf("Instance %s stopped", name)
-	case inst.ExitCode != nil:
-		return fmt.Sprintf("Instance %s exited with code %d", name, inst.GetExitCode())
-	case inst.GetState() == stateFailed:
-		return fmt.Sprintf("Instance %s failed: %s", name, firstLine(inst.GetStateError()))
+	case instance.ExitCode != nil:
+		return fmt.Sprintf("Instance %s exited with code %d", name, instance.GetExitCode())
+	case instance.GetState() == stateFailed:
+		return fmt.Sprintf("Instance %s failed: %s", name, firstLine(instance.GetStateError()))
 	default:
 		return fmt.Sprintf("Instance %s stopped", name)
 	}

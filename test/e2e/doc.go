@@ -20,12 +20,13 @@
 // daemon for behaviour that belongs to no resource and metrics for the
 // endpoint. Things that are not resources go with the resource they are part
 // of -- a hypervisor is an instance's attribute and exec is an instance's
-// verb, so both are in instance_test.go.
+// verb, so both are in instance_test.go -- or in a file named after both,
+// such as instance_top_test.go.
 //
 // Each of those files owns the helpers for its own resource, so that how to
 // create an instance sits beside the tests that create one. Only what every
 // resource needs is shared: e2e_test.go builds the environment, remote_test.go
-// reaches the host over SSH, and dicer_test.go runs CLI commands and decodes
+// reaches the host over SSH, and cli_test.go runs CLI commands and decodes
 // what they print.
 //
 // The daemon under test is installed entirely under its own prefix -- its own

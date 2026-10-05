@@ -13,25 +13,24 @@ import (
 	"github.com/u-root/u-root/pkg/cpio"
 )
 
-// cpioPacker packs a directory tree into an uncompressed cpio archive (initramfs format).
-// Uses uncompressed format for faster boot — the kernel loads it directly without decompression.
-type cpioPacker struct{}
-
-func (cpioPacker) Pack(ctx context.Context, dir, outputPath string) (int64, error) {
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o750); err != nil {
-		return 0, fmt.Errorf("create output dir: %w", err)
+// writeCPIO packs the tree under dir into an initramfs at path, and returns
+// its size. The archive is left uncompressed so that the kernel boots from it
+// without decompressing it first.
+func writeCPIO(ctx context.Context, dir, path string) (int64, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return 0, fmt.Errorf("create the output directory: %w", err)
 	}
 
-	outFile, err := os.Create(outputPath)
+	f, err := os.Create(path)
 	if err != nil {
-		return 0, fmt.Errorf("create output file: %w", err)
+		return 0, fmt.Errorf("create the output file: %w", err)
 	}
-	defer func() { _ = outFile.Close() }()
+	defer func() { _ = f.Close() }()
 
-	cpioWriter := cpio.Newc.Writer(outFile)
+	cpioWriter := cpio.Newc.Writer(f)
 	recorder := cpio.NewRecorder()
 
-	err = filepath.WalkDir(dir, func(path string, _ fs.DirEntry, err error) error {
+	err = filepath.WalkDir(dir, func(entry string, _ fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -42,36 +41,36 @@ func (cpioPacker) Pack(ctx context.Context, dir, outputPath string) (int64, erro
 		default:
 		}
 
-		relPath, err := filepath.Rel(dir, path)
+		name, err := filepath.Rel(dir, entry)
 		if err != nil {
 			return err
 		}
-		if relPath == "." {
+		if name == "." {
 			return nil
 		}
 
-		rec, err := recorder.GetRecord(path)
+		record, err := recorder.GetRecord(entry)
 		if err != nil {
-			return fmt.Errorf("get cpio record for %s: %w", path, err)
+			return fmt.Errorf("read %s: %w", entry, err)
 		}
-		rec.Name = relPath
+		record.Name = name
 
-		if err := cpioWriter.WriteRecord(rec); err != nil {
-			return fmt.Errorf("write cpio record for %s: %w", path, err)
+		if err := cpioWriter.WriteRecord(record); err != nil {
+			return fmt.Errorf("write cpio record for %s: %w", entry, err)
 		}
 		return nil
 	})
 	if err != nil {
-		return 0, fmt.Errorf("walk dir: %w", err)
+		return 0, fmt.Errorf("walk %s: %w", dir, err)
 	}
 
 	if err := cpio.WriteTrailer(cpioWriter); err != nil {
 		return 0, fmt.Errorf("write cpio trailer: %w", err)
 	}
 
-	stat, err := os.Stat(outputPath)
+	info, err := f.Stat()
 	if err != nil {
-		return 0, fmt.Errorf("stat output: %w", err)
+		return 0, fmt.Errorf("stat %s: %w", path, err)
 	}
-	return stat.Size(), nil
+	return info.Size(), nil
 }

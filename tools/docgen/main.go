@@ -44,9 +44,9 @@ func main() {
 	}
 }
 
-// meta is a page's front matter. The description and icon are what the
-// page's card shows, where a section's index or another page lists it.
-type meta struct {
+// frontMatter is a page's front matter. The description and icon are what
+// the page's card shows, where a section's index or another page lists it.
+type frontMatter struct {
 	title       string
 	weight      int
 	description string
@@ -61,7 +61,7 @@ type meta struct {
 }
 
 // writePage writes a page with front matter.
-func writePage(path string, m meta, body []byte) error {
+func writePage(path string, m frontMatter, body []byte) error {
 	var page bytes.Buffer
 
 	page.WriteString("---\n" + generatedNote)
@@ -77,8 +77,8 @@ func writePage(path string, m meta, body []byte) error {
 	}
 	if len(m.related) > 0 {
 		page.WriteString("related:\n")
-		for _, r := range m.related {
-			page.WriteString("  - " + r + "\n")
+		for _, related := range m.related {
+			page.WriteString("  - " + related + "\n")
 		}
 	}
 	if m.collapsed {

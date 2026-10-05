@@ -20,6 +20,8 @@ type resourceHandler struct {
 	dataDir     string
 }
 
+// GetResources reports the host's CPU, memory and disk, and what the
+// instances hold of them.
 func (h *resourceHandler) GetResources(
 	_ context.Context, _ *dicerdv1.GetResourcesRequest,
 ) (*dicerdv1.GetResourcesResponse, error) {
@@ -43,15 +45,15 @@ func (h *resourceHandler) GetResources(
 			Allocated:   usage.Allocated.MemoryBytes,
 			Available:   available.MemoryBytes,
 		},
-		Instances: make([]*dicerdv1.InstanceResources, 0, len(usage.Holders)),
+		Instances: make([]*dicerdv1.InstanceResources, 0, len(usage.Instances)),
 	}
 
-	for _, holder := range usage.Holders {
+	for _, instance := range usage.Instances {
 		resp.Instances = append(resp.Instances, &dicerdv1.InstanceResources{
-			Name:        holder.Name,
-			State:       instanceStates.toProto(holder.State),
-			Vcpus:       int32(holder.Resources.VCPUs),
-			MemoryBytes: holder.Resources.MemoryBytes,
+			Name:        instance.Name,
+			State:       instanceStates.toProto(instance.State),
+			Vcpus:       int32(instance.Resources.VCPUs),
+			MemoryBytes: instance.Resources.MemoryBytes,
 		})
 	}
 
@@ -67,32 +69,23 @@ func (h *resourceHandler) GetResources(
 // diskUsage reports on the data directory's filesystem and what is
 // provisioned on it.
 func (h *resourceHandler) diskUsage() (*dicerdv1.DiskUsage, error) {
-	fs, err := hostinfo.ReadDiskUsage(h.dataDir)
-	if err != nil {
-		return nil, err
-	}
-
-	instances, err := h.definitions.ListInstances()
-	if err != nil {
-		return nil, err
-	}
-	volumes, err := h.definitions.ListVolumes()
+	filesystem, err := hostinfo.DiskUsage(h.dataDir)
 	if err != nil {
 		return nil, err
 	}
 
 	var provisioned int64
-	for _, inst := range instances {
-		provisioned += inst.DiskBytes
+	for _, instance := range h.definitions.Instances() {
+		provisioned += instance.DiskBytes
 	}
-	for _, v := range volumes {
+	for _, v := range h.definitions.Volumes() {
 		provisioned += v.SizeBytes
 	}
 
 	return &dicerdv1.DiskUsage{
 		Path:             h.dataDir,
-		TotalBytes:       fs.TotalBytes,
-		FreeBytes:        fs.FreeBytes,
+		TotalBytes:       filesystem.TotalBytes,
+		FreeBytes:        filesystem.FreeBytes,
 		ProvisionedBytes: provisioned,
 	}, nil
 }

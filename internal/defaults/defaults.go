@@ -19,6 +19,6 @@ const (
 	// for it.
 	Socket = RunDir + "/dicer.sock"
 
-	// Config is the daemon's configuration file.
-	Config = "/etc/dicerd/config.yaml"
+	// ConfigFile is the daemon's configuration file.
+	ConfigFile = "/etc/dicerd/config.yaml"
 )

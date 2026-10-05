@@ -37,18 +37,18 @@ func mountAll(log *slog.Logger, mounts []guest.Mount, mode types.InitMode) {
 		return
 	}
 
-	if mode == types.ModeSystemd && slices.ContainsFunc(mounts, underRun) {
+	if mode == types.InitModeSystemd && slices.ContainsFunc(mounts, underRun) {
 		// systemd mounts a tmpfs on /run only if nothing is mounted there
 		// yet. Mounting it first, as an initrd would, keeps the mounts
 		// beneath it from being hidden.
 		if err := mountRun(); err != nil {
-			log.Error("mount /run failed", "err", err)
+			log.Error("mount /run failed", "error", err)
 		}
 	}
 
 	if slices.ContainsFunc(mounts, func(m guest.Mount) bool { return m.File != nil }) {
 		if err := mountFilesDir(); err != nil {
-			log.Error("mount failed", "target", filesDir, "err", err)
+			log.Error("mount failed", "target", filesDir, "error", err)
 		}
 	}
 
@@ -59,7 +59,7 @@ func mountAll(log *slog.Logger, mounts []guest.Mount, mode types.InitMode) {
 
 	for i, m := range sorted {
 		if err := mountOne(i, m); err != nil {
-			log.Error("mount failed", "target", m.Target, "err", err)
+			log.Error("mount failed", "target", m.Target, "error", err)
 			continue
 		}
 		log.Info("mounted", "target", m.Target, "read_only", m.ReadOnly)
@@ -88,8 +88,8 @@ func mountOne(i int, m guest.Mount) error {
 }
 
 // mountVolume mounts the filesystem on a volume's disk.
-func mountVolume(vol *guest.VolumeSource, target string, readOnly bool) error {
-	if err := waitForDevice(vol.Device); err != nil {
+func mountVolume(volume *guest.VolumeSource, target string, readOnly bool) error {
+	if err := waitForDevice(volume.Device); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(target, 0o755); err != nil {
@@ -104,13 +104,13 @@ func mountVolume(vol *guest.VolumeSource, target string, readOnly bool) error {
 		flags = syscall.MS_RDONLY
 		// noload skips ext4 journal recovery, which a disk other guests
 		// may also have attached must not get.
-		if vol.Fstype == "ext4" {
+		if volume.FilesystemType == "ext4" {
 			data = "noload"
 		}
 	}
 
-	if err := syscall.Mount(vol.Device, target, vol.Fstype, flags, data); err != nil {
-		return fmt.Errorf("mount %s: %w", vol.Device, err)
+	if err := syscall.Mount(volume.Device, target, volume.FilesystemType, flags, data); err != nil {
+		return fmt.Errorf("mount %s: %w", volume.Device, err)
 	}
 	return nil
 }
@@ -188,7 +188,7 @@ func ensureFile(path string) error {
 
 // mountRun mounts a tmpfs on /run with the options systemd would give it.
 func mountRun() error {
-	target := overlayPath("run")
+	target := filepath.Join(overlayRoot, "run")
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		return err
 	}

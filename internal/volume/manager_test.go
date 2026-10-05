@@ -19,37 +19,35 @@ func newTestManager(t *testing.T) *Manager {
 	return m
 }
 
-// --- Create ---
-
-func TestManager_Create(t *testing.T) {
+func TestCreateMakesAVolume(t *testing.T) {
 	m := newTestManager(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	vol, err := m.Create(ctx, "my-vol", 1024)
+	volume, err := m.Create(ctx, "my-vol", 1024)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if vol.ID == "" {
+	if volume.ID == "" {
 		t.Error("ID should be non-empty")
 	}
-	if vol.Name != "my-vol" {
-		t.Errorf("Name = %q, want %q", vol.Name, "my-vol")
+	if volume.Name != "my-vol" {
+		t.Errorf("Name = %q, want %q", volume.Name, "my-vol")
 	}
-	if vol.SizeBytes != 1024 {
-		t.Errorf("SizeBytes = %d, want 1024", vol.SizeBytes)
+	if volume.SizeBytes != 1024 {
+		t.Errorf("SizeBytes = %d, want 1024", volume.SizeBytes)
 	}
-	if vol.Path == "" {
+	if volume.Path == "" {
 		t.Error("Path should be non-empty")
 	}
-	if vol.CreatedAt.IsZero() {
+	if volume.CreatedAt.IsZero() {
 		t.Error("CreatedAt should be set")
 	}
 }
 
-func TestManager_CreateInvalidSize(t *testing.T) {
+func TestCreateRejectsAZeroSize(t *testing.T) {
 	m := newTestManager(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, err := m.Create(ctx, "vol", 0)
 	if err == nil {
@@ -57,43 +55,41 @@ func TestManager_CreateInvalidSize(t *testing.T) {
 	}
 }
 
-func TestManager_CreateError(t *testing.T) {
+func TestCreateFailsWithItsDisk(t *testing.T) {
 	m := newTestManager(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	provErr := errors.New("mkfs failed")
-	m.createDisk = func(_ context.Context, _ string, _ int64) error { return provErr }
+	diskErr := errors.New("mkfs failed")
+	m.createDisk = func(_ context.Context, _ string, _ int64) error { return diskErr }
 
 	_, err := m.Create(ctx, "vol", 512)
 	if err == nil {
 		t.Fatal("Create() should propagate the disk creation error")
 	}
-	if !errors.Is(err, provErr) {
-		t.Errorf("error = %v, want to wrap %v", err, provErr)
+	if !errors.Is(err, diskErr) {
+		t.Errorf("error = %v, want to wrap %v", err, diskErr)
 	}
 }
 
-// --- Delete ---
-
-func TestManager_Delete(t *testing.T) {
+func TestDeleteRemovesTheVolumeDirectory(t *testing.T) {
 	m := newTestManager(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
-	vol, err := m.Create(ctx, "to-delete", 512)
+	volume, err := m.Create(ctx, "to-delete", 512)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if err := m.Delete(vol.ID); err != nil {
+	if err := m.Delete(volume.ID); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
-	if _, err := os.Stat(m.volumeDir(vol.ID)); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(m.volumeDir(volume.ID)); !errors.Is(err, fs.ErrNotExist) {
 		t.Error("volume directory should be removed after Delete")
 	}
 }
 
-func TestManager_Delete_Idempotent(t *testing.T) {
+func TestDeleteOfAMissingVolumeSucceeds(t *testing.T) {
 	m := newTestManager(t)
 
 	if err := m.Delete("ghost"); err != nil {
@@ -122,12 +118,12 @@ func TestDiskBytesCountsWhatASparseDiskTakesUp(t *testing.T) {
 		return err
 	}
 
-	vol, err := m.Create(t.Context(), "data", size)
+	volume, err := m.Create(t.Context(), "data", size)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if got := m.DiskBytes(vol.ID); got <= 0 || got >= size {
+	if got := m.DiskBytes(volume.ID); got <= 0 || got >= size {
 		t.Errorf("DiskBytes() = %d, want more than 0 and less than the size, %d", got, size)
 	}
 	if got := m.DiskBytes("missing"); got != 0 {

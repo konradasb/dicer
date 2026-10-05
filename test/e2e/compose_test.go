@@ -47,14 +47,6 @@ networks:
     external: true
 `
 
-// composeRecord is what the tests read of an instance a project made.
-type composeRecord struct {
-	ID     string            `json:"id"`
-	Name   string            `json:"name"`
-	State  string            `json:"state"`
-	Labels map[string]string `json:"labels"`
-}
-
 // TestComposeProjectUpChangeAndDown brings a project up, waiting on its
 // dependencies' conditions against real guests; changes one service and
 // checks only it is recreated; and takes it down again.
@@ -75,12 +67,12 @@ func TestComposeProjectUpChangeAndDown(t *testing.T) {
 		t.Errorf("up -d --wait did not say the instances are ready:\n%s", out)
 	}
 
-	db := env.composeInstance(t, project+"-db")
-	if db.State != "INSTANCE_STATE_RUNNING" || db.Labels["dicer.compose.service"] != "db" {
+	db := env.instance(t, project+"-db")
+	if db.State != "Running" || db.Labels["dicer.compose.service"] != "db" {
 		t.Errorf("db = %+v, want it running and labelled as the project's", db)
 	}
-	if got := env.instance(t, project+"-db").Health.Status; got != "healthy" {
-		t.Errorf("db's health = %q, want healthy: app waited on it", got)
+	if db.Health.Status != "healthy" {
+		t.Errorf("db's health = %q, want healthy: app waited on it", db.Health.Status)
 	}
 	if got := env.instance(t, project+"-migrate"); got.ExitCode == nil || *got.ExitCode != 0 {
 		t.Errorf("migrate = %+v, want it to have exited 0", got)
@@ -91,20 +83,19 @@ func TestComposeProjectUpChangeAndDown(t *testing.T) {
 
 	// app finds db by its service's name, its hostname, from the network's
 	// DNS.
-	dbIP := env.instance(t, project+"-db").IP
-	if out, err := env.tryExec(t, project+"-app", "nslookup", "db"); err != nil || !strings.Contains(out, dbIP) {
-		t.Errorf("nslookup db from app = %v, want %s:\n%s", err, dbIP, out)
+	if out, err := env.tryExec(t, project+"-app", "nslookup", "db"); err != nil || !strings.Contains(out, db.IP) {
+		t.Errorf("nslookup db from app = %v, want %s:\n%s", err, db.IP, out)
 	}
 
 	// A changed service is recreated; an unchanged one is left running.
 	env.writeComposeFile(t, dir, "goodbye")
-	appBefore := env.composeInstance(t, project+"-app")
+	appBefore := env.instance(t, project+"-app")
 	env.compose(t, dir, "up", "-d", "--wait")
 
-	if got := env.composeInstance(t, project+"-db"); got.ID != db.ID {
+	if got := env.instance(t, project+"-db"); got.ID != db.ID {
 		t.Errorf("db was recreated (%s, was %s), though it did not change", got.ID, db.ID)
 	}
-	if got := env.composeInstance(t, project+"-app"); got.ID == appBefore.ID {
+	if got := env.instance(t, project+"-app"); got.ID == appBefore.ID {
 		t.Error("app was not recreated, though its environment changed")
 	}
 	if got := strings.TrimSpace(env.exec(t, project+"-app", "sh", "-c", "echo $GREETING")); got != "goodbye" {
@@ -162,16 +153,4 @@ func (e *environment) runCompose(ctx context.Context, dir string, args ...string
 		e.paths.dicer, "--remote", e.remote(), "compose", "-f", dir + "/dicer-compose.yaml",
 	}, args...)
 	return e.host.run(ctx, argv...)
-}
-
-// composeInstance reads an instance's ID, state and labels.
-func (e *environment) composeInstance(t *testing.T, name string) composeRecord {
-	t.Helper()
-
-	out := e.dicer(t, "instance", "show", name, "--format", "json")
-	records := rows[composeRecord](t, out, "instance "+name)
-	if len(records) != 1 {
-		t.Fatalf("instance show %s returned %d rows, want 1", name, len(records))
-	}
-	return records[0]
 }

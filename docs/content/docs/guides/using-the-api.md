@@ -62,7 +62,7 @@ func main() {
 	}
 	defer c.Close()
 
-	inst, err := c.CreateInstance(ctx, &dicerdv1.CreateInstanceRequest{
+	instance, err := c.CreateInstance(ctx, &dicerdv1.CreateInstanceRequest{
 		Name:        "web",
 		ImageRef:    "nginx:1.27",
 		Vcpus:       1,
@@ -75,7 +75,7 @@ func main() {
 	})
 	switch status.Code(err) {
 	case codes.OK:
-		fmt.Printf("%s is %s at %s\n", inst.GetName(), inst.GetState(), inst.GetIp())
+		fmt.Printf("%s is %s at %s\n", instance.GetName(), instance.GetState(), instance.GetIp())
 	case codes.AlreadyExists:
 		fmt.Println("web exists already")
 	default:

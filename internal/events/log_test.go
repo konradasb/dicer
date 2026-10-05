@@ -248,7 +248,7 @@ func TestCloseWritesPendingEvents(t *testing.T) {
 // is slow to write, and that the events still reach the file in order.
 func TestRecordDoesNotWaitForTheFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.jsonl")
-	file := newGatedFile()
+	file := newGate(1)
 	l := openGatedLog(t, Config{File: path}, file, writeBuffer)
 
 	recorded := make(chan struct{})
@@ -285,7 +285,7 @@ func TestEventsDroppedFromAFullQueueAreWrittenOnceTheWriterCatchesUp(t *testing.
 	const buffer = 2
 
 	path := filepath.Join(t.TempDir(), "events.jsonl")
-	file := newGatedFile()
+	file := newGate(1)
 	l := openGatedLog(t, Config{File: path}, file, buffer)
 
 	want := make([]string, 0, 10)
@@ -313,43 +313,9 @@ func TestEventsDroppedFromAFullQueueAreWrittenOnceTheWriterCatchesUp(t *testing.
 	}
 }
 
-// gatedFile opens the events file with writes that wait until released.
-type gatedFile struct {
-	released chan struct{}
-	once     sync.Once
-}
-
-func newGatedFile() *gatedFile {
-	return &gatedFile{released: make(chan struct{})}
-}
-
-// release lets the writes through, and every one after them.
-func (g *gatedFile) release() { g.once.Do(func() { close(g.released) }) }
-
-// open opens path for appending, through the gate.
-func (g *gatedFile) open(path string) (io.WriteCloser, error) {
-	f, err := openAppend(path)
-	if err != nil {
-		return nil, err
-	}
-
-	return gatedWriter{WriteCloser: f, released: g.released}, nil
-}
-
-// gatedWriter is a file whose writes wait until released is closed.
-type gatedWriter struct {
-	io.WriteCloser
-	released <-chan struct{}
-}
-
-func (w gatedWriter) Write(p []byte) (int, error) {
-	<-w.released
-	return w.WriteCloser.Write(p)
-}
-
-// openGatedLog opens a log whose file is written through g, with room for
-// buffer events to wait to be written.
-func openGatedLog(t *testing.T, cfg Config, g *gatedFile, buffer int) *Log {
+// openGatedLog opens a log whose writes to its file are held up until g is
+// released, with room for buffer events to wait to be written.
+func openGatedLog(t *testing.T, cfg Config, g *gate, buffer int) *Log {
 	t.Helper()
 
 	l := openLogWith(t, cfg, &eventsFile{open: g.open, replace: atomicfile.Write, now: time.Now}, buffer)
@@ -362,18 +328,9 @@ func openGatedLog(t *testing.T, cfg Config, g *gatedFile, buffer int) *Log {
 func namesInFile(t *testing.T, path string) []string {
 	t.Helper()
 
-	data, err := os.ReadFile(path)
+	names, err := readNames(path)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	var names []string
-	for line := range bytes.Lines(data) {
-		var e Event
-		if err := json.Unmarshal(line, &e); err != nil {
-			t.Fatalf("an unreadable line %q: %v", line, err)
-		}
-		names = append(names, e.Name)
 	}
 
 	return names
@@ -382,21 +339,28 @@ func namesInFile(t *testing.T, path string) []string {
 // tryNamesInFile is namesInFile for a file still being written: it returns
 // nil if the file cannot be read whole.
 func tryNamesInFile(path string) []string {
+	names, _ := readNames(path)
+
+	return names
+}
+
+// readNames returns the name of each event in the file at path, in order.
+func readNames(path string) ([]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	var names []string
 	for line := range bytes.Lines(data) {
 		var e Event
 		if err := json.Unmarshal(line, &e); err != nil {
-			return nil
+			return nil, fmt.Errorf("an unreadable line %q: %w", line, err)
 		}
 		names = append(names, e.Name)
 	}
 
-	return names
+	return names, nil
 }
 
 // TestADroppedEventOutlivesAFailedCompaction checks that events dropped from
@@ -406,7 +370,7 @@ func TestADroppedEventOutlivesAFailedCompaction(t *testing.T) {
 	const maxCount, buffer = 4, 5
 
 	path := filepath.Join(t.TempDir(), "events.jsonl")
-	file := newGatedFile()
+	file := newGate(1)
 	replace := &flakyReplace{failOn: map[int]bool{2: true}}
 	l := openLogWith(t, Config{File: path, MaxCount: maxCount},
 		&eventsFile{open: file.open, replace: replace.replace, now: newFakeClock().now}, buffer)
@@ -507,7 +471,7 @@ func TestCloseReturnsAFailedCompaction(t *testing.T) {
 // queue is warned of once, not once an event.
 func TestDroppingIsWarnedOfOnce(t *testing.T) {
 	var log syncBuffer
-	file := newGatedFile()
+	file := newGate(1)
 	l := openLogWith(t, Config{
 		File:   filepath.Join(t.TempDir(), "events.jsonl"),
 		Logger: slog.New(slog.NewTextHandler(&log, nil)),
@@ -551,7 +515,7 @@ func TestEventsACompactionWroteAreNotWrittenAgain(t *testing.T) {
 	const maxCount = 4
 
 	path := filepath.Join(t.TempDir(), "events.jsonl")
-	file := newGatedFile()
+	file := newGate(1)
 	l := openGatedLog(t, Config{File: path, MaxCount: maxCount}, file, writeBuffer)
 
 	// The sixth write compacts the file with all ten events recorded, four
@@ -588,7 +552,7 @@ func TestAnEventDroppedDuringACompactionIsWrittenWhileIdle(t *testing.T) {
 
 	// The second write waits while the queue fills with the third and
 	// fourth events. Once written, it grows the file past its limit, and
-	// the compaction snapshots all four, then waits while the fifth is
+	// the compaction copies all four, then waits while the fifth is
 	// dropped from the full queue.
 	l.Record(instanceEvent("web-1", ActionCreated))
 	l.Record(instanceEvent("web-2", ActionCreated))
@@ -612,7 +576,7 @@ func TestAnEventDroppedDuringACompactionIsWrittenWhileIdle(t *testing.T) {
 }
 
 // gate holds up the nth call through it until released, and says when that
-// call has reached it.
+// call has reached it. Every call after the nth goes straight through.
 type gate struct {
 	n        int64
 	calls    atomic.Int64
@@ -741,18 +705,19 @@ func (f *failingFile) open(path string) (io.WriteCloser, error) {
 		return nil, err
 	}
 
-	return &failingWriter{WriteCloser: file, f: f}, nil
+	return &failingWriter{WriteCloser: file, failingFile: f}, nil
 }
 
 // failingWriter is a file whose writes fail as its failingFile says.
 type failingWriter struct {
 	io.WriteCloser
-	f *failingFile
+	failingFile *failingFile
 }
 
 func (w *failingWriter) Write(p []byte) (int, error) {
-	w.f.writes++
-	if w.f.failAll || w.f.failWrites[w.f.writes] {
+	f := w.failingFile
+	f.writes++
+	if f.failAll || f.failWrites[f.writes] {
 		n, _ := w.WriteCloser.Write(p[:len(p)/2])
 		return n, errDiskFull
 	}

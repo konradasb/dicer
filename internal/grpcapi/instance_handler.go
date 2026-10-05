@@ -6,7 +6,7 @@ package grpcapi
 import (
 	"cmp"
 	"context"
-	"log/slog"
+	"fmt"
 	"time"
 
 	"github.com/nrednav/cuid2"
@@ -26,7 +26,6 @@ type instanceHandler struct {
 	definitions *filestore.Manager
 	instances   *vm.Manager
 	defaults    defaultResolver
-	logger      *slog.Logger
 
 	// statsInterval is how often GetInstanceStats reads stats.
 	statsInterval time.Duration
@@ -38,7 +37,7 @@ type instanceHandler struct {
 func (h *instanceHandler) CreateInstance(
 	ctx context.Context, req *dicerdv1.CreateInstanceRequest,
 ) (*dicerdv1.Instance, error) {
-	inst, err := h.newInstance(req)
+	instance, err := h.newInstance(req)
 	if err != nil {
 		return nil, err
 	}
@@ -47,19 +46,17 @@ func (h *instanceHandler) CreateInstance(
 		return nil, err
 	}
 
-	if err := h.instances.Create(ctx, inst, pull); err != nil {
+	if err := h.instances.Create(ctx, instance, pull); err != nil {
 		return nil, err
 	}
 
 	if req.GetStart() {
-		if err := h.instances.Start(ctx, inst); err != nil {
-			h.logger.ErrorContext(ctx, "instance created but failed to start",
-				"instance", inst.Name, "error", err)
-			return nil, err
+		if err := h.instances.Start(ctx, instance); err != nil {
+			return nil, fmt.Errorf("instance %q was created, but did not start: %w", instance.Name, err)
 		}
 	}
 
-	return h.view(inst)
+	return h.view(instance)
 }
 
 // newInstance validates a create request and returns the instance it
@@ -77,7 +74,7 @@ func (h *instanceHandler) newInstance(req *dicerdv1.CreateInstanceRequest) (type
 		return types.InstanceSpec{}, err
 	}
 
-	if _, err := h.definitions.GetInstance(req.GetName()); err == nil {
+	if _, err := h.definitions.Instance(req.GetName()); err == nil {
 		return types.InstanceSpec{}, errdefs.Exists("instance %q already exists", req.GetName())
 	}
 
@@ -115,7 +112,7 @@ func (h *instanceHandler) newInstance(req *dicerdv1.CreateInstanceRequest) (type
 	}
 
 	now := time.Now()
-	inst := types.InstanceSpec{
+	instance := types.InstanceSpec{
 		ID:                cuid2.Generate(),
 		Name:              req.GetName(),
 		Hostname:          req.GetHostname(),
@@ -136,117 +133,117 @@ func (h *instanceHandler) newInstance(req *dicerdv1.CreateInstanceRequest) (type
 		Labels:            req.GetLabels(),
 		Restart:           restart,
 		HealthCheck:       healthCheck,
-		InitMode:          cmp.Or(initMode, types.ModeAuto),
+		InitMode:          cmp.Or(initMode, types.InitModeAuto),
 		RemoveOnExit:      req.GetRemoveOnExit(),
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
 
-	if err := checkRemoveOnExit(inst); err != nil {
+	if err := checkRemoveOnExit(instance); err != nil {
 		return types.InstanceSpec{}, err
 	}
 
-	return inst, nil
+	return instance, nil
 }
 
 // UpdateInstance modifies an instance's definition. See vm.Manager.Update.
 func (h *instanceHandler) UpdateInstance(
 	ctx context.Context, req *dicerdv1.UpdateInstanceRequest,
 ) (*dicerdv1.Instance, error) {
-	inst, err := h.definitions.GetInstance(req.GetName())
+	instance, err := h.definitions.Instance(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.applyReferences(&inst, req); err != nil {
+	if err := h.applyReferences(&instance, req); err != nil {
 		return nil, err
 	}
-	applySettings(&inst, req)
-	if err := h.applyLists(&inst, req); err != nil {
+	applySettings(&instance, req)
+	if err := h.applyLists(&instance, req); err != nil {
 		return nil, err
 	}
 	if p := req.GetRestartPolicy(); p != nil {
-		if inst.Restart, err = restartPolicyFromProto(p); err != nil {
+		if instance.Restart, err = restartPolicyFromProto(p); err != nil {
 			return nil, err
 		}
 	}
 	if c := req.GetHealthCheck(); c != nil {
-		if inst.HealthCheck, err = healthCheckFromProto(c); err != nil {
+		if instance.HealthCheck, err = healthCheckFromProto(c); err != nil {
 			return nil, err
 		}
 	}
 	if m := req.GetInitMode(); m != dicerdv1.InitMode_INIT_MODE_UNSPECIFIED {
-		if inst.InitMode, err = initModes.fromProto(m); err != nil {
+		if instance.InitMode, err = initModes.fromProto(m); err != nil {
 			return nil, err
 		}
 	}
 	if t := req.GetHypervisorType(); t != dicerdv1.HypervisorType_HYPERVISOR_TYPE_UNSPECIFIED {
-		if inst.HypervisorType, err = hypervisorTypes.fromProto(t); err != nil {
+		if instance.HypervisorType, err = hypervisorTypes.fromProto(t); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := validateResources(int32(inst.VCPUs), inst.MemoryBytes, inst.DiskBytes); err != nil {
+	if err := validateResources(int32(instance.VCPUs), instance.MemoryBytes, instance.DiskBytes); err != nil {
 		return nil, err
 	}
-	if err := guest.ValidateHostname(inst.Hostname); err != nil {
+	if err := guest.ValidateHostname(instance.Hostname); err != nil {
 		return nil, errdefs.InvalidArgument("%v", err)
 	}
-	if err := checkRemoveOnExit(inst); err != nil {
+	if err := checkRemoveOnExit(instance); err != nil {
 		return nil, err
 	}
-	if err := h.checkStaticIP(inst.NetworkName, inst.StaticIP); err != nil {
+	if err := h.checkStaticIP(instance.NetworkName, instance.StaticIP); err != nil {
 		return nil, err
 	}
-	if err := h.instances.CheckResources(inst.Resources()); err != nil {
-		return nil, err
-	}
-
-	inst.UpdatedAt = time.Now()
-	if err := h.instances.Update(ctx, inst); err != nil {
+	if err := h.instances.CheckResources(instance.Resources()); err != nil {
 		return nil, err
 	}
 
-	return h.view(inst)
+	instance.UpdatedAt = time.Now()
+	if err := h.instances.Update(ctx, instance); err != nil {
+		return nil, err
+	}
+
+	return h.view(instance)
 }
 
 // applyReferences applies the image, kernel and network an update names,
 // checking that each is valid or exists.
-func (h *instanceHandler) applyReferences(inst *types.InstanceSpec, req *dicerdv1.UpdateInstanceRequest) error {
+func (h *instanceHandler) applyReferences(instance *types.InstanceSpec, req *dicerdv1.UpdateInstanceRequest) error {
 	if v := req.ImageRef; v != nil {
 		ref, err := reference.Parse(*v)
 		if err != nil {
 			return errdefs.InvalidArgument("invalid image %q: %v", *v, err)
 		}
-		inst.ImageRef = ref.String()
+		instance.ImageRef = ref.String()
 	}
 	if v := req.KernelName; v != nil {
-		if _, err := h.definitions.GetKernel(*v); err != nil {
+		if _, err := h.definitions.Kernel(*v); err != nil {
 			return errdefs.InvalidArgument("%v", err)
 		}
-		inst.KernelName = *v
+		instance.KernelName = *v
 	}
 	if v := req.NetworkName; v != nil {
-		if _, err := h.definitions.GetNetwork(*v); err != nil {
+		if _, err := h.definitions.Network(*v); err != nil {
 			return errdefs.InvalidArgument("%v", err)
 		}
-		inst.NetworkName = *v
+		instance.NetworkName = *v
 	}
 	return nil
 }
 
 // applySettings applies the scalar fields an update sets.
-func applySettings(inst *types.InstanceSpec, req *dicerdv1.UpdateInstanceRequest) {
+func applySettings(instance *types.InstanceSpec, req *dicerdv1.UpdateInstanceRequest) {
 	if v := req.Vcpus; v != nil {
-		inst.VCPUs = int(*v)
+		instance.VCPUs = int(*v)
 	}
-	setIf(&inst.HypervisorVersion, req.HypervisorVersion)
-	setIf(&inst.KernelArgs, req.KernelArgs)
-	setIf(&inst.MemoryBytes, req.MemoryBytes)
-	setIf(&inst.DiskBytes, req.DiskBytes)
-	setIf(&inst.StaticIP, req.StaticIp)
-	setIf(&inst.Hostname, req.Hostname)
-	setIf(&inst.RemoveOnExit, req.RemoveOnExit)
+	setIf(&instance.HypervisorVersion, req.HypervisorVersion)
+	setIf(&instance.KernelArgs, req.KernelArgs)
+	setIf(&instance.MemoryBytes, req.MemoryBytes)
+	setIf(&instance.DiskBytes, req.DiskBytes)
+	setIf(&instance.StaticIP, req.StaticIp)
+	setIf(&instance.Hostname, req.Hostname)
+	setIf(&instance.RemoveOnExit, req.RemoveOnExit)
 }
 
 // setIf sets *dst to *v if v is set.
@@ -257,103 +254,107 @@ func setIf[T any](dst, v *T) {
 }
 
 // applyLists replaces each list or map an update gives a non-empty value.
-func (h *instanceHandler) applyLists(inst *types.InstanceSpec, req *dicerdv1.UpdateInstanceRequest) error {
+func (h *instanceHandler) applyLists(instance *types.InstanceSpec, req *dicerdv1.UpdateInstanceRequest) error {
 	if len(req.GetMounts()) > 0 {
 		mounts, err := h.mounts(req.GetMounts())
 		if err != nil {
 			return err
 		}
-		inst.Mounts = mounts
+		instance.Mounts = mounts
 	}
 	if len(req.GetPorts()) > 0 {
 		ports, err := portMappings(req.GetPorts())
 		if err != nil {
 			return err
 		}
-		inst.Ports = ports
+		instance.Ports = ports
 	}
 	if len(req.GetEnv()) > 0 {
-		inst.Env = req.GetEnv()
+		instance.Env = req.GetEnv()
 	}
 	if len(req.GetCmd()) > 0 {
-		inst.Cmd = req.GetCmd()
+		instance.Cmd = req.GetCmd()
 	}
 	if len(req.GetLabels()) > 0 {
-		inst.Labels = req.GetLabels()
+		instance.Labels = req.GetLabels()
 	}
 	return nil
 }
 
+// StartInstance boots an instance.
 func (h *instanceHandler) StartInstance(
 	ctx context.Context, req *dicerdv1.StartInstanceRequest,
 ) (*dicerdv1.Instance, error) {
-	inst, err := h.definitions.GetInstance(req.GetName())
+	instance, err := h.definitions.Instance(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.instances.Start(ctx, inst); err != nil {
+	if err := h.instances.Start(ctx, instance); err != nil {
 		return nil, err
 	}
 
-	return h.view(inst)
+	return h.view(instance)
 }
 
+// StopInstance shuts an instance down.
 func (h *instanceHandler) StopInstance(
 	ctx context.Context, req *dicerdv1.StopInstanceRequest,
 ) (*dicerdv1.Instance, error) {
-	inst, err := h.definitions.GetInstance(req.GetName())
+	instance, err := h.definitions.Instance(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.instances.Stop(ctx, inst); err != nil {
+	if err := h.instances.Stop(ctx, instance); err != nil {
 		return nil, err
 	}
 
-	return h.view(inst)
+	return h.view(instance)
 }
 
+// PauseInstance pauses a running instance.
 func (h *instanceHandler) PauseInstance(
 	ctx context.Context, req *dicerdv1.PauseInstanceRequest,
 ) (*dicerdv1.Instance, error) {
-	inst, err := h.definitions.GetInstance(req.GetName())
+	instance, err := h.definitions.Instance(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.instances.Pause(ctx, inst); err != nil {
+	if err := h.instances.Pause(ctx, instance); err != nil {
 		return nil, err
 	}
 
-	return h.view(inst)
+	return h.view(instance)
 }
 
+// ResumeInstance resumes a paused instance.
 func (h *instanceHandler) ResumeInstance(
 	ctx context.Context, req *dicerdv1.ResumeInstanceRequest,
 ) (*dicerdv1.Instance, error) {
-	inst, err := h.definitions.GetInstance(req.GetName())
+	instance, err := h.definitions.Instance(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.instances.Resume(ctx, inst); err != nil {
+	if err := h.instances.Resume(ctx, instance); err != nil {
 		return nil, err
 	}
 
-	return h.view(inst)
+	return h.view(instance)
 }
 
 // RenameInstance changes a stopped instance's name.
 func (h *instanceHandler) RenameInstance(
 	ctx context.Context, req *dicerdv1.RenameInstanceRequest,
 ) (*dicerdv1.Instance, error) {
-	inst, err := h.definitions.GetInstance(req.GetName())
+	instance, err := h.definitions.Instance(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	renamed, err := h.instances.Rename(ctx, inst, req.GetNewName())
+	renamed, err := h.instances.Rename(ctx, instance, req.GetNewName())
 	if err != nil {
 		return nil, err
 	}
@@ -361,45 +362,46 @@ func (h *instanceHandler) RenameInstance(
 	return h.view(renamed)
 }
 
+// DeleteInstance removes an instance and everything it owns but its
+// volumes. An active instance is refused unless the request forces it.
 func (h *instanceHandler) DeleteInstance(
 	ctx context.Context, req *dicerdv1.DeleteInstanceRequest,
 ) (*emptypb.Empty, error) {
-	inst, err := h.definitions.GetInstance(req.GetName())
+	instance, err := h.definitions.Instance(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.instances.Delete(ctx, inst, req.GetForce()); err != nil {
+	if err := h.instances.Delete(ctx, instance, req.GetForce()); err != nil {
 		return nil, err
 	}
 
 	return &emptypb.Empty{}, nil
 }
 
+// GetInstance returns an instance with its status.
 func (h *instanceHandler) GetInstance(
 	_ context.Context, req *dicerdv1.GetInstanceRequest,
 ) (*dicerdv1.Instance, error) {
-	inst, err := h.definitions.GetInstance(req.GetName())
+	instance, err := h.definitions.Instance(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	return h.view(inst)
+	return h.view(instance)
 }
 
+// ListInstances lists every instance with its status, sorted by name.
 func (h *instanceHandler) ListInstances(
 	_ context.Context, _ *dicerdv1.ListInstancesRequest,
 ) (*dicerdv1.ListInstancesResponse, error) {
-	instances, err := h.definitions.ListInstances()
-	if err != nil {
-		return nil, err
-	}
+	instances := h.definitions.Instances()
 
 	resp := &dicerdv1.ListInstancesResponse{
 		Instances: make([]*dicerdv1.Instance, 0, len(instances)),
 	}
-	for _, inst := range instances {
-		view, err := h.view(inst)
+	for _, instance := range instances {
+		view, err := h.view(instance)
 		if err != nil {
 			return nil, err
 		}
@@ -410,19 +412,19 @@ func (h *instanceHandler) ListInstances(
 }
 
 // view assembles the API representation of an instance.
-func (h *instanceHandler) view(inst types.InstanceSpec) (*dicerdv1.Instance, error) {
-	return viewInstance(h.instances, inst)
+func (h *instanceHandler) view(instance types.InstanceSpec) (*dicerdv1.Instance, error) {
+	return viewInstance(h.instances, instance)
 }
 
 // viewInstance assembles an instance's spec, status, address and health.
 func viewInstance(instances *vm.Manager, spec types.InstanceSpec) (*dicerdv1.Instance, error) {
-	status, err := instances.Runtime(spec)
+	status, err := instances.Status(spec)
 	if err != nil {
 		return nil, err
 	}
 
-	if alloc, err := instances.Address(spec); err == nil {
-		status.IP, status.MAC = alloc.IP, alloc.MAC
+	if allocation, err := instances.Allocation(spec); err == nil {
+		status.IP, status.MAC = allocation.IP, allocation.MAC
 	}
 	if check, health, ok := instances.Health(spec); ok {
 		status.HealthCheck, status.Health = &check, &health

@@ -25,31 +25,31 @@ import (
 
 // Start boots a defined instance. It cancels any pending restart, resets the
 // restart count and clears StoppedByUser.
-func (m *Manager) Start(ctx context.Context, inst types.InstanceSpec) (err error) {
+func (m *Manager) Start(ctx context.Context, instance types.InstanceSpec) (err error) {
 	started := time.Now()
-	defer func() { m.observe(opStart, started, err) }()
+	defer func() { m.observeOperation(operationStart, started, err) }()
 
-	lock := m.lock(inst.ID)
+	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
 
-	rt, err := m.Runtime(inst)
+	status, err := m.Status(instance)
 	if err != nil {
 		return err
 	}
-	if rt.State.IsActive() {
-		return errdefs.InvalidState("instance %q is already %s", inst.Name, rt.State.Lower())
+	if status.State.IsActive() {
+		return errdefs.InvalidState("instance %q is already %s", instance.Name, status.State.Lowercase())
 	}
-	m.cancelRestart(inst.ID)
+	m.cancelRestart(instance.ID)
 
-	if err := m.admit(inst, inst.Resources()); err != nil {
+	if err := m.admit(instance, instance.Resources()); err != nil {
 		return err
 	}
-	m.setStoppedByUser(ctx, inst, false)
+	m.setStoppedByUser(ctx, instance, false)
 
-	if err := m.boot(ctx, inst, 0); err != nil {
-		m.fail(inst.ID, err)
-		m.record(inst, events.ActionDied, "Failed to start instance: "+err.Error(), nil)
+	if err := m.boot(ctx, instance, 0); err != nil {
+		m.fail(instance.ID, err)
+		m.record(instance, events.ActionDied, "Failed to start instance: "+err.Error(), nil)
 		return err
 	}
 	return nil
@@ -58,13 +58,13 @@ func (m *Manager) Start(ctx context.Context, inst types.InstanceSpec) (err error
 // boot starts the VMM of an instance admission has moved to Starting and
 // records it running. On failure everything acquired is undone and the caller
 // records the error. The caller must hold the instance lock.
-func (m *Manager) boot(ctx context.Context, inst types.InstanceSpec, restarts int) error {
+func (m *Manager) boot(ctx context.Context, instance types.InstanceSpec, restarts int) error {
 	booting := time.Now()
-	starter, err := m.resolveStarter(inst, inst.HypervisorVersion)
+	starter, err := m.resolveStarter(instance, instance.HypervisorVersion)
 	if err != nil {
 		return err
 	}
-	boot, err := m.resolveBoot(ctx, inst, starter)
+	boot, err := m.resolveBoot(ctx, instance, starter)
 	if err != nil {
 		return err
 	}
@@ -72,27 +72,27 @@ func (m *Manager) boot(ctx context.Context, inst types.InstanceSpec, restarts in
 	cu := cleanup.Make(func() {})
 	defer cu.Clean()
 
-	if err := m.prepareRuntimeDir(inst.ID); err != nil {
+	if err := m.prepareRuntimeDir(instance.ID); err != nil {
 		return err
 	}
-	cu.Add(func() { _ = m.clearRuntime(inst.ID) })
+	cu.Add(func() { _ = m.removeRuntimeDir(instance.ID) })
 
-	if err := ensureOverlayDisk(ctx, m.overlayDiskPath(inst), inst.DiskBytes); err != nil {
+	if err := ensureOverlayDisk(ctx, m.overlayDiskPath(instance), instance.DiskBytes); err != nil {
 		return fmt.Errorf("provision overlay disk: %w", err)
 	}
 
-	netSetup, err := m.setupNetwork(ctx, inst)
+	setup, err := m.setupNetwork(ctx, instance)
 	if err != nil {
 		return err
 	}
-	cu.Add(netSetup.cleanup)
+	cu.Add(setup.cleanup)
 
-	if err := m.writeGuestDisks(ctx, inst, starter, boot.image, boot.mounts, netSetup, guest.Status{}); err != nil {
+	if err := m.writeGuestDisks(ctx, instance, starter, boot.image, boot.mounts, setup, guest.Status{}); err != nil {
 		return err
 	}
 
-	spec := m.vmSpec(inst, boot, netSetup.nic)
-	vmm, _, err := starter.StartVM(ctx, m.hypervisorSocketPath(inst.ID), spec)
+	spec := m.vmSpec(instance, boot, setup.nic)
+	vmm, _, err := starter.StartVM(ctx, m.hypervisorSocketPath(instance.ID), spec)
 	if err != nil {
 		return fmt.Errorf("start vm: %w", err)
 	}
@@ -100,39 +100,39 @@ func (m *Manager) boot(ctx context.Context, inst types.InstanceSpec, restarts in
 
 	run := runRecord{
 		hypervisorVersion: starter.Version(),
-		held:              inst.Resources(),
+		held:              instance.Resources(),
 		imageDigest:       boot.image.Digest,
 		restarts:          restarts,
-		healthCheck:       types.EffectiveHealthCheck(inst.HealthCheck, boot.image.HealthCheck),
+		healthCheck:       types.EffectiveHealthCheck(instance.HealthCheck, boot.image.HealthCheck),
 	}
-	rt, err := m.recordRunning(inst, vmm, run)
+	status, err := m.recordRunning(instance, vmm, run)
 	if err != nil {
 		return err
 	}
 
 	cu.Release()
-	m.supervise(ctx, inst, vmm, rt)
+	m.supervise(ctx, instance, vmm, status)
 
 	verb, why := "Started", ""
-	attrs := map[string]string{"ip": netSetup.nic.IP}
+	attrs := map[string]string{"ip": setup.nic.IP}
 	if restarts > 0 {
-		verb, why = "Restarted", " ("+restartCount(inst.Restart, restarts)+")"
+		verb, why = "Restarted", " ("+restartCount(instance.Restart, restarts)+")"
 		attrs["restart_count"] = strconv.Itoa(restarts)
 	}
 	message := fmt.Sprintf("%s instance on %s %s in %s%s: %s, %s memory, IP %s, PID %d",
-		verb, inst.Hypervisor(), starter.Version(), humanize.Duration(time.Since(booting)), why,
-		humanize.Count(inst.VCPUs, "vCPU"), humanize.Bytes(inst.MemoryBytes), netSetup.nic.IP, vmm.PID())
-	m.record(inst, events.ActionStarted, message, attrs)
+		verb, instance.EffectiveHypervisorType(), starter.Version(), humanize.Duration(time.Since(booting)), why,
+		humanize.Count(instance.VCPUs, "vCPU"), humanize.Bytes(instance.MemoryBytes), setup.nic.IP, vmm.PID())
+	m.record(instance, events.ActionStarted, message, attrs)
 
 	m.logger.InfoContext(ctx, "started instance",
-		"instance", inst.Name, "pid", vmm.PID(), "ip", netSetup.nic.IP)
+		"instance", instance.Name, "pid", vmm.PID(), "ip", setup.nic.IP)
 	return nil
 }
 
 // setStoppedByUser records whether a user last stopped an instance. It is
 // best effort. The caller must hold the instance lock.
-func (m *Manager) setStoppedByUser(ctx context.Context, inst types.InstanceSpec, stopped bool) {
-	current, err := m.definitions.GetInstance(inst.ID)
+func (m *Manager) setStoppedByUser(ctx context.Context, instance types.InstanceSpec, stopped bool) {
+	current, err := m.definitions.Instance(instance.ID)
 	if err != nil || current.StoppedByUser == stopped {
 		return
 	}
@@ -140,7 +140,7 @@ func (m *Manager) setStoppedByUser(ctx context.Context, inst types.InstanceSpec,
 	current.StoppedByUser = stopped
 	if err := m.definitions.UpdateInstance(current); err != nil {
 		m.logger.WarnContext(ctx, "cannot record whether the instance was stopped by a user",
-			"instance", inst.Name, "error", err)
+			"instance", instance.Name, "error", err)
 	}
 }
 
@@ -154,44 +154,35 @@ type bootAssets struct {
 	volumeDisks []hypervisor.DiskConfig
 }
 
-// resolveBoot resolves the image, kernel, initrd and mounts inst boots
+// resolveBoot resolves the image, kernel, initrd and mounts instance boots
 // from, fetching what is missing.
-func (m *Manager) resolveBoot(ctx context.Context, inst types.InstanceSpec, starter hypervisor.Starter) (bootAssets, error) {
-	b := bootAssets{kernelArgs: inst.KernelArgs}
+func (m *Manager) resolveBoot(ctx context.Context, instance types.InstanceSpec, starter hypervisor.Starter) (bootAssets, error) {
+	b := bootAssets{kernelArgs: instance.KernelArgs}
 	if b.kernelArgs == "" {
-		b.kernelArgs = starter.DefaultBootArgs()
+		b.kernelArgs = starter.DefaultKernelArgs()
 	}
 
+	// Pulled only if it is not held, so a start needs no registry.
 	var err error
-	if b.image, err = m.image(ctx, inst); err != nil {
-		return b, err
+	if b.image, err = m.images.Ensure(ctx, instance.ImageRef, types.PullPolicyMissing); err != nil {
+		return b, fmt.Errorf("get image %q: %w", instance.ImageRef, err)
 	}
 
-	kern, err := m.definitions.GetKernel(inst.KernelName)
+	kernel, err := m.definitions.Kernel(instance.KernelName)
 	if err != nil {
-		return b, fmt.Errorf("get kernel %q: %w", inst.KernelName, err)
+		return b, fmt.Errorf("get kernel %q: %w", instance.KernelName, err)
 	}
-	if b.kernelPath, err = m.kernels.Path(ctx, kern); err != nil {
-		return b, fmt.Errorf("provision kernel %q: %w", inst.KernelName, err)
+	if b.kernelPath, err = m.kernels.Path(ctx, kernel); err != nil {
+		return b, fmt.Errorf("provision kernel %q: %w", instance.KernelName, err)
 	}
 
 	if b.initrdPath, err = m.initrds.Prepare(ctx); err != nil {
 		return b, fmt.Errorf("prepare initrd: %w", err)
 	}
-	if b.mounts, b.volumeDisks, err = m.resolveMounts(inst); err != nil {
+	if b.mounts, b.volumeDisks, err = m.resolveMounts(instance); err != nil {
 		return b, err
 	}
 	return b, nil
-}
-
-// image returns the image an instance boots from, pulling it only if it is
-// not held locally.
-func (m *Manager) image(ctx context.Context, inst types.InstanceSpec) (*types.Image, error) {
-	img, err := m.images.Ensure(ctx, inst.ImageRef, types.PullMissing)
-	if err != nil {
-		return nil, fmt.Errorf("get image %q: %w", inst.ImageRef, err)
-	}
-	return img, nil
 }
 
 // statusDevice is the guest's status disk, the fourth disk.
@@ -201,68 +192,68 @@ const statusDevice = "/dev/vdd"
 // /dev/vdz.
 const MaxVolumeMounts = 'z' - 'e' + 1
 
-// vmSpec is the specification inst boots with. Disk order matters: image,
+// vmSpec is the specification instance boots with. Disk order matters: image,
 // overlay, config, status, then volumes.
-func (m *Manager) vmSpec(inst types.InstanceSpec, b bootAssets, nic hypervisor.NetworkInterfaceConfig) hypervisor.VirtualMachine {
-	return hypervisor.VirtualMachine{
+func (m *Manager) vmSpec(instance types.InstanceSpec, b bootAssets, nic hypervisor.NetworkInterfaceConfig) hypervisor.VMSpec {
+	return hypervisor.VMSpec{
 		Boot: hypervisor.BootConfig{
 			KernelPath: b.kernelPath,
 			KernelArgs: b.kernelArgs,
 			InitrdPath: b.initrdPath,
 		},
-		CPU:    hypervisor.CPUConfig{Count: inst.VCPUs},
-		Memory: hypervisor.MemoryConfig{SizeBytes: inst.MemoryBytes},
+		CPU:    hypervisor.CPUConfig{Count: instance.VCPUs},
+		Memory: hypervisor.MemoryConfig{SizeBytes: instance.MemoryBytes},
 		Disks: append([]hypervisor.DiskConfig{
 			{Path: b.image.DiskPath, ReadOnly: true},
-			{Path: m.overlayDiskPath(inst)},
-			{Path: m.configDiskPath(inst.ID), ReadOnly: true},
-			{Path: m.statusDiskPath(inst.ID)},
+			{Path: m.overlayDiskPath(instance)},
+			{Path: m.configDiskPath(instance.ID), ReadOnly: true},
+			{Path: m.statusDiskPath(instance.ID)},
 		}, b.volumeDisks...),
-		NICs:    []hypervisor.NetworkInterfaceConfig{nic},
-		Console: hypervisor.ConsoleConfig{Path: m.serialLogPath(inst)},
+		NetworkInterfaces: []hypervisor.NetworkInterfaceConfig{nic},
+		Console:           hypervisor.ConsoleConfig{Path: m.serialLogPath(instance)},
 		Vsock: &hypervisor.VsockConfig{
-			CID:    uint32(vsockCID(inst.ID)),
-			Socket: m.vsockPath(inst.ID),
+			CID:        uint32(vsockCID(instance.ID)),
+			SocketPath: m.vsockPath(instance.ID),
 		},
 	}
 }
 
-// resolveMounts turns inst's mounts into the guest's mount table and the
+// resolveMounts turns instance's mounts into the guest's mount table and the
 // disks behind its volumes, which follow the four fixed disks in order. Host
 // files are read now, so each start sees their current contents.
-func (m *Manager) resolveMounts(inst types.InstanceSpec) ([]guest.Mount, []hypervisor.DiskConfig, error) {
-	if len(inst.Mounts) == 0 {
+func (m *Manager) resolveMounts(instance types.InstanceSpec) ([]guest.Mount, []hypervisor.DiskConfig, error) {
+	if len(instance.Mounts) == 0 {
 		return nil, nil, nil
 	}
 
 	var (
-		mounts = make([]guest.Mount, 0, len(inst.Mounts))
+		mounts = make([]guest.Mount, 0, len(instance.Mounts))
 		disks  []hypervisor.DiskConfig
 	)
-	for _, mnt := range inst.Mounts {
-		gm := guest.Mount{Target: mnt.Target, ReadOnly: mnt.ReadOnly}
+	for _, mount := range instance.Mounts {
+		guestMount := guest.Mount{Target: mount.Target, ReadOnly: mount.ReadOnly}
 
-		switch mnt.Type {
-		case types.MountVolume:
-			path, err := m.volumeDisk(mnt.Source)
+		switch mount.Type {
+		case types.MountTypeVolume:
+			path, err := m.volumeDisk(mount.Source)
 			if err != nil {
 				return nil, nil, err
 			}
-			gm.Volume = &guest.VolumeSource{Device: fmt.Sprintf("/dev/vd%c", 'e'+len(disks))}
-			disks = append(disks, hypervisor.DiskConfig{Path: path, ReadOnly: mnt.ReadOnly})
-		case types.MountFile:
-			file, err := readHostFile(mnt.Source)
+			guestMount.Volume = &guest.VolumeSource{Device: fmt.Sprintf("/dev/vd%c", 'e'+len(disks))}
+			disks = append(disks, hypervisor.DiskConfig{Path: path, ReadOnly: mount.ReadOnly})
+		case types.MountTypeFile:
+			file, err := readHostFile(mount.Source)
 			if err != nil {
-				return nil, nil, fmt.Errorf("mount on %s: %w", mnt.Target, err)
+				return nil, nil, fmt.Errorf("mount on %s: %w", mount.Target, err)
 			}
-			gm.File = file
-		case types.MountTmpfs:
-			gm.Tmpfs = &guest.TmpfsSource{}
+			guestMount.File = file
+		case types.MountTypeTmpfs:
+			guestMount.Tmpfs = &guest.TmpfsSource{}
 		default:
-			return nil, nil, fmt.Errorf("mount on %s: unknown type %q", mnt.Target, mnt.Type)
+			return nil, nil, fmt.Errorf("mount on %s: unknown type %q", mount.Target, mount.Type)
 		}
 
-		mounts = append(mounts, gm)
+		mounts = append(mounts, guestMount)
 	}
 
 	return mounts, disks, nil
@@ -270,14 +261,14 @@ func (m *Manager) resolveMounts(inst types.InstanceSpec) ([]guest.Mount, []hyper
 
 // volumeDisk finds the disk of the named volume.
 func (m *Manager) volumeDisk(name string) (string, error) {
-	vol, err := m.definitions.GetVolume(name)
+	volume, err := m.definitions.Volume(name)
 	if err != nil {
 		return "", fmt.Errorf("get volume %q: %w", name, err)
 	}
 
-	path := m.volumes.Path(vol.ID)
+	path := m.volumes.Path(volume.ID)
 	if _, err := os.Stat(path); err != nil {
-		return "", fmt.Errorf("volume %q disk: %w", vol.Name, err)
+		return "", fmt.Errorf("volume %q disk: %w", volume.Name, err)
 	}
 	return path, nil
 }
@@ -295,27 +286,28 @@ func readHostFile(path string) (*guest.FileSource, error) {
 	}
 
 	file := &guest.FileSource{Data: data, Mode: uint32(info.Mode().Perm())}
-	if st, ok := info.Sys().(*syscall.Stat_t); ok {
-		file.UID, file.GID = int(st.Uid), int(st.Gid)
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		file.UID, file.GID = int(stat.Uid), int(stat.Gid)
 	}
 	return file, nil
 }
 
-// writeGuestDisks builds the config disk and writes st to the status disk.
+// writeGuestDisks builds the config disk and writes guestStatus to the status
+// disk.
 func (m *Manager) writeGuestDisks(
-	ctx context.Context, inst types.InstanceSpec, starter hypervisor.Starter,
-	img *types.Image, mounts []guest.Mount, netSetup *networkSetup, st guest.Status,
+	ctx context.Context, instance types.InstanceSpec, starter hypervisor.Starter,
+	image *types.Image, mounts []guest.Mount, setup *networkSetup, guestStatus guest.Status,
 ) error {
-	cfg := buildInitConfig(inst, img, mounts, netSetup, guestHalt(starter))
+	cfg := buildInitConfig(instance, image, mounts, setup, guestHalt(starter))
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid init config: %w", err)
 	}
 
-	if err := m.provisionConfigDisk(ctx, m.configDiskPath(inst.ID), cfg); err != nil {
+	if err := m.provisionConfigDisk(ctx, m.configDiskPath(instance.ID), cfg); err != nil {
 		return fmt.Errorf("provision config disk: %w", err)
 	}
 
-	return writeStatusDisk(m.statusDiskPath(inst.ID), st)
+	return writeStatusDisk(m.statusDiskPath(instance.ID), guestStatus)
 }
 
 // guestHalt is how a guest on starter's hypervisor ends its VMM.
@@ -326,37 +318,38 @@ func guestHalt(starter hypervisor.Starter) guest.Halt {
 	return guest.HaltReset
 }
 
-// buildInitConfig assembles the configuration handed to dicer-init in the guest.
+// buildInitConfig assembles the configuration handed to dicer-init in the
+// guest.
 func buildInitConfig(
-	inst types.InstanceSpec, img *types.Image, mounts []guest.Mount, netSetup *networkSetup, halt guest.Halt,
+	instance types.InstanceSpec, image *types.Image, mounts []guest.Mount, setup *networkSetup, halt guest.Halt,
 ) *guest.Config {
 	cfg := &guest.Config{
-		Hostname:     inst.Hostname,
-		Entrypoint:   img.Entrypoint,
-		Cmd:          img.Cmd,
-		Workdir:      img.WorkingDir,
-		Env:          mergeEnv(img.Env, inst.Env),
-		Mode:         cmp.Or(inst.InitMode, types.ModeAuto),
+		Hostname:     instance.Hostname,
+		Entrypoint:   image.Entrypoint,
+		Cmd:          image.Cmd,
+		Workdir:      image.WorkingDir,
+		Env:          mergeEnv(image.Env, instance.Env),
+		Mode:         cmp.Or(instance.InitMode, types.InitModeAuto),
 		Mounts:       mounts,
 		StatusDevice: statusDevice,
 		Halt:         halt,
 	}
-	if inst.Hostname == "" {
-		cfg.Hostname = inst.Name
+	if instance.Hostname == "" {
+		cfg.Hostname = instance.Name
 	}
 
 	cfg.Network = guest.NetworkConfig{
-		DNS: guest.DNSConfig{Nameservers: netSetup.nameservers},
+		DNS: guest.DNSConfig{Nameservers: setup.nameservers},
 		Interfaces: []guest.NetworkInterface{{
-			Interface: "eth0",
-			Addresses: []string{fmt.Sprintf("%s/%d", netSetup.nic.IP, netSetup.prefixLen)},
-			MTU:       netSetup.nic.MTU,
+			Name:      "eth0",
+			Addresses: []string{fmt.Sprintf("%s/%d", setup.nic.IP, setup.prefixLen)},
+			MTU:       setup.nic.MTU,
 		}},
-		Routes: []guest.NetworkRoute{{Destination: "default", Gateway: netSetup.gateway}},
+		Routes: []guest.NetworkRoute{{Destination: "default", Gateway: setup.gateway}},
 	}
 
-	if len(inst.Cmd) > 0 {
-		cfg.Entrypoint = inst.Cmd
+	if len(instance.Cmd) > 0 {
+		cfg.Entrypoint = instance.Cmd
 		cfg.Cmd = nil
 	}
 

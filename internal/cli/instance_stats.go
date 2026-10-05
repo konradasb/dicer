@@ -22,18 +22,18 @@ type printableInstanceStats struct {
 	Instances []*dicerdv1.InstanceStats
 }
 
-func (p *printableInstanceStats) Cols() []string {
+func (p *printableInstanceStats) Columns() []string {
 	return []string{"ID", "Name", "CPUPerc", "MemUsage", "MemPerc", "NetIO", "BlockIO"}
 }
 
-func (p *printableInstanceStats) KV() []map[string]any {
-	kv := make([]map[string]any, 0, len(p.Instances))
+func (p *printableInstanceStats) Rows() []map[string]any {
+	rows := make([]map[string]any, 0, len(p.Instances))
 	for _, s := range p.Instances {
 		memPerc := "--"
 		if s.GetMemoryBytes() > 0 {
 			memPerc = fmt.Sprintf("%.2f%%", float64(s.GetResidentMemoryBytes())/float64(s.GetMemoryBytes())*100)
 		}
-		kv = append(kv, map[string]any{
+		rows = append(rows, map[string]any{
 			"ID":       s.GetId(),
 			"Name":     s.GetName(),
 			"CPUPerc":  fmt.Sprintf("%.2f%%", s.GetCpuPercent()),
@@ -43,7 +43,7 @@ func (p *printableInstanceStats) KV() []map[string]any {
 			"BlockIO":  humanize.Bytes(s.GetDiskReadBytes()) + " / " + humanize.Bytes(s.GetDiskWrittenBytes()),
 		})
 	}
-	return kv
+	return rows
 }
 
 func newInstanceStatsCommand() *cobra.Command {

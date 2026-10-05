@@ -53,26 +53,26 @@ func (h *kernelHandler) ImportKernel(
 		return nil, err
 	}
 
-	if _, err := h.definitions.GetKernel(req.GetName()); err == nil {
+	if _, err := h.definitions.Kernel(req.GetName()); err == nil {
 		return nil, errdefs.Exists("kernel %q already exists", req.GetName())
 	}
 
 	now := time.Now()
 	k := types.Kernel{
-		ID:        cuid2.Generate(),
-		Name:      req.GetName(),
-		Arch:      arch,
-		URL:       req.GetUrl(),
-		SHA256:    strings.ToLower(req.GetSha256()),
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:           cuid2.Generate(),
+		Name:         req.GetName(),
+		Architecture: arch,
+		URL:          req.GetUrl(),
+		SHA256:       strings.ToLower(req.GetSha256()),
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	if err := h.definitions.CreateKernel(k); err != nil {
 		return nil, err
 	}
 
-	message := fmt.Sprintf("Imported kernel for %s from %s, to be fetched when an instance first starts with it", k.Arch, k.URL)
+	message := fmt.Sprintf("Imported kernel for %s from %s, to be fetched when an instance first starts with it", k.Architecture, k.URL)
 	if k.SHA256 == "" {
 		message += "; no checksum to verify it by"
 	}
@@ -87,13 +87,11 @@ func isSHA256Hex(s string) bool {
 	return err == nil && len(b) == sha256.Size
 }
 
+// ListKernels lists the imported kernels, sorted by name.
 func (h *kernelHandler) ListKernels(
 	_ context.Context, _ *dicerdv1.ListKernelsRequest,
 ) (*dicerdv1.ListKernelsResponse, error) {
-	kernels, err := h.definitions.ListKernels()
-	if err != nil {
-		return nil, err
-	}
+	kernels := h.definitions.Kernels()
 
 	resp := &dicerdv1.ListKernelsResponse{
 		Kernels: make([]*dicerdv1.Kernel, 0, len(kernels)),
@@ -105,10 +103,11 @@ func (h *kernelHandler) ListKernels(
 	return resp, nil
 }
 
+// GetKernel returns an imported kernel.
 func (h *kernelHandler) GetKernel(
 	_ context.Context, req *dicerdv1.GetKernelRequest,
 ) (*dicerdv1.Kernel, error) {
-	k, err := h.definitions.GetKernel(req.GetName())
+	k, err := h.definitions.Kernel(req.GetName())
 	if err != nil {
 		return nil, err
 	}
@@ -116,15 +115,17 @@ func (h *kernelHandler) GetKernel(
 	return kernelToProto(k), nil
 }
 
+// DeleteKernel removes a kernel and its fetched copy, refusing one an
+// instance uses.
 func (h *kernelHandler) DeleteKernel(
 	_ context.Context, req *dicerdv1.DeleteKernelRequest,
 ) (*emptypb.Empty, error) {
-	k, err := h.definitions.GetKernel(req.GetName())
+	k, err := h.definitions.Kernel(req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	inUse := func(inst types.InstanceSpec) bool { return inst.KernelName == k.Name }
+	inUse := func(instance types.InstanceSpec) bool { return instance.KernelName == k.Name }
 	if err := refuseInUse(h.definitions, fmt.Sprintf("kernel %q is in use", k.Name), inUse); err != nil {
 		return nil, err
 	}
@@ -154,6 +155,6 @@ func (h *kernelHandler) record(k types.Kernel, action events.Action, message str
 		Name:       k.Name,
 		Action:     action,
 		Message:    message,
-		Attributes: map[string]string{"url": k.URL, "arch": k.Arch},
+		Attributes: map[string]string{"url": k.URL, "arch": k.Architecture},
 	})
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/konradasb/dicer"
-	"github.com/konradasb/dicer/internal/cli/remote"
 	"github.com/konradasb/dicer/internal/humanize"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
@@ -78,17 +77,18 @@ func instancesIn(states ...dicerdv1.InstanceState) completer {
 		}
 
 		var names []string
-		for _, inst := range resp.GetInstances() {
-			if len(states) > 0 && !slices.Contains(states, inst.GetState()) {
+		for _, instance := range resp.GetInstances() {
+			if len(states) > 0 && !slices.Contains(states, instance.GetState()) {
 				continue
 			}
-			names = append(names, inst.GetName()+"\t"+stateName(inst.GetState())+", "+inst.GetImageRef())
+			names = append(names, instance.GetName()+"\t"+stateName(instance.GetState())+", "+instance.GetImageRef())
 		}
 
 		return names, nil
 	}
 }
 
+// listImages completes image names, each described by its size.
 func listImages(ctx context.Context, client *dicer.Client, _ []string) ([]string, error) {
 	resp, err := client.ListImages(ctx, &dicerdv1.ListImagesRequest{})
 	if err != nil {
@@ -96,13 +96,14 @@ func listImages(ctx context.Context, client *dicer.Client, _ []string) ([]string
 	}
 
 	names := make([]string, 0, len(resp.GetImages()))
-	for _, img := range resp.GetImages() {
-		names = append(names, img.GetName()+"\t"+humanize.Bytes(img.GetSizeBytes()))
+	for _, image := range resp.GetImages() {
+		names = append(names, image.GetName()+"\t"+humanize.Bytes(image.GetSizeBytes()))
 	}
 
 	return names, nil
 }
 
+// listNetworks completes network names, each described by its subnet.
 func listNetworks(ctx context.Context, client *dicer.Client, _ []string) ([]string, error) {
 	resp, err := client.ListNetworks(ctx, &dicerdv1.ListNetworksRequest{})
 	if err != nil {
@@ -117,6 +118,7 @@ func listNetworks(ctx context.Context, client *dicer.Client, _ []string) ([]stri
 	return names, nil
 }
 
+// listVolumes completes volume names, each described by its size.
 func listVolumes(ctx context.Context, client *dicer.Client, _ []string) ([]string, error) {
 	resp, err := client.ListVolumes(ctx, &dicerdv1.ListVolumesRequest{})
 	if err != nil {
@@ -131,6 +133,7 @@ func listVolumes(ctx context.Context, client *dicer.Client, _ []string) ([]strin
 	return names, nil
 }
 
+// listKernels completes kernel names, each described by its architecture.
 func listKernels(ctx context.Context, client *dicer.Client, _ []string) ([]string, error) {
 	resp, err := client.ListKernels(ctx, &dicerdv1.ListKernelsRequest{})
 	if err != nil {
@@ -174,18 +177,14 @@ func completeRemotes(_ *cobra.Command, args []string, _ string) ([]string, cobra
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	dir, err := remote.Dir()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-	cfg, err := remote.Load(dir)
+	cfg, err := loadRemoteConfig()
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
 	var names []string
 	for _, name := range cfg.Names() {
-		r, _ := cfg.Get(name)
+		r, _ := cfg.Remote(name)
 		names = append(names, name+"\t"+r.Address)
 	}
 	return names, cobra.ShellCompDirectiveNoFileComp

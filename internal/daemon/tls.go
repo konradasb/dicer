@@ -23,15 +23,15 @@ func serverTLSConfig(cfg TLSConfig, logger *slog.Logger) (*tls.Config, error) {
 		return nil, err
 	}
 
-	out := &tls.Config{
+	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS13,
 
 		// GetCertificate picks up a renewed certificate without a restart.
-		GetCertificate: cert.get,
+		GetCertificate: cert.current,
 	}
 
 	if !cfg.RequiresClientCert() {
-		return out, nil
+		return tlsConfig, nil
 	}
 
 	pem, err := os.ReadFile(cfg.ClientCAFile)
@@ -44,10 +44,10 @@ func serverTLSConfig(cfg TLSConfig, logger *slog.Logger) (*tls.Config, error) {
 		return nil, fmt.Errorf("api.tcp.tls.client_ca_file %s holds no certificates; want PEM", cfg.ClientCAFile)
 	}
 
-	out.ClientCAs = pool
-	out.ClientAuth = tls.RequireAndVerifyClientCert
+	tlsConfig.ClientCAs = pool
+	tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
 
-	return out, nil
+	return tlsConfig, nil
 }
 
 // certificate is the daemon's certificate, reloaded when its files change.
@@ -55,11 +55,14 @@ type certificate struct {
 	certFile, keyFile string
 	logger            *slog.Logger
 
-	mu       sync.Mutex
-	cert     *tls.Certificate
-	modCert  time.Time
-	modKey   time.Time
-	complain time.Time
+	mu   sync.Mutex
+	cert *tls.Certificate
+	// certModTime and keyModTime are the files' modification times when
+	// they were read.
+	certModTime time.Time
+	keyModTime  time.Time
+	// failureLoggedAt is when a failed reload was last logged.
+	failureLoggedAt time.Time
 }
 
 // newCertificate loads the certificate.
@@ -72,9 +75,10 @@ func newCertificate(certFile, keyFile string, logger *slog.Logger) (*certificate
 	return c, nil
 }
 
-// get returns the certificate to present, reloading it first if the files
-// have changed. It is tls.Config's GetCertificate.
-func (c *certificate) get(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+// current returns the certificate to present, reloading it first if the
+// files have changed. It is tls.Config's GetCertificate, and safe for
+// concurrent use.
+func (c *certificate) current(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -85,8 +89,8 @@ func (c *certificate) get(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	if err := c.load(); err != nil {
 		// Keep serving the previous certificate; the renewal may be half
 		// written. Logging is rate-limited since every handshake gets here.
-		if time.Since(c.complain) > certComplainInterval {
-			c.complain = time.Now()
+		if time.Since(c.failureLoggedAt) > reloadFailureLogInterval {
+			c.failureLoggedAt = time.Now()
 			c.logger.Error("the API certificate changed but could not be read; still serving the previous one",
 				"cert_file", c.certFile, "error", err)
 		}
@@ -95,8 +99,8 @@ func (c *certificate) get(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return c.cert, nil
 }
 
-// certComplainInterval bounds how often a failing reload is logged.
-const certComplainInterval = time.Minute
+// reloadFailureLogInterval bounds how often a failing reload is logged.
+const reloadFailureLogInterval = time.Minute
 
 // load reads the pair and records its modification times. The caller holds
 // the lock, except during construction.
@@ -115,7 +119,7 @@ func (c *certificate) load() error {
 		return fmt.Errorf("load the API certificate: %w", err)
 	}
 
-	c.cert, c.modCert, c.modKey = &pair, certInfo.ModTime(), keyInfo.ModTime()
+	c.cert, c.certModTime, c.keyModTime = &pair, certInfo.ModTime(), keyInfo.ModTime()
 
 	return nil
 }
@@ -132,5 +136,5 @@ func (c *certificate) changed() bool {
 		return false
 	}
 
-	return !certInfo.ModTime().Equal(c.modCert) || !keyInfo.ModTime().Equal(c.modKey)
+	return !certInfo.ModTime().Equal(c.certModTime) || !keyInfo.ModTime().Equal(c.keyModTime)
 }

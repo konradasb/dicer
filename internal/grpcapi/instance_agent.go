@@ -11,19 +11,15 @@ import (
 	diceragentv1 "github.com/konradasb/dicer/proto/diceragent/v1"
 )
 
-// agent connects to the guest agent of a running instance. The returned
-// function closes the connection.
-func (h *instanceHandler) agent(name string) (diceragentv1.AgentServiceClient, func(), error) {
-	inst, err := h.definitions.GetInstance(name)
+// agent connects to the guest agent of the running instance with the given
+// name or ID. The returned function closes the connection.
+func (h *instanceHandler) agent(nameOrID string) (diceragentv1.AgentServiceClient, func(), error) {
+	instance, err := h.definitions.Instance(nameOrID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	agent, closeAgent, err := h.instances.Agent(inst)
-	if err != nil {
-		return nil, nil, err
-	}
-	return agent, closeAgent, nil
+	return h.instances.Agent(instance)
 }
 
 // agentError passes a guest agent's status through, explaining an

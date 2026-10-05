@@ -14,47 +14,47 @@ import (
 )
 
 // Delete removes an instance and everything it owns: its VM, network
-// resources, address, runtime state and directory. Volumes are kept. An
+// resources, address, status and directory. Volumes are kept. An
 // active instance is refused unless force is set.
-func (m *Manager) Delete(ctx context.Context, inst types.InstanceSpec, force bool) (err error) {
+func (m *Manager) Delete(ctx context.Context, instance types.InstanceSpec, force bool) (err error) {
 	started := time.Now()
-	defer func() { m.observe(opDelete, started, err) }()
+	defer func() { m.observeOperation(operationDelete, started, err) }()
 
-	lock := m.lock(inst.ID)
+	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
 
-	rt, err := m.Runtime(inst)
+	status, err := m.Status(instance)
 	if err != nil {
 		return err
 	}
 
-	if rt.State.IsActive() && !force {
-		return errdefs.InvalidState("instance %q is %s", inst.Name, rt.State.Lower())
+	if status.State.IsActive() && !force {
+		return errdefs.InvalidState("instance %q is %s", instance.Name, status.State.Lowercase())
 	}
-	m.cancelRestart(inst.ID)
+	m.cancelRestart(instance.ID)
 	// Finish the delete even if the request is cancelled.
 	ctx = context.WithoutCancel(ctx)
-	m.stopVMM(ctx, inst, rt, false)
+	m.stopVMM(ctx, instance, status, false)
 
-	m.teardownNetwork(ctx, inst)
+	m.teardownNetwork(ctx, instance)
 
-	if err := m.networks.Release(inst.NetworkName, inst.ID); err != nil {
+	if err := m.networks.Release(instance.NetworkName, instance.ID); err != nil {
 		m.logger.WarnContext(ctx, "failed to release network allocation",
-			"instance", inst.Name, "error", err)
+			"instance", instance.Name, "error", err)
 	}
 
-	if err := m.clearRuntime(inst.ID); err != nil {
-		m.logger.WarnContext(ctx, "failed to clear runtime state",
-			"instance", inst.Name, "error", err)
+	if err := m.removeRuntimeDir(instance.ID); err != nil {
+		m.logger.WarnContext(ctx, "failed to remove the runtime directory",
+			"instance", instance.Name, "error", err)
 	}
 
-	if err := m.definitions.DeleteInstance(inst.Name); err != nil {
-		return fmt.Errorf("delete instance %q: %w", inst.Name, err)
+	if err := m.definitions.DeleteInstance(instance.Name); err != nil {
+		return fmt.Errorf("delete instance %q: %w", instance.Name, err)
 	}
 
-	m.record(inst, events.ActionDeleted,
-		"Deleted instance: removed its definition, disks and snapshots; released its address on network "+inst.NetworkName, nil)
-	m.logger.InfoContext(ctx, "deleted instance", "instance", inst.Name)
+	m.record(instance, events.ActionDeleted,
+		"Deleted instance: removed its definition, disks and snapshots; released its address on network "+instance.NetworkName, nil)
+	m.logger.InfoContext(ctx, "deleted instance", "instance", instance.Name)
 	return nil
 }

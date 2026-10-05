@@ -18,7 +18,7 @@ import (
 // without booting something that can write to the disk.
 func TestVolumeOutlivesItsInstance(t *testing.T) {
 	var (
-		volume = instanceName(t) + "-vol"
+		volume = instanceName(t) + "-volume"
 		writer = instanceName(t) + "-writer"
 		reader = instanceName(t) + "-reader"
 		marker = "written-by-" + writer
@@ -57,7 +57,7 @@ func TestVolumeOutlivesItsInstance(t *testing.T) {
 // never removed implicitly, however the instance using it goes away.
 func TestVolumeSurvivesItsInstance(t *testing.T) {
 	var (
-		volume   = instanceName(t) + "-vol"
+		volume   = instanceName(t) + "-volume"
 		instance = instanceName(t)
 	)
 

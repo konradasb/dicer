@@ -25,18 +25,22 @@ func TestClassStaysOutOfTheMessage(t *testing.T) {
 		{ResourceExhausted("no room"), ErrResourceExhausted, "no room"},
 		{Unavailable("cannot reach %s", "ghcr.io"), ErrUnavailable, "cannot reach ghcr.io"},
 	} {
-		if got := tc.err.Error(); got != tc.want {
-			t.Errorf("message = %q, want %q", got, tc.want)
-		}
-		if !errors.Is(tc.err, tc.class) {
-			t.Errorf("%q is not in class %v", tc.err, tc.class)
-		}
-		if !errors.Is(fmt.Errorf("context: %w", tc.err), tc.class) {
-			t.Errorf("%q wrapped lost class %v", tc.err, tc.class)
-		}
+		t.Run(tc.class.Error(), func(t *testing.T) {
+			if got := tc.err.Error(); got != tc.want {
+				t.Errorf("message = %q, want %q", got, tc.want)
+			}
+			if !errors.Is(tc.err, tc.class) {
+				t.Errorf("%q is not in class %v", tc.err, tc.class)
+			}
+			if !errors.Is(fmt.Errorf("context: %w", tc.err), tc.class) {
+				t.Errorf("%q wrapped lost class %v", tc.err, tc.class)
+			}
+		})
 	}
 }
 
+// TestClassKeepsCause checks an error matches both its class and what its
+// message wrapped with %w, and no other class.
 func TestClassKeepsCause(t *testing.T) {
 	err := InvalidState("cannot publish port 80: in use (%w)", io.ErrUnexpectedEOF)
 	if !errors.Is(err, io.ErrUnexpectedEOF) || !errors.Is(err, ErrInvalidState) {

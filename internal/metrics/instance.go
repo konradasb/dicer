@@ -98,36 +98,36 @@ type instanceCollector struct {
 func (m *Metrics) newInstanceCollector(source func() InstanceSummary) *instanceCollector {
 	return &instanceCollector{
 		source: source,
-		count: m.desc(Description{
+		count: m.descriptor(Description{
 			Name:   "dicer_instances",
 			Labels: []string{"state"},
 			Help:   "Instances defined on this host, by lifecycle state.",
 			Doc:    "Every state is present, at 0 if none.",
 			Group:  GroupInstances,
 		}),
-		health: m.desc(Description{
+		health: m.descriptor(Description{
 			Name:   "dicer_instances_health",
 			Labels: []string{"status"},
 			Help:   "Running instances whose health is checked, by what the check has found.",
 			Doc:    "`status` is `starting`, `healthy` or `unhealthy`.",
 			Group:  GroupInstances,
 		}),
-		vcpus: m.desc(Description{
+		vcpus: m.descriptor(Description{
 			Name:  "dicer_instances_vcpus",
 			Help:  "vCPUs committed to instances that are starting, running or paused.",
 			Group: GroupInstances,
 		}),
-		memory: m.desc(Description{
+		memory: m.descriptor(Description{
 			Name:  "dicer_instances_memory_bytes",
 			Help:  "Guest memory committed to instances that are starting, running or paused.",
 			Group: GroupInstances,
 		}),
-		allocatableVCPUs: m.desc(Description{
+		allocatableVCPUs: m.descriptor(Description{
 			Name:  "dicer_instances_vcpus_allocatable",
 			Help:  "vCPUs instances may be committed in total; a start beyond it is refused.",
 			Group: GroupInstances,
 		}),
-		allocatableMemory: m.desc(Description{
+		allocatableMemory: m.descriptor(Description{
 			Name:  "dicer_instances_memory_allocatable_bytes",
 			Help:  "Guest memory instances may be committed in total; a start beyond it is refused.",
 			Group: GroupInstances,
@@ -145,16 +145,16 @@ func (c *instanceCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *instanceCollector) Collect(ch chan<- prometheus.Metric) {
-	stats := c.source()
+	summary := c.source()
 
-	for state, n := range stats.ByState {
-		ch <- gauge(c.count, float64(n), state)
+	for state, n := range summary.ByState {
+		ch <- gaugeReading(c.count, float64(n), state)
 	}
-	for status, n := range stats.ByHealth {
-		ch <- gauge(c.health, float64(n), status)
+	for status, n := range summary.ByHealth {
+		ch <- gaugeReading(c.health, float64(n), status)
 	}
-	ch <- gauge(c.vcpus, float64(stats.VCPUs))
-	ch <- gauge(c.memory, float64(stats.MemoryBytes))
-	ch <- gauge(c.allocatableVCPUs, float64(stats.AllocatableVCPUs))
-	ch <- gauge(c.allocatableMemory, float64(stats.AllocatableMemoryBytes))
+	ch <- gaugeReading(c.vcpus, float64(summary.VCPUs))
+	ch <- gaugeReading(c.memory, float64(summary.MemoryBytes))
+	ch <- gaugeReading(c.allocatableVCPUs, float64(summary.AllocatableVCPUs))
+	ch <- gaugeReading(c.allocatableMemory, float64(summary.AllocatableMemoryBytes))
 }

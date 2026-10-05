@@ -11,20 +11,20 @@ import (
 	"github.com/konradasb/dicer/internal/errdefs"
 )
 
-// nameRe matches an RFC 1123 subdomain. Names become paths under the data
-// directory, so this also rules out ".." and leading dots.
-var nameRe = regexp.MustCompile(
+// namePattern matches an RFC 1123 subdomain. Names become paths under the
+// data directory, so this also rules out ".." and leading dots.
+var namePattern = regexp.MustCompile(
 	`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$`)
 
-// maxNameLen is the longest a name may be, as for a hostname.
-const maxNameLen = 253
+// maxNameLength is the longest a name may be, as for a hostname.
+const maxNameLength = 253
 
-// Validate reports whether s is a valid resource name, such as
-// "vmlinux-6.1".
-func Validate(s string) error {
-	if len(s) > maxNameLen || !nameRe.MatchString(s) {
+// Validate returns an error in the errdefs.ErrInvalidArgument class if name
+// is not a valid resource name, such as "vmlinux-6.1", and nil if it is.
+func Validate(name string) error {
+	if len(name) > maxNameLength || !namePattern.MatchString(name) {
 		return errdefs.InvalidArgument("invalid name %q: use letters, digits and hyphens, "+
-			"in dot-separated parts that each start and end with a letter or digit", s)
+			"in dot-separated parts that each start and end with a letter or digit", name)
 	}
 
 	return nil

@@ -33,7 +33,7 @@ const (
 
 // newMetrics builds the metrics this daemon records into, whether or not the
 // endpoint is served. The scrape-time sources read managers that
-// initServices creates later.
+// openDefinitionsAndAllocations and initServices create later.
 func (d *daemon) newMetrics() *metrics.Metrics {
 	return metrics.New(metrics.Options{
 		Version: version.Version,
@@ -61,7 +61,7 @@ func (d *daemon) instanceSummary() metrics.InstanceSummary {
 
 	byState := make(map[string]int, len(usage.ByState))
 	for state, n := range usage.ByState {
-		byState[state.Lower()] = n
+		byState[state.Lowercase()] = n
 	}
 	byHealth := make(map[string]int, len(usage.ByHealth))
 	for status, n := range usage.ByHealth {
@@ -97,34 +97,30 @@ func (d *daemon) networkSummaries() []metrics.NetworkSummary {
 		return nil
 	}
 
-	networks, err := d.definitions.ListNetworks()
-	if err != nil {
-		d.logger.Warn("cannot list networks for metrics", "error", err)
-		return nil
-	}
+	networks := d.definitions.Networks()
 
-	stats := make([]metrics.NetworkSummary, 0, len(networks))
-	for _, nw := range networks {
-		allocations, err := d.networks.List(nw.Name)
+	summaries := make([]metrics.NetworkSummary, 0, len(networks))
+	for _, network := range networks {
+		allocations, err := d.networks.List(network.Name)
 		if err != nil {
 			d.logger.Warn("cannot read allocations for metrics",
-				"network", nw.Name, "error", err)
+				"network", network.Name, "error", err)
 			continue
 		}
 
-		_, available := nw.Usage(len(allocations))
-		stats = append(stats, metrics.NetworkSummary{
-			Name:      nw.Name,
+		_, available := network.IPCounts(len(allocations))
+		summaries = append(summaries, metrics.NetworkSummary{
+			Name:      network.Name,
 			Allocated: len(allocations),
 			Available: available,
 		})
 	}
 
-	return stats
+	return summaries
 }
 
-// imageSummary sums what the image store holds for a scrape. It reports
-// nothing before the store exists.
+// imageSummary counts the images pulled, and sums their sizes, for a scrape.
+// It reports nothing before the image manager exists.
 func (d *daemon) imageSummary() metrics.ImageSummary {
 	if d.images == nil {
 		return metrics.ImageSummary{}
@@ -132,26 +128,22 @@ func (d *daemon) imageSummary() metrics.ImageSummary {
 
 	images := d.images.List()
 
-	stats := metrics.ImageSummary{Count: len(images)}
-	for _, img := range images {
-		stats.DiskBytes += img.SizeBytes
+	summary := metrics.ImageSummary{Count: len(images)}
+	for _, image := range images {
+		summary.DiskBytes += image.SizeBytes
 	}
 
-	return stats
+	return summary
 }
 
 // kernelSummary counts the kernels defined, and sums what they hold on disk,
-// for a scrape. It reports nothing before the kernel store exists.
+// for a scrape. It reports nothing before the kernel manager exists.
 func (d *daemon) kernelSummary() metrics.KernelSummary {
 	if d.definitions == nil || d.kernels == nil {
 		return metrics.KernelSummary{}
 	}
 
-	kernels, err := d.definitions.ListKernels()
-	if err != nil {
-		d.logger.Warn("cannot list kernels for metrics", "error", err)
-		return metrics.KernelSummary{}
-	}
+	kernels := d.definitions.Kernels()
 
 	summary := metrics.KernelSummary{Count: len(kernels)}
 	for _, k := range kernels {
@@ -163,17 +155,13 @@ func (d *daemon) kernelSummary() metrics.KernelSummary {
 
 // volumeSummary counts the volumes defined, and sums their sizes and what
 // they take up on disk, for a scrape. It reports nothing before the volume
-// store exists.
+// manager exists.
 func (d *daemon) volumeSummary() metrics.VolumeSummary {
 	if d.definitions == nil || d.volumes == nil {
 		return metrics.VolumeSummary{}
 	}
 
-	volumes, err := d.definitions.ListVolumes()
-	if err != nil {
-		d.logger.Warn("cannot list volumes for metrics", "error", err)
-		return metrics.VolumeSummary{}
-	}
+	volumes := d.definitions.Volumes()
 
 	summary := metrics.VolumeSummary{Count: len(volumes)}
 	for _, v := range volumes {
@@ -194,8 +182,7 @@ func (d *daemon) serveMetrics(ctx context.Context) error {
 
 	logger := d.logger.With("component", "metrics")
 
-	var lc net.ListenConfig
-	listener, err := lc.Listen(ctx, "tcp", cfg.Listen)
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.Listen)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", cfg.Listen, err)
 	}

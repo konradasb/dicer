@@ -77,7 +77,7 @@ func TestReferenceListsEverything(t *testing.T) {
 	m.RecordImagePull(errors.New("unreachable"), time.Second, 1)
 	m.RecordImageConversion(time.Second)
 	m.RecordImageCacheLookup(true)
-	m.RecordImageCollected("unused")
+	m.RecordImageGCCollected("unused")
 	m.RecordImageGCReclaimed(1)
 	m.RecordKernelFetch(nil, time.Second, 1)
 	m.RecordDNSQuery("default", "local")

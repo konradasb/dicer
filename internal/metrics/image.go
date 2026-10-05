@@ -24,13 +24,13 @@ type ImageSummary struct {
 // imageMetrics measures pulling container images and converting them to the
 // disks guests boot from.
 type imageMetrics struct {
-	pulls           *prometheus.CounterVec
-	pullDuration    prometheus.Histogram
-	pulledBytes     prometheus.Counter
-	convertDuration prometheus.Histogram
-	cacheLookups    *prometheus.CounterVec
-	collected       *prometheus.CounterVec
-	gcReclaimed     prometheus.Counter
+	pulls              *prometheus.CounterVec
+	pullDuration       prometheus.Histogram
+	pulledBytes        prometheus.Counter
+	conversionDuration prometheus.Histogram
+	cacheLookups       *prometheus.CounterVec
+	gcCollected        *prometheus.CounterVec
+	gcReclaimed        prometheus.Counter
 }
 
 func (m *Metrics) newImageMetrics() imageMetrics {
@@ -55,7 +55,7 @@ func (m *Metrics) newImageMetrics() imageMetrics {
 			Group: GroupImages,
 		}),
 
-		convertDuration: m.histogram(Description{
+		conversionDuration: m.histogram(Description{
 			Name:  "dicer_image_conversion_duration_seconds",
 			Help:  "Time spent packing an unpacked image into its EROFS disk.",
 			Group: GroupImages,
@@ -69,7 +69,7 @@ func (m *Metrics) newImageMetrics() imageMetrics {
 			Group:  GroupImages,
 		}),
 
-		collected: m.counterVec(Description{
+		gcCollected: m.counterVec(Description{
 			Name:   "dicer_image_gc_collected_total",
 			Labels: []string{"reason"},
 			Help:   "Images garbage collection removed, by reason (unused, size).",
@@ -95,7 +95,7 @@ func (m *Metrics) RecordImagePull(err error, d time.Duration, downloadedBytes in
 // RecordImageConversion records the time taken to pack an unpacked image into
 // the disk a guest boots from.
 func (m *Metrics) RecordImageConversion(d time.Duration) {
-	m.image.convertDuration.Observe(d.Seconds())
+	m.image.conversionDuration.Observe(d.Seconds())
 }
 
 // RecordImageCacheLookup records whether an image was already held locally.
@@ -114,18 +114,18 @@ type imageCollector struct {
 	source func() ImageSummary
 
 	count *prometheus.Desc
-	bytes *prometheus.Desc
+	disk  *prometheus.Desc
 }
 
 func (m *Metrics) newImageCollector(source func() ImageSummary) *imageCollector {
 	return &imageCollector{
 		source: source,
-		count: m.desc(Description{
+		count: m.descriptor(Description{
 			Name:  "dicer_images",
 			Help:  "Images held on this host.",
 			Group: GroupImages,
 		}),
-		bytes: m.desc(Description{
+		disk: m.descriptor(Description{
 			Name:  "dicer_image_disk_bytes",
 			Help:  "Total size of the bootable disks those images were converted to.",
 			Group: GroupImages,
@@ -135,19 +135,20 @@ func (m *Metrics) newImageCollector(source func() ImageSummary) *imageCollector 
 
 func (c *imageCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.count
-	ch <- c.bytes
+	ch <- c.disk
 }
 
 func (c *imageCollector) Collect(ch chan<- prometheus.Metric) {
-	stats := c.source()
+	summary := c.source()
 
-	ch <- gauge(c.count, float64(stats.Count))
-	ch <- gauge(c.bytes, float64(stats.DiskBytes))
+	ch <- gaugeReading(c.count, float64(summary.Count))
+	ch <- gaugeReading(c.disk, float64(summary.DiskBytes))
 }
 
-// RecordImageCollected records an image garbage collection removed, and why.
-func (m *Metrics) RecordImageCollected(reason string) {
-	m.image.collected.WithLabelValues(reason).Inc()
+// RecordImageGCCollected records an image garbage collection removed, and
+// why.
+func (m *Metrics) RecordImageGCCollected(reason string) {
+	m.image.gcCollected.WithLabelValues(reason).Inc()
 }
 
 // RecordImageGCReclaimed records the bytes garbage collection gave back.

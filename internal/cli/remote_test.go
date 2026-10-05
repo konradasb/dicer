@@ -4,7 +4,6 @@
 package cli
 
 import (
-	"bytes"
 	"log/slog"
 	"net"
 	"path/filepath"
@@ -15,32 +14,6 @@ import (
 	"github.com/konradasb/dicer/internal/filestore"
 	"github.com/konradasb/dicer/internal/grpcapi"
 )
-
-// run executes the dicer command line with args and returns what it printed.
-func run(t *testing.T, args ...string) (string, error) {
-	t.Helper()
-
-	cmd := NewCommand()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	cmd.SetArgs(args)
-
-	err := cmd.ExecuteContext(t.Context())
-	return out.String(), err
-}
-
-// isolateConfig gives the test a configuration directory of its own, and
-// clears whatever remote the environment names.
-func isolateConfig(t *testing.T) string {
-	t.Helper()
-
-	dir := t.TempDir()
-	t.Setenv(remote.DirEnv, dir)
-	t.Setenv(remoteEnv, "")
-
-	return dir
-}
 
 // serveDaemon serves the API on loopback, as dicerd does with api.tcp.listen
 // set. It returns the address to reach it at.

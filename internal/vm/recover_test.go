@@ -16,10 +16,10 @@ import (
 )
 
 // startAdoptable launches a real process to play a VMM left running by a
-// previous daemon, and makes it the one mgr adopts for its PID. Adoption by
+// previous daemon, and makes it the one manager adopts for its PID. Adoption by
 // pidfd is process.Attach's business and tested there; here it is only
 // what recovery does with the result.
-func startAdoptable(t *testing.T, mgr *Manager) *process.Process {
+func startAdoptable(t *testing.T, manager *Manager) *process.Process {
 	t.Helper()
 
 	vmm, err := process.Start(exec.CommandContext(t.Context(), "sleep", "60"))
@@ -27,12 +27,12 @@ func startAdoptable(t *testing.T, mgr *Manager) *process.Process {
 		t.Fatalf("start sleeper: %v", err)
 	}
 	t.Cleanup(func() {
-		mgr.Close()
+		manager.Close()
 		vmm.Terminate()
 	})
 
-	next := mgr.attach
-	mgr.attach = func(pid int, arg string) (*process.Process, error) {
+	next := manager.attach
+	manager.attach = func(pid int, arg string) (*process.Process, error) {
 		if pid == vmm.PID() {
 			return vmm, nil
 		}
@@ -43,37 +43,35 @@ func startAdoptable(t *testing.T, mgr *Manager) *process.Process {
 }
 
 func TestRecoverAdoptsLiveInstance(t *testing.T) {
-	mgr, definitions, hostNetwork := newTestManager(t)
+	manager, definitions, hostNetwork := newTestManager(t)
 	ctx := context.Background()
 
-	inst := seedInstance(t, definitions, "web")
-	vmm := startAdoptable(t, mgr)
+	instance := seedInstance(t, definitions, "web")
+	vmm := startAdoptable(t, manager)
 	pid := vmm.PID()
 
-	err := mgr.writeRuntime(types.InstanceStatus{
-		InstanceID:    inst.ID,
-		State:         types.StateRunning,
-		HypervisorPID: &pid,
+	err := manager.writeStatus(types.InstanceStatus{
+		InstanceID: instance.ID,
+		State:      types.InstanceStateRunning,
+		VMMPID:     &pid,
 	})
 	if err != nil {
-		t.Fatalf("writeRuntime: %v", err)
+		t.Fatalf("writeStatus: %v", err)
 	}
 
-	if err := mgr.Recover(ctx); err != nil {
-		t.Fatalf("Recover: %v", err)
-	}
+	manager.Recover(ctx)
 
-	rt, err := mgr.Runtime(inst)
+	status, err := manager.Status(instance)
 	if err != nil {
 		t.Fatalf("get runtime: %v", err)
 	}
-	if rt.State != types.StateRunning {
-		t.Errorf("state = %s, want Running for a VMM that is still alive", rt.State)
+	if status.State != types.InstanceStateRunning {
+		t.Errorf("state = %s, want Running for a VMM that is still alive", status.State)
 	}
 	if len(hostNetwork.removedTAPs) != 0 {
 		t.Errorf("released host resources for a live instance: %v", hostNetwork.removedTAPs)
 	}
-	if mgr.vmm(inst.ID) != vmm {
+	if manager.vmm(instance.ID) != vmm {
 		t.Error("adopted VMM is not supervised")
 	}
 }
@@ -81,13 +79,13 @@ func TestRecoverAdoptsLiveInstance(t *testing.T) {
 // Recovery sets up the networks of adopted instances again, and only
 // theirs, so that the host network knows their bridges.
 func TestRecoverSetsUpTheNetworksOfAdoptedInstances(t *testing.T) {
-	mgr, definitions, hostNetwork := newTestManager(t)
+	manager, definitions, hostNetwork := newTestManager(t)
 
-	inst := seedInstance(t, definitions, "web")
-	vmm := startAdoptable(t, mgr)
+	instance := seedInstance(t, definitions, "web")
+	vmm := startAdoptable(t, manager)
 	pid := vmm.PID()
-	if err := mgr.writeRuntime(types.InstanceStatus{
-		InstanceID: inst.ID, State: types.StateRunning, HypervisorPID: &pid,
+	if err := manager.writeStatus(types.InstanceStatus{
+		InstanceID: instance.ID, State: types.InstanceStateRunning, VMMPID: &pid,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -97,9 +95,7 @@ func TestRecoverSetsUpTheNetworksOfAdoptedInstances(t *testing.T) {
 	definitions.instances["idle"] = stopped
 	definitions.networks["quiet"] = types.Network{Name: "quiet", Bridge: "dicer-quiet", Subnet: "10.2.0.0/24", Gateway: "10.2.0.1"}
 
-	if err := mgr.Recover(context.Background()); err != nil {
-		t.Fatalf("Recover: %v", err)
-	}
+	manager.Recover(context.Background())
 
 	if want := []string{definitions.networks["default"].Bridge}; !slices.Equal(hostNetwork.setUpBridges, want) {
 		t.Errorf("bridges set up = %q, want %q", hostNetwork.setUpBridges, want)
@@ -109,26 +105,24 @@ func TestRecoverSetsUpTheNetworksOfAdoptedInstances(t *testing.T) {
 // TestAdoptedVMMCrashFailsInstance checks that an adopted VMM is watched
 // like one the daemon started: its death is noticed when it happens.
 func TestAdoptedVMMCrashFailsInstance(t *testing.T) {
-	mgr, definitions, hostNetwork := newTestManager(t)
+	manager, definitions, hostNetwork := newTestManager(t)
 
-	inst := seedInstance(t, definitions, "web")
-	vmm := startAdoptable(t, mgr)
+	instance := seedInstance(t, definitions, "web")
+	vmm := startAdoptable(t, manager)
 	pid := vmm.PID()
-	if err := mgr.writeRuntime(types.InstanceStatus{
-		InstanceID: inst.ID, State: types.StateRunning, HypervisorPID: &pid,
+	if err := manager.writeStatus(types.InstanceStatus{
+		InstanceID: instance.ID, State: types.InstanceStateRunning, VMMPID: &pid,
 	}); err != nil {
-		t.Fatalf("writeRuntime: %v", err)
+		t.Fatalf("writeStatus: %v", err)
 	}
-	if err := mgr.Recover(t.Context()); err != nil {
-		t.Fatalf("Recover: %v", err)
-	}
+	manager.Recover(t.Context())
 
 	vmm.Terminate()
 
-	h := &harness{mgr: mgr, hostNetwork: hostNetwork, inst: inst}
-	rt := h.waitForState(t, types.StateFailed)
-	if !strings.Contains(rt.StateError, "exited unexpectedly") {
-		t.Errorf("state error = %q, want an unexpected exit", rt.StateError)
+	h := &harness{manager: manager, hostNetwork: hostNetwork, instance: instance}
+	status := h.waitForState(t, types.InstanceStateFailed)
+	if !strings.Contains(status.StateError, "exited unexpectedly") {
+		t.Errorf("state error = %q, want an unexpected exit", status.StateError)
 	}
 	if len(hostNetwork.removedTAPs) != 1 {
 		t.Errorf("removed TAPs = %v, want the instance's", hostNetwork.removedTAPs)
@@ -139,20 +133,18 @@ func TestAdoptedVMMCrashFailsInstance(t *testing.T) {
 // through a stop: the VMM may still be running, and must not be adopted as
 // if nothing had happened.
 func TestRecoverKillsVMMOfInterruptedStop(t *testing.T) {
-	mgr, definitions, hostNetwork := newTestManager(t)
+	manager, definitions, hostNetwork := newTestManager(t)
 
-	inst := seedInstance(t, definitions, "web")
-	vmm := startAdoptable(t, mgr)
+	instance := seedInstance(t, definitions, "web")
+	vmm := startAdoptable(t, manager)
 	pid := vmm.PID()
-	if err := mgr.writeRuntime(types.InstanceStatus{
-		InstanceID: inst.ID, State: types.StateStopping, HypervisorPID: &pid,
+	if err := manager.writeStatus(types.InstanceStatus{
+		InstanceID: instance.ID, State: types.InstanceStateStopping, VMMPID: &pid,
 	}); err != nil {
-		t.Fatalf("writeRuntime: %v", err)
+		t.Fatalf("writeStatus: %v", err)
 	}
 
-	if err := mgr.Recover(t.Context()); err != nil {
-		t.Fatalf("Recover: %v", err)
-	}
+	manager.Recover(t.Context())
 
 	select {
 	case <-vmm.Done():
@@ -160,12 +152,12 @@ func TestRecoverKillsVMMOfInterruptedStop(t *testing.T) {
 		t.Error("the VMM of an interrupted stop is still running")
 	}
 
-	rt, err := mgr.Runtime(inst)
+	status, err := manager.Status(instance)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rt.State != types.StateFailed || !strings.Contains(rt.StateError, "interrupted") {
-		t.Errorf("state = %s (%q), want Failed as interrupted", rt.State, rt.StateError)
+	if status.State != types.InstanceStateFailed || !strings.Contains(status.StateError, "interrupted") {
+		t.Errorf("state = %s (%q), want Failed as interrupted", status.State, status.StateError)
 	}
 	if len(hostNetwork.removedTAPs) != 1 {
 		t.Errorf("removed TAPs = %v, want the instance's", hostNetwork.removedTAPs)
@@ -173,41 +165,39 @@ func TestRecoverKillsVMMOfInterruptedStop(t *testing.T) {
 }
 
 func TestRecoverCleansUpDeadInstance(t *testing.T) {
-	mgr, definitions, hostNetwork := newTestManager(t)
+	manager, definitions, hostNetwork := newTestManager(t)
 	ctx := context.Background()
 
-	inst := seedInstance(t, definitions, "web")
+	instance := seedInstance(t, definitions, "web")
 
 	// A PID that is not running: the daemon and its VMM both died.
 	deadPID := deadPID(t)
-	err := mgr.writeRuntime(types.InstanceStatus{
-		InstanceID:    inst.ID,
-		State:         types.StateRunning,
-		HypervisorPID: &deadPID,
+	err := manager.writeStatus(types.InstanceStatus{
+		InstanceID: instance.ID,
+		State:      types.InstanceStateRunning,
+		VMMPID:     &deadPID,
 	})
 	if err != nil {
-		t.Fatalf("writeRuntime: %v", err)
+		t.Fatalf("writeStatus: %v", err)
 	}
 
-	if err := mgr.Recover(ctx); err != nil {
-		t.Fatalf("Recover: %v", err)
-	}
+	manager.Recover(ctx)
 
-	rt, err := mgr.Runtime(inst)
+	status, err := manager.Status(instance)
 	if err != nil {
 		t.Fatalf("get runtime: %v", err)
 	}
 	// A VMM that died while nobody was watching is still a failure, and
 	// must not be passed off as a clean stop.
-	if rt.State != types.StateFailed || !strings.Contains(rt.StateError, "not running") {
+	if status.State != types.InstanceStateFailed || !strings.Contains(status.StateError, "not running") {
 		t.Errorf("state = %s (%q), want Failed as having died while dicerd was down",
-			rt.State, rt.StateError)
+			status.State, status.StateError)
 	}
 
 	// Cleanup must reach the host layer, deriving the TAP from the instance
 	// ID rather than reading back a recorded resource list.
-	if len(hostNetwork.removedTAPs) != 1 || hostNetwork.removedTAPs[0] != inst.ID {
-		t.Errorf("removed TAPs = %v, want [%s]", hostNetwork.removedTAPs, inst.ID)
+	if len(hostNetwork.removedTAPs) != 1 || hostNetwork.removedTAPs[0] != instance.ID {
+		t.Errorf("removed TAPs = %v, want [%s]", hostNetwork.removedTAPs, instance.ID)
 	}
 	if len(hostNetwork.tornDownBridges) != 1 {
 		t.Errorf("torn down bridges = %v, want the bridge to go with the last instance", hostNetwork.tornDownBridges)
@@ -217,22 +207,20 @@ func TestRecoverCleansUpDeadInstance(t *testing.T) {
 // TestRecoverCleansUpInterruptedStart covers a crash partway through Start:
 // the instance is recorded as Starting with no PID at all.
 func TestRecoverCleansUpInterruptedStart(t *testing.T) {
-	mgr, definitions, hostNetwork := newTestManager(t)
+	manager, definitions, hostNetwork := newTestManager(t)
 	ctx := context.Background()
 
-	inst := seedInstance(t, definitions, "web")
-	forceState(t, mgr, inst.ID, types.StateStarting)
+	instance := seedInstance(t, definitions, "web")
+	forceState(t, manager, instance.ID, types.InstanceStateStarting)
 
-	if err := mgr.Recover(ctx); err != nil {
-		t.Fatalf("Recover: %v", err)
-	}
+	manager.Recover(ctx)
 
-	rt, err := mgr.Runtime(inst)
+	status, err := manager.Status(instance)
 	if err != nil {
 		t.Fatalf("get runtime: %v", err)
 	}
-	if rt.State != types.StateFailed || !strings.Contains(rt.StateError, "start interrupted") {
-		t.Errorf("state = %s (%q), want Failed as an interrupted start", rt.State, rt.StateError)
+	if status.State != types.InstanceStateFailed || !strings.Contains(status.StateError, "start interrupted") {
+		t.Errorf("state = %s (%q), want Failed as an interrupted start", status.State, status.StateError)
 	}
 	if len(hostNetwork.removedTAPs) != 1 {
 		t.Errorf("removed TAPs = %v, want cleanup to run for an interrupted start", hostNetwork.removedTAPs)
@@ -243,15 +231,13 @@ func TestRecoverCleansUpInterruptedStart(t *testing.T) {
 // clears the runtime directory, so everything reads as Stopped and recovery
 // must not go poking at host resources.
 func TestRecoverAfterReboot(t *testing.T) {
-	mgr, definitions, hostNetwork := newTestManager(t)
+	manager, definitions, hostNetwork := newTestManager(t)
 	ctx := context.Background()
 
 	seedInstance(t, definitions, "web")
 	seedInstance(t, definitions, "db")
 
-	if err := mgr.Recover(ctx); err != nil {
-		t.Fatalf("Recover: %v", err)
-	}
+	manager.Recover(ctx)
 
 	if len(hostNetwork.removedTAPs) != 0 || len(hostNetwork.tornDownBridges) != 0 {
 		t.Errorf("recovery touched host resources for instances that were not running: taps=%v bridges=%v",
@@ -262,29 +248,27 @@ func TestRecoverAfterReboot(t *testing.T) {
 // TestRecoverKeepsBridgeWhileAnotherInstanceRuns guards against tearing a
 // bridge out from under a VM that is still using it.
 func TestRecoverKeepsBridgeWhileAnotherInstanceRuns(t *testing.T) {
-	mgr, definitions, hostNetwork := newTestManager(t)
+	manager, definitions, hostNetwork := newTestManager(t)
 	ctx := context.Background()
 
 	dead := seedInstance(t, definitions, "dead")
 	live := seedInstance(t, definitions, "live")
 
 	deadPID := deadPID(t)
-	if err := mgr.writeRuntime(types.InstanceStatus{
-		InstanceID: dead.ID, State: types.StateRunning, HypervisorPID: &deadPID,
+	if err := manager.writeStatus(types.InstanceStatus{
+		InstanceID: dead.ID, State: types.InstanceStateRunning, VMMPID: &deadPID,
 	}); err != nil {
-		t.Fatalf("writeRuntime: %v", err)
+		t.Fatalf("writeStatus: %v", err)
 	}
 
-	livePID := startAdoptable(t, mgr).PID()
-	if err := mgr.writeRuntime(types.InstanceStatus{
-		InstanceID: live.ID, State: types.StateRunning, HypervisorPID: &livePID,
+	livePID := startAdoptable(t, manager).PID()
+	if err := manager.writeStatus(types.InstanceStatus{
+		InstanceID: live.ID, State: types.InstanceStateRunning, VMMPID: &livePID,
 	}); err != nil {
-		t.Fatalf("writeRuntime: %v", err)
+		t.Fatalf("writeStatus: %v", err)
 	}
 
-	if err := mgr.Recover(ctx); err != nil {
-		t.Fatalf("Recover: %v", err)
-	}
+	manager.Recover(ctx)
 
 	if len(hostNetwork.tornDownBridges) != 0 {
 		t.Errorf("tore down bridge %v while another instance was still running", hostNetwork.tornDownBridges)
@@ -295,32 +279,30 @@ func TestRecoverKeepsBridgeWhileAnotherInstanceRuns(t *testing.T) {
 }
 
 func TestRecoverReleasesOrphanedAllocations(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
+	manager, definitions, _ := newTestManager(t)
 	ctx := context.Background()
 
 	seedInstance(t, definitions, "web")
 
 	// An allocation left behind by an instance that no longer exists.
-	n, err := definitions.GetNetwork("default")
+	n, err := definitions.Network("default")
 	if err != nil {
 		t.Fatalf("get network: %v", err)
 	}
-	if _, err := mgr.networks.Allocate(n, "id-ghost", ""); err != nil {
+	if _, err := manager.networks.Allocate(n, "id-ghost", ""); err != nil {
 		t.Fatalf("allocate: %v", err)
 	}
 
-	if err := mgr.Recover(ctx); err != nil {
-		t.Fatalf("Recover: %v", err)
-	}
+	manager.Recover(ctx)
 
-	networks, ok := mgr.networks.(*fakeNetworks)
+	networks, ok := manager.networks.(*fakeNetworks)
 	if !ok {
-		t.Fatalf("networks is %T, want *fakeNetworks", mgr.networks)
+		t.Fatalf("networks is %T, want *fakeNetworks", manager.networks)
 	}
-	allocs := networks.allocations("default")
-	for _, a := range allocs {
-		if a.InstanceID == "id-ghost" {
-			t.Errorf("orphaned allocation for %s survived recovery", a.InstanceID)
+	allocations := networks.allocations("default")
+	for _, allocation := range allocations {
+		if allocation.InstanceID == "id-ghost" {
+			t.Errorf("orphaned allocation for %s survived recovery", allocation.InstanceID)
 		}
 	}
 }
@@ -339,7 +321,7 @@ func deadPID(t *testing.T) int {
 }
 
 func TestStartOnBootOnlyStartsInstancesThatAskToBeRunning(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
+	manager, definitions, _ := newTestManager(t)
 	ctx := context.Background()
 
 	// None of these asks to be started at boot, so nothing should be
@@ -347,26 +329,26 @@ func TestStartOnBootOnlyStartsInstancesThatAskToBeRunning(t *testing.T) {
 	// hypervisor, which is exactly what makes this assertion meaningful.
 	seedInstance(t, definitions, "web")
 	onFailure := seedInstance(t, definitions, "db")
-	onFailure.Restart = types.RestartPolicy{Mode: types.RestartOnFailure}
+	onFailure.Restart = types.RestartPolicy{Mode: types.RestartModeOnFailure}
 	definitions.instances[onFailure.Name] = onFailure
 	stopped := seedInstance(t, definitions, "cache")
-	stopped.Restart = types.RestartPolicy{Mode: types.RestartUnlessStopped}
+	stopped.Restart = types.RestartPolicy{Mode: types.RestartModeUnlessStopped}
 	stopped.StoppedByUser = true
 	definitions.instances[stopped.Name] = stopped
 
-	mgr.StartOnBoot(ctx)
+	manager.StartOnBoot(ctx)
 
 	for _, name := range []string{"web", "db", "cache"} {
-		inst, err := definitions.GetInstance(name)
+		instance, err := definitions.Instance(name)
 		if err != nil {
 			t.Fatalf("get instance: %v", err)
 		}
-		rt, err := mgr.Runtime(inst)
+		status, err := manager.Status(instance)
 		if err != nil {
 			t.Fatalf("get runtime: %v", err)
 		}
-		if rt.State != types.StateStopped {
-			t.Errorf("%s state = %s, want Stopped", name, rt.State)
+		if status.State != types.InstanceStateStopped {
+			t.Errorf("%s state = %s, want Stopped", name, status.State)
 		}
 	}
 }
@@ -379,22 +361,22 @@ func TestStartOnBootStartsFailedInstance(t *testing.T) {
 		policy        types.RestartMode
 		stoppedByUser bool
 	}{
-		{types.RestartUnlessStopped, false},
+		{types.RestartModeUnlessStopped, false},
 		// always overrides a user's stop.
-		{types.RestartAlways, true},
+		{types.RestartModeAlways, true},
 	} {
 		t.Run(string(tt.policy), func(t *testing.T) {
 			h := newHarness(t)
 			h.setRestart(t, types.RestartPolicy{Mode: tt.policy})
-			h.inst.StoppedByUser = tt.stoppedByUser
-			h.definitions.instances[h.inst.Name] = h.inst
+			h.instance.StoppedByUser = tt.stoppedByUser
+			h.definitions.instances[h.instance.Name] = h.instance
 
-			h.mgr.fail(h.inst.ID, errors.New("hypervisor exited"))
+			h.manager.fail(h.instance.ID, errors.New("hypervisor exited"))
 
-			h.mgr.StartOnBoot(t.Context())
+			h.manager.StartOnBoot(t.Context())
 
-			if rt := h.runtime(t); rt.State != types.StateRunning {
-				t.Errorf("state = %s (%s), want Running", rt.State, rt.StateError)
+			if status := h.status(t); status.State != types.InstanceStateRunning {
+				t.Errorf("state = %s (%s), want Running", status.State, status.StateError)
 			}
 		})
 	}

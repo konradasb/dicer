@@ -90,7 +90,7 @@ func TestProcessesAreReadInPIDOrderWithoutKernelThreads(t *testing.T) {
 		fakeProcess{pid: 31, ppid: 30, uid: 0, comm: "sh", state: "Z"},
 	)
 
-	processes, err := processes(proc)
+	processes, err := processesIn(proc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestProcessesLeaveOutAProcessThatExited(t *testing.T) {
 		fakeProcess{pid: 9, ppid: 1, comm: "sleep", state: "S", cmdline: []string{"sleep", "1"}, exited: true},
 	)
 
-	processes, err := processes(proc)
+	processes, err := processesIn(proc)
 	if err != nil {
 		t.Fatal(err)
 	}

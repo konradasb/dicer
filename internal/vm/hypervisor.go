@@ -14,12 +14,12 @@ import (
 
 // resolveStarter returns the starter for an instance's hypervisor at version,
 // or the default version if it is empty.
-func (m *Manager) resolveStarter(inst types.InstanceSpec, version string) (hypervisor.Starter, error) {
-	hvType := inst.Hypervisor()
+func (m *Manager) resolveStarter(instance types.InstanceSpec, version string) (hypervisor.Starter, error) {
+	hypervisorType := instance.EffectiveHypervisorType()
 
-	starters := m.starters[hvType]
+	starters := m.starters[hypervisorType]
 	if len(starters) == 0 {
-		return nil, fmt.Errorf("hypervisor %s: %w", hvType, errors.ErrUnsupported)
+		return nil, fmt.Errorf("hypervisor %s: %w", hypervisorType, errors.ErrUnsupported)
 	}
 
 	if version == "" {
@@ -32,30 +32,30 @@ func (m *Manager) resolveStarter(inst types.InstanceSpec, version string) (hyper
 		}
 	}
 
-	return nil, errdefs.InvalidArgument("no hypervisor %s %s on this host", hvType, version)
+	return nil, errdefs.InvalidArgument("no hypervisor %s %s on this host", hypervisorType, version)
 }
 
 // snapshotStarter returns the hypervisor version that took a snapshot, which
 // is the only one that can restore it.
-func (m *Manager) snapshotStarter(snap types.Snapshot) (hypervisor.Starter, error) {
-	for _, s := range m.starters[snap.HypervisorType] {
-		if s.Version() == snap.HypervisorVersion {
+func (m *Manager) snapshotStarter(snapshot types.Snapshot) (hypervisor.Starter, error) {
+	for _, s := range m.starters[snapshot.HypervisorType] {
+		if s.Version() == snapshot.HypervisorVersion {
 			return s, nil
 		}
 	}
 
 	return nil, errdefs.InvalidState("snapshot %q was taken with %s %s, which this daemon does not have",
-		snap.Name, snap.HypervisorType, snap.HypervisorVersion)
+		snapshot.Name, snapshot.HypervisorType, snapshot.HypervisorVersion)
 }
 
 // connect returns a control client for an instance's running VMM.
-func (m *Manager) connect(inst types.InstanceSpec, rt types.InstanceStatus) (hypervisor.Hypervisor, error) {
-	starter, err := m.resolveStarter(inst, rt.HypervisorVersion)
+func (m *Manager) connect(instance types.InstanceSpec, status types.InstanceStatus) (hypervisor.Hypervisor, error) {
+	starter, err := m.resolveStarter(instance, status.HypervisorVersion)
 	if err != nil {
 		return nil, err
 	}
 
-	hv, err := starter.Connect(rt.HypervisorSocketPath)
+	hv, err := starter.Connect(status.HypervisorSocketPath)
 	if err != nil {
 		return nil, fmt.Errorf("connect to hypervisor: %w", err)
 	}
@@ -64,11 +64,11 @@ func (m *Manager) connect(inst types.InstanceSpec, rt types.InstanceStatus) (hyp
 }
 
 // requireCapability returns errors.ErrUnsupported unless supported is true.
-func requireCapability(inst types.InstanceSpec, supported bool, feature string) error {
+func requireCapability(instance types.InstanceSpec, supported bool, feature string) error {
 	if supported {
 		return nil
 	}
 
 	return fmt.Errorf("hypervisor %s does not support %s: %w",
-		inst.Hypervisor(), feature, errors.ErrUnsupported)
+		instance.EffectiveHypervisorType(), feature, errors.ErrUnsupported)
 }

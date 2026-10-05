@@ -8,7 +8,9 @@ import (
 	"time"
 )
 
-func TestBytes(t *testing.T) {
+// TestBytesUsesLargestWholeUnit checks a size is written in the largest unit
+// that leaves it at least 1, to one decimal place.
+func TestBytesUsesLargestWholeUnit(t *testing.T) {
 	for _, tc := range []struct {
 		bytes int64
 		want  string
@@ -20,9 +22,11 @@ func TestBytes(t *testing.T) {
 		{1536 << 20, "1.5 GiB"},
 		{33_554_432_000, "31.3 GiB"},
 	} {
-		if got := Bytes(tc.bytes); got != tc.want {
-			t.Errorf("Bytes(%d) = %q, want %q", tc.bytes, got, tc.want)
-		}
+		t.Run(tc.want, func(t *testing.T) {
+			if got := Bytes(tc.bytes); got != tc.want {
+				t.Errorf("Bytes(%d) = %q, want %q", tc.bytes, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -38,25 +42,51 @@ func TestBytesOfWritesBothInTheTotalsUnit(t *testing.T) {
 		{0, 0, "0 of 0 B"},
 		{3 << 20, 900 << 20, "3 of 900 MiB"},
 	} {
-		if got := BytesOf(tc.part, tc.total); got != tc.want {
-			t.Errorf("BytesOf(%d, %d) = %q, want %q", tc.part, tc.total, got, tc.want)
-		}
+		t.Run(tc.want, func(t *testing.T) {
+			if got := BytesOf(tc.part, tc.total); got != tc.want {
+				t.Errorf("BytesOf(%d, %d) = %q, want %q", tc.part, tc.total, got, tc.want)
+			}
+		})
 	}
 }
 
-func TestDuration(t *testing.T) {
-	for d, want := range map[time.Duration]string{
-		829 * time.Millisecond:                "829ms",
-		1840 * time.Millisecond:               "1.8s",
-		5*time.Minute + 3400*time.Millisecond: "5m3s",
+func TestNumberDropsATrailingZero(t *testing.T) {
+	for _, tc := range []struct {
+		f    float64
+		want string
+	}{
+		{4, "4"},
+		{1.04, "1"},
+		{30.25, "30.3"},
 	} {
-		if got := Duration(d); got != want {
-			t.Errorf("Duration(%v) = %q, want %q", d, got, want)
-		}
+		t.Run(tc.want, func(t *testing.T) {
+			if got := Number(tc.f); got != tc.want {
+				t.Errorf("Number(%v) = %q, want %q", tc.f, got, tc.want)
+			}
+		})
 	}
 }
 
-func TestCount(t *testing.T) {
+// TestDurationRoundsToAUsefulPrecision checks a duration is rounded more
+// coarsely the longer it is.
+func TestDurationRoundsToAUsefulPrecision(t *testing.T) {
+	for _, tc := range []struct {
+		d    time.Duration
+		want string
+	}{
+		{829 * time.Millisecond, "829ms"},
+		{1840 * time.Millisecond, "1.8s"},
+		{5*time.Minute + 3400*time.Millisecond, "5m3s"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			if got := Duration(tc.d); got != tc.want {
+				t.Errorf("Duration(%v) = %q, want %q", tc.d, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCountPluralisesAnyNumberButOne(t *testing.T) {
 	for _, tc := range []struct {
 		n    int
 		want string
@@ -65,8 +95,10 @@ func TestCount(t *testing.T) {
 		{1, "1 vCPU"},
 		{4, "4 vCPUs"},
 	} {
-		if got := Count(tc.n, "vCPU"); got != tc.want {
-			t.Errorf("Count(%d) = %q, want %q", tc.n, got, tc.want)
-		}
+		t.Run(tc.want, func(t *testing.T) {
+			if got := Count(tc.n, "vCPU"); got != tc.want {
+				t.Errorf("Count(%d) = %q, want %q", tc.n, got, tc.want)
+			}
+		})
 	}
 }

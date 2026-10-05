@@ -13,7 +13,7 @@ import (
 )
 
 func TestDefaultsFallBackToTheOnlyOne(t *testing.T) {
-	_, definitions := newResourceServer(t)
+	_, definitions := newTestServer(t)
 	r := defaultResolver{definitions: definitions}
 
 	// None yet: nothing to default to, and the error says how to get one.
@@ -48,7 +48,7 @@ func TestDefaultsFallBackToTheOnlyOne(t *testing.T) {
 }
 
 func TestDefaultsConfiguredWin(t *testing.T) {
-	_, definitions := newResourceServer(t)
+	_, definitions := newTestServer(t)
 	for _, n := range []string{"a", "b"} {
 		if err := definitions.CreateNetwork(types.Network{
 			ID: "n-" + n, Name: n, Subnet: "10.0.0.0/24", Gateway: "10.0.0.1", Bridge: "dicer-" + n,

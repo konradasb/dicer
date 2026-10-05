@@ -37,9 +37,12 @@ type Manager struct {
 	dir    string
 	logger *slog.Logger
 
-	// mu guards the allocation tables. Assignment is a read-modify-write
-	// over a whole network, so one lock across all of them is both correct
-	// and, at the scale of one host, cheap; lookups share it.
+	// writeMu serialises the changes to the allocation tables. Each is a
+	// read-modify-write of a network's file, made under writeMu alone, so
+	// that mu is held only to read or swap an allocation table, never
+	// across the write.
+	writeMu sync.Mutex
+
 	mu               sync.RWMutex
 	allocationTables map[string]*allocationTable
 	// allocationTableErrors holds the error reading each allocation table
@@ -50,7 +53,8 @@ type Manager struct {
 }
 
 // allocationTable is a network's allocations, indexed by instance and by
-// address so that a lookup scans none of them.
+// address so that a lookup scans none of them. It is never changed once
+// made: a change makes a new one.
 type allocationTable struct {
 	allocations []types.NetworkAllocation
 	// byInstance and byIP are the index into allocations of each instance's
@@ -60,7 +64,7 @@ type allocationTable struct {
 }
 
 // emptyAllocationTable is the allocation table of a network with no
-// allocations. It is never changed: save makes a new allocation table.
+// allocations.
 var emptyAllocationTable = newAllocationTable(nil)
 
 func newAllocationTable(allocations []types.NetworkAllocation) *allocationTable {
@@ -80,7 +84,7 @@ func newAllocationTable(allocations []types.NetworkAllocation) *allocationTable 
 type Config struct {
 	// Dir is the directory the allocation tables are kept in.
 	Dir string
-
+	// Logger is where the Manager logs. Nil is slog.Default().
 	Logger *slog.Logger
 }
 
@@ -112,22 +116,23 @@ func NewManager(cfg Config) (*Manager, error) {
 		if !ok || e.IsDir() || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
-		allocations, err := readAllocations(m.path(network))
+		t, err := readAllocationTable(m.allocationTablePath(network))
 		if err != nil {
 			m.allocationTableErrors[network] = fmt.Errorf("allocations for %q: %w", network, err)
 			continue
 		}
-		m.allocationTables[network] = newAllocationTable(allocations)
+		m.allocationTables[network] = t
 	}
 	return m, nil
 }
 
-func (m *Manager) path(network string) string {
+// allocationTablePath returns the path of a network's allocation table file.
+func (m *Manager) allocationTablePath(network string) string {
 	return filepath.Join(m.dir, network+allocationTableExt)
 }
 
-// readAllocations reads an allocation table file.
-func readAllocations(path string) ([]types.NetworkAllocation, error) {
+// readAllocationTable reads an allocation table file.
+func readAllocationTable(path string) (*allocationTable, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
@@ -136,12 +141,16 @@ func readAllocations(path string) ([]types.NetworkAllocation, error) {
 	if err := yaml.Unmarshal(data, &allocations); err != nil {
 		return nil, fmt.Errorf("parse: %w", err)
 	}
-	return allocations, nil
+	return newAllocationTable(allocations), nil
 }
 
 // allocationTableOf returns a network's allocation table,
-// emptyAllocationTable if it has none. Must be called with the lock held.
+// emptyAllocationTable if it has none, or the error it could not be read
+// with.
 func (m *Manager) allocationTableOf(network string) (*allocationTable, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	if err := m.allocationTableErrors[network]; err != nil {
 		return nil, err
 	}
@@ -151,10 +160,10 @@ func (m *Manager) allocationTableOf(network string) (*allocationTable, error) {
 	return emptyAllocationTable, nil
 }
 
-// save writes a network's allocation table to its file and, once it is
-// there, makes it the allocation table in memory: a failed write changes
-// neither. Must be called with the lock held for writing.
-func (m *Manager) save(network string, allocations []types.NetworkAllocation) error {
+// saveAllocationTable writes a network's allocations to its file and, once
+// they are there, makes them its allocation table in memory: a failed write
+// changes neither. It must be called with writeMu held.
+func (m *Manager) saveAllocationTable(network string, allocations []types.NetworkAllocation) error {
 	data, err := yaml.Marshal(allocations)
 	if err != nil {
 		return fmt.Errorf("marshal allocations for %q: %w", network, err)
@@ -163,19 +172,19 @@ func (m *Manager) save(network string, allocations []types.NetworkAllocation) er
 	if err := os.MkdirAll(m.dir, 0o700); err != nil {
 		return fmt.Errorf("create %s: %w", m.dir, err)
 	}
-	if err := atomicfile.Write(m.path(network), data, 0o600); err != nil {
+	if err := atomicfile.Write(m.allocationTablePath(network), data, 0o600); err != nil {
 		return err
 	}
 
-	m.allocationTables[network] = newAllocationTable(allocations)
+	t := newAllocationTable(allocations)
+	m.mu.Lock()
+	m.allocationTables[network] = t
+	m.mu.Unlock()
 	return nil
 }
 
 // List returns every allocation on a network. The slice is the caller's.
 func (m *Manager) List(network string) ([]types.NetworkAllocation, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	t, err := m.allocationTableOf(network)
 	if err != nil {
 		return nil, err
@@ -183,11 +192,9 @@ func (m *Manager) List(network string) ([]types.NetworkAllocation, error) {
 	return slices.Clone(t.allocations), nil
 }
 
-// Get returns the allocation held by an instance on a network.
-func (m *Manager) Get(network, instanceID string) (types.NetworkAllocation, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
+// Allocation returns the allocation held by an instance on a network, or an
+// errdefs.ErrNotFound error if it holds none.
+func (m *Manager) Allocation(network, instanceID string) (types.NetworkAllocation, error) {
 	t, err := m.allocationTableOf(network)
 	if err != nil {
 		return types.NetworkAllocation{}, err
@@ -204,9 +211,6 @@ func (m *Manager) Get(network, instanceID string) (types.NetworkAllocation, erro
 // reports false if none does, or if the network's allocation table cannot
 // be read.
 func (m *Manager) InstanceAt(network, ip string) (string, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	t, err := m.allocationTableOf(network)
 	if err != nil {
 		return "", false
@@ -221,8 +225,8 @@ func (m *Manager) InstanceAt(network, ip string) (string, bool) {
 // Allocate assigns an address to an instance, or returns the one it holds. A
 // staticIP must be in the subnet and free.
 func (m *Manager) Allocate(n types.Network, instanceID, staticIP string) (types.NetworkAllocation, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.writeMu.Lock()
+	defer m.writeMu.Unlock()
 
 	t, err := m.allocationTableOf(n.Name)
 	if err != nil {
@@ -256,7 +260,7 @@ func (m *Manager) Allocate(n types.Network, instanceID, staticIP string) (types.
 				"static IP %s is already in use on network %q", ip, n.Name)
 		}
 	} else {
-		ip, err = allocateIP(ipNet, used)
+		ip, err = freeIP(ipNet, used)
 		if err != nil {
 			return types.NetworkAllocation{}, fmt.Errorf(
 				"allocate address on network %q: %w", n.Name, err)
@@ -274,19 +278,17 @@ func (m *Manager) Allocate(n types.Network, instanceID, staticIP string) (types.
 		IP:         ip,
 		MAC:        mac,
 	}
-
-	if err := m.save(n.Name, append(slices.Clone(t.allocations), allocation)); err != nil {
+	if err := m.saveAllocationTable(n.Name, append(slices.Clone(t.allocations), allocation)); err != nil {
 		return types.NetworkAllocation{}, err
 	}
-
 	return allocation, nil
 }
 
 // Release drops an instance's allocation. Releasing one that does not exist
 // is not an error, so cleanup paths can call it unconditionally.
 func (m *Manager) Release(network, instanceID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.writeMu.Lock()
+	defer m.writeMu.Unlock()
 
 	t, err := m.allocationTableOf(network)
 	if err != nil {
@@ -296,30 +298,32 @@ func (m *Manager) Release(network, instanceID string) error {
 	if !ok {
 		return nil
 	}
-
-	return m.save(network, slices.Delete(slices.Clone(t.allocations), i, i+1))
+	return m.saveAllocationTable(network, slices.Delete(slices.Clone(t.allocations), i, i+1))
 }
 
 // Forget discards a network's whole allocation table, for use when the
-// network itself is deleted.
+// network itself is deleted. Forgetting a network with none is not an
+// error.
 func (m *Manager) Forget(network string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.writeMu.Lock()
+	defer m.writeMu.Unlock()
 
-	if err := os.Remove(m.path(network)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := os.Remove(m.allocationTablePath(network)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("remove allocations for %q: %w", network, err)
 	}
+
+	m.mu.Lock()
 	delete(m.allocationTables, network)
 	delete(m.allocationTableErrors, network)
-
+	m.mu.Unlock()
 	return nil
 }
 
 // Reconcile drops allocations on the given networks held by instances not in
 // live, and returns how many it released.
 func (m *Manager) Reconcile(networks []string, live map[string]struct{}) (int, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.writeMu.Lock()
+	defer m.writeMu.Unlock()
 
 	var released int
 	for _, network := range networks {
@@ -342,10 +346,9 @@ func (m *Manager) Reconcile(networks []string, live map[string]struct{}) (int, e
 		if len(kept) == len(t.allocations) {
 			continue
 		}
-		if err := m.save(network, kept); err != nil {
+		if err := m.saveAllocationTable(network, kept); err != nil {
 			return released, err
 		}
 	}
-
 	return released, nil
 }

@@ -5,7 +5,6 @@ package registry
 
 import (
 	"io"
-	"sync/atomic"
 
 	gcr "github.com/google/go-containerregistry/pkg/v1"
 )
@@ -22,89 +21,92 @@ const (
 	PhaseUnpacking Phase = "unpacking"
 )
 
-// Event reports how far a pull has got. Downloaded and Total are bytes of
+// Progress reports how far a pull has got. Downloaded and Total are bytes of
 // compressed layers, and are zero outside PhaseDownloading.
-type Event struct {
+type Progress struct {
 	Phase      Phase
 	Downloaded int64
 	Total      int64
 }
 
-// EventFunc receives pull events. It may be nil, and is called from the
-// goroutine doing the pull, so it should not block for long.
-type EventFunc func(Event)
+// ProgressFunc receives a pull's progress. It may be nil, and is called from
+// the goroutine doing the pull, so it should not block for long.
+type ProgressFunc func(Progress)
 
-func (f EventFunc) send(ev Event) {
+// report passes p to f, if f is not nil.
+func (f ProgressFunc) report(p Progress) {
 	if f != nil {
-		f(ev)
+		f(p)
 	}
 }
 
-// progressImage reports the bytes read from an image's layers.
-type progressImage struct {
+// countingImage passes count the compressed bytes read from an image's
+// layers.
+type countingImage struct {
 	gcr.Image
-	report func(n int64)
+	count func(n int64)
 }
 
-func (p progressImage) Layers() ([]gcr.Layer, error) {
-	layers, err := p.Image.Layers()
+// Layers implements gcr.Image.
+func (i countingImage) Layers() ([]gcr.Layer, error) {
+	layers, err := i.Image.Layers()
 	if err != nil {
 		return nil, err
 	}
 
-	wrapped := make([]gcr.Layer, len(layers))
-	for i, l := range layers {
-		wrapped[i] = progressLayer{Layer: l, report: p.report}
+	counted := make([]gcr.Layer, len(layers))
+	for n, l := range layers {
+		counted[n] = countingLayer{Layer: l, count: i.count}
 	}
 
-	return wrapped, nil
+	return counted, nil
 }
 
-func (p progressImage) LayerByDigest(h gcr.Hash) (gcr.Layer, error) {
-	l, err := p.Image.LayerByDigest(h)
+// LayerByDigest implements gcr.Image.
+func (i countingImage) LayerByDigest(h gcr.Hash) (gcr.Layer, error) {
+	l, err := i.Image.LayerByDigest(h)
 	if err != nil {
 		return nil, err
 	}
-	return progressLayer{Layer: l, report: p.report}, nil
+	return countingLayer{Layer: l, count: i.count}, nil
 }
 
-func (p progressImage) LayerByDiffID(h gcr.Hash) (gcr.Layer, error) {
-	l, err := p.Image.LayerByDiffID(h)
+// LayerByDiffID implements gcr.Image.
+func (i countingImage) LayerByDiffID(h gcr.Hash) (gcr.Layer, error) {
+	l, err := i.Image.LayerByDiffID(h)
 	if err != nil {
 		return nil, err
 	}
-	return progressLayer{Layer: l, report: p.report}, nil
+	return countingLayer{Layer: l, count: i.count}, nil
 }
 
-// progressLayer counts the compressed bytes read out of a layer, which is
-// what crosses the network.
-type progressLayer struct {
+// countingLayer passes count the compressed bytes read out of a layer, which
+// is what crosses the network.
+type countingLayer struct {
 	gcr.Layer
-	report func(n int64)
+	count func(n int64)
 }
 
-func (l progressLayer) Compressed() (io.ReadCloser, error) {
+// Compressed implements gcr.Layer.
+func (l countingLayer) Compressed() (io.ReadCloser, error) {
 	rc, err := l.Layer.Compressed()
 	if err != nil {
 		return nil, err
 	}
-	return &countingReader{ReadCloser: rc, report: l.report}, nil
+	return &countingReader{ReadCloser: rc, count: l.count}, nil
 }
 
+// countingReader passes count the bytes read through it.
 type countingReader struct {
 	io.ReadCloser
-	report func(n int64)
+	count func(n int64)
 }
 
-func (c *countingReader) Read(p []byte) (int, error) {
-	n, err := c.ReadCloser.Read(p)
-	if n > 0 && c.report != nil {
-		c.report(int64(n))
+// Read implements io.Reader.
+func (r *countingReader) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	if n > 0 {
+		r.count(int64(n))
 	}
 	return n, err
 }
-
-// counter accumulates downloaded bytes across layers pulled in parallel.
-type counter struct{ n atomic.Int64 }
-
-func (c *counter) add(n int64) int64 { return c.n.Add(n) }

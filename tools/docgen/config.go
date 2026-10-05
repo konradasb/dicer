@@ -16,6 +16,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/konradasb/dicer/internal/cli"
 )
 
 // module is this module's path.
@@ -27,31 +29,37 @@ const (
 	daemonPackage  = module + "/internal/daemon"
 )
 
-// section is part of a reference page: an introduction, then the keys of one
-// struct under a prefix. A section with no struct is its introduction alone,
-// or what build returns, given every key.
-type section struct {
-	intro, from, typ, prefix string
-	build                    func(keys map[string]bool) string
+// configurationSection is part of a configuration reference page: an
+// introduction, then the keys of the struct structName in the package at
+// importPath, under a prefix. A section with no struct is its introduction
+// alone, or what build returns, given every key and every command.
+type configurationSection struct {
+	intro, importPath, structName, prefix string
+	build                                 func(keys, commands map[string]bool) string
 }
 
 // writeConfiguration writes the configuration reference: every key of the
 // daemon's configuration file.
 func writeConfiguration(root, dir string) error {
-	l := &loader{root: root, packages: map[string]*goPackage{}, keys: map[string]bool{}, commands: commandPaths()}
+	l := &loader{
+		root:     root,
+		packages: map[string]*goPackage{},
+		keys:     map[string]bool{},
+		commands: commandPaths(cli.NewCommand()),
+	}
 
 	pages := []struct {
-		path     string
-		meta     meta
-		sections []section
+		path        string
+		frontMatter frontMatter
+		sections    []configurationSection
 	}{
 		{
 			path: filepath.Join(dir, "configuration.md"),
-			meta: meta{
+			frontMatter: frontMatter{
 				title: "Daemon configuration", weight: 3, icon: "cog",
 				description: "Every key of dicerd's configuration file, with its default.",
 			},
-			sections: []section{{
+			sections: []configurationSection{{
 				intro: "`dicerd` reads its configuration from `/etc/dicerd/config.yaml`, or the file " +
 					"`dicerd serve --config` names, when it starts: a changed file is taken up by restarting " +
 					"it. The file is optional, as every key has a default, and unknown keys are rejected: " +
@@ -75,17 +83,17 @@ func writeConfiguration(root, dir string) error {
 					"## General {#general}\n\n" +
 					"The daemon's own settings. The sections after them are the API, resources, networking, " +
 					"defaults, metrics, images, events and registries.",
-				from: daemonPackage, typ: "Config",
+				importPath: daemonPackage, structName: "Config",
 			}},
 		},
 		{
 			path: filepath.Join(dir, "compose-file.md"),
-			meta: meta{
+			frontMatter: frontMatter{
 				title: "Compose file", weight: 4, icon: "template",
 				description: "Every key of the file dicer compose reads, with its default.",
 				related:     []string{"/docs/guides/compose", "/docs/reference/cli/dicer_compose"},
 			},
-			sections: []section{
+			sections: []configurationSection{
 				{
 					intro: "`dicer compose` reads a project from a YAML file: its services, and the networks and " +
 						"volumes they use. A key it does not support is refused, with the reason, rather than " +
@@ -106,7 +114,7 @@ func writeConfiguration(root, dir string) error {
 						"can leave running. Labels starting `dicer.compose.` are reserved for `dicer compose`.\n\n" +
 						"## General {#general}\n\n" +
 						"The project's own keys. The sections after them are its services, networks and volumes.",
-					from: composePackage, typ: "rawFile",
+					importPath: composePackage, structName: "rawFile",
 				},
 				{intro: composeVariables},
 				{build: composeUnsupported},
@@ -115,11 +123,11 @@ func writeConfiguration(root, dir string) error {
 	}
 
 	for _, p := range pages {
-		for _, sec := range p.sections {
-			if sec.typ == "" {
+		for _, section := range p.sections {
+			if section.structName == "" {
 				continue
 			}
-			if err := l.collectKeys(sec.from, sec.typ, sec.prefix); err != nil {
+			if err := l.collectKeys(section.importPath, section.structName, section.prefix); err != nil {
 				return fmt.Errorf("%s: %w", filepath.Base(p.path), err)
 			}
 		}
@@ -128,24 +136,24 @@ func writeConfiguration(root, dir string) error {
 	for _, p := range pages {
 		var body bytes.Buffer
 
-		for _, sec := range p.sections {
-			if sec.build != nil {
-				body.WriteString(sec.build(l.keys) + "\n")
+		for _, section := range p.sections {
+			if section.build != nil {
+				body.WriteString(section.build(l.keys, l.commands) + "\n")
 				continue
 			}
-			if sec.typ == "" {
-				body.WriteString(sec.intro + "\n")
+			if section.structName == "" {
+				body.WriteString(section.intro + "\n")
 				continue
 			}
 
-			b, err := l.document(sec.from, sec.typ, sec.prefix, sec.intro)
+			b, err := l.document(section.importPath, section.structName, section.prefix, section.intro)
 			if err != nil {
 				return fmt.Errorf("%s: %w", filepath.Base(p.path), err)
 			}
 			body.Write(b)
 		}
 
-		if err := writePage(p.path, p.meta, body.Bytes()); err != nil {
+		if err := writePage(p.path, p.frontMatter, body.Bytes()); err != nil {
 			return err
 		}
 	}
@@ -173,10 +181,10 @@ type goPackage struct {
 // structType is a struct as declared, with the imports its fields' types
 // refer to.
 type structType struct {
-	pkg     *goPackage
-	name    string
-	fields  []*ast.Field
-	imports map[string]string
+	goPackage *goPackage
+	name      string
+	fields    []*ast.Field
+	imports   map[string]string
 }
 
 // load parses a package of this module, without its tests.
@@ -211,13 +219,13 @@ func (l *loader) load(importPath string) (*goPackage, error) {
 		}
 
 		imports := map[string]string{}
-		for _, imp := range file.Imports {
-			ipath, _ := strconv.Unquote(imp.Path.Value)
-			alias := packageName(ipath)
-			if imp.Name != nil {
-				alias = imp.Name.Name
+		for _, importSpec := range file.Imports {
+			imported, _ := strconv.Unquote(importSpec.Path.Value)
+			alias := packageName(imported)
+			if importSpec.Name != nil {
+				alias = importSpec.Name.Name
 			}
-			imports[alias] = ipath
+			imports[alias] = imported
 		}
 
 		for _, decl := range file.Decls {
@@ -233,7 +241,7 @@ func (l *loader) load(importPath string) (*goPackage, error) {
 				}
 				if st, ok := ts.Type.(*ast.StructType); ok {
 					p.structs[ts.Name.Name] = &structType{
-						pkg: p, name: ts.Name.Name, fields: st.Fields.List, imports: imports,
+						goPackage: p, name: ts.Name.Name, fields: st.Fields.List, imports: imports,
 					}
 				}
 			}
@@ -256,17 +264,27 @@ func packageName(importPath string) string {
 	return name
 }
 
-// document returns the reference for a struct and every mapping under it, with
-// its keys under prefix.
-func (l *loader) document(importPath, name, prefix, intro string) ([]byte, error) {
+// structType returns the struct called name in the package at importPath.
+func (l *loader) structType(importPath, name string) (*structType, error) {
 	p, err := l.load(importPath)
 	if err != nil {
 		return nil, err
 	}
 
-	root, ok := p.structs[name]
+	st, ok := p.structs[name]
 	if !ok {
 		return nil, fmt.Errorf("no struct %s in %s", name, importPath)
+	}
+
+	return st, nil
+}
+
+// document returns the reference for a struct and every mapping under it, with
+// its keys under prefix.
+func (l *loader) document(importPath, name, prefix, intro string) ([]byte, error) {
+	root, err := l.structType(importPath, name)
+	if err != nil {
+		return nil, err
 	}
 
 	var out bytes.Buffer
@@ -283,19 +301,16 @@ func (l *loader) document(importPath, name, prefix, intro string) ([]byte, error
 // collectKeys adds a struct's keys, and those of every mapping under it, to
 // l.keys: each alone, and under its prefix.
 func (l *loader) collectKeys(importPath, name, prefix string) error {
-	p, err := l.load(importPath)
+	st, err := l.structType(importPath, name)
 	if err != nil {
 		return err
-	}
-
-	st, ok := p.structs[name]
-	if !ok {
-		return fmt.Errorf("no struct %s in %s", name, importPath)
 	}
 
 	return l.collectStruct(st, prefix, map[*structType]bool{})
 }
 
+// collectStruct adds st's keys under prefix, and those of every mapping under
+// it, to l.keys, visiting each struct once.
 func (l *loader) collectStruct(st *structType, prefix string, seen map[*structType]bool) error {
 	if seen[st] {
 		return nil
@@ -332,9 +347,10 @@ func (l *loader) collectStruct(st *structType, prefix string, seen map[*structTy
 	return nil
 }
 
-// entry is a key of a mapping, ready to write.
+// entry is a key of a mapping, ready to write: the key alone and under its
+// prefix, its type as describe gives it, and its text.
 type entry struct {
-	key, full, typ, text string
+	key, full, typeDescription, text string
 
 	// mapping is the struct of a key that is a mapping, or a list of them.
 	mapping *structType
@@ -353,7 +369,7 @@ func (l *loader) writeMapping(out *bytes.Buffer, st *structType, prefix string, 
 
 	for _, e := range entries {
 		if e.mapping == nil {
-			fmt.Fprintf(out, "\n### `%s` {#%s}\n\n*%s*\n\n%s\n", e.full, anchor(e.full), e.typ, e.text)
+			fmt.Fprintf(out, "\n### `%s` {#%s}\n\n*%s*\n\n%s\n", e.full, anchor(e.full), e.typeDescription, e.text)
 		}
 	}
 
@@ -362,7 +378,7 @@ func (l *loader) writeMapping(out *bytes.Buffer, st *structType, prefix string, 
 			continue
 		}
 
-		fmt.Fprintf(out, "\n## `%s` {#%s}\n\n*%s*\n\n%s\n", e.full, anchor(e.full), e.typ, e.text)
+		fmt.Fprintf(out, "\n## `%s` {#%s}\n\n*%s*\n\n%s\n", e.full, anchor(e.full), e.typeDescription, e.text)
 
 		if other, ok := seen[e.mapping]; ok {
 			fmt.Fprintf(out, "\nIts keys are the same as [`%s`](#%s)'s.\n", other, anchor(other))
@@ -403,14 +419,14 @@ func (l *loader) entries(st *structType, prefix string) ([]entry, error) {
 			full = prefix + "." + key
 		}
 
-		typ, ref, err := l.describe(st, f.Type)
+		typeDescription, ref, err := l.describe(st, f.Type)
 		if err != nil {
 			return nil, fmt.Errorf("%s.%s: %w", st.name, goName, err)
 		}
 		switch {
-		case ref != nil && strings.HasPrefix(typ, "list of"):
+		case ref != nil && strings.HasPrefix(typeDescription, "list of"):
 			full += "[]"
-		case ref != nil && strings.HasPrefix(typ, "mapping of"):
+		case ref != nil && strings.HasPrefix(typeDescription, "mapping of"):
 			full += ".*"
 		}
 
@@ -428,7 +444,7 @@ func (l *loader) entries(st *structType, prefix string) ([]entry, error) {
 			return nil, fmt.Errorf("%s.%s has no doc comment, so %s would go undocumented", st.name, goName, full)
 		}
 
-		out = append(out, entry{key: key, full: full, typ: typ, text: text, mapping: ref})
+		out = append(out, entry{key: key, full: full, typeDescription: typeDescription, text: text, mapping: ref})
 		previous, lastLine = key, l.fset.Position(f.End()).Line
 	}
 
@@ -469,7 +485,7 @@ func (l *loader) describe(in *structType, expr ast.Expr) (string, *structType, e
 		if err != nil {
 			return "", nil, err
 		}
-		if ref != nil && shortForms[ref.pkg.path+"."+ref.name] {
+		if ref != nil && shortForms[ref.goPackage.path+"."+ref.name] {
 			return "list of strings or mappings", ref, nil
 		}
 		if ref != nil {
@@ -494,17 +510,17 @@ func (l *loader) describe(in *structType, expr ast.Expr) (string, *structType, e
 			return scalar, nil, nil
 		}
 
-		return l.named(in.pkg.path, t.Name)
+		return l.named(in.goPackage.path, t.Name)
 
 	case *ast.SelectorExpr:
-		pkg, ok := t.X.(*ast.Ident)
+		packageIdent, ok := t.X.(*ast.Ident)
 		if !ok {
 			break
 		}
 
-		importPath, ok := in.imports[pkg.Name]
+		importPath, ok := in.imports[packageIdent.Name]
 		if !ok {
-			return "", nil, fmt.Errorf("unknown package %s", pkg.Name)
+			return "", nil, fmt.Errorf("unknown package %s", packageIdent.Name)
 		}
 
 		return l.named(importPath, t.Sel.Name)
@@ -523,14 +539,9 @@ func (l *loader) named(importPath, name string) (string, *structType, error) {
 		return "", nil, fmt.Errorf("%s.%s is not a type a configuration can hold", importPath, name)
 	}
 
-	p, err := l.load(importPath)
+	st, err := l.structType(importPath, name)
 	if err != nil {
 		return "", nil, err
-	}
-
-	st, ok := p.structs[name]
-	if !ok {
-		return "", nil, fmt.Errorf("%s.%s is not a struct", importPath, name)
 	}
 
 	return "mapping", st, nil
@@ -554,7 +565,7 @@ var specials = map[string]string{
 	composePackage + ".byteSize":        "size, such as 512MiB or 2GiB",
 	composePackage + ".stringList":      "string, or list of strings",
 	composePackage + ".shellCommand":    "string, or list of strings",
-	composePackage + ".healthTest":      "string, or list of strings",
+	composePackage + ".healthCheckTest": "string, or list of strings",
 	composePackage + ".keyValues":       "mapping of strings, or list of KEY=VALUE strings",
 	composePackage + ".serviceNetworks": "list of one name, or mapping of one name to a mapping",
 	composePackage + ".dependsOn":       "list of names, or mapping of names to mappings",
@@ -599,12 +610,12 @@ func prose(comment string, keys map[string]string) string {
 	}
 
 	var paragraphs []string
-	for para := range strings.SplitSeq(strings.TrimSpace(comment), "\n\n") {
-		if isCode(para) {
-			paragraphs = append(paragraphs, "```yaml\n"+dedent(para)+"\n```")
+	for paragraph := range strings.SplitSeq(strings.TrimSpace(comment), "\n\n") {
+		if isCode(paragraph) {
+			paragraphs = append(paragraphs, "```yaml\n"+dedent(paragraph)+"\n```")
 			continue
 		}
-		paragraphs = append(paragraphs, strings.Join(strings.Fields(para), " "))
+		paragraphs = append(paragraphs, strings.Join(strings.Fields(paragraph), " "))
 	}
 
 	return strings.Join(paragraphs, "\n\n")
@@ -614,8 +625,8 @@ func prose(comment string, keys map[string]string) string {
 var compound = regexp.MustCompile(`^[A-Z][a-z0-9]+[A-Z]`)
 
 // isCode reports whether a paragraph is an indented example.
-func isCode(para string) bool {
-	for line := range strings.SplitSeq(para, "\n") {
+func isCode(paragraph string) bool {
+	for line := range strings.SplitSeq(paragraph, "\n") {
 		if line != "" && !strings.HasPrefix(line, "\t") && !strings.HasPrefix(line, "  ") {
 			return false
 		}
@@ -625,8 +636,8 @@ func isCode(para string) bool {
 }
 
 // dedent removes an example's indentation.
-func dedent(para string) string {
-	lines := strings.Split(para, "\n")
+func dedent(paragraph string) string {
+	lines := strings.Split(paragraph, "\n")
 	for i, line := range lines {
 		lines[i] = strings.TrimPrefix(line, "\t")
 	}

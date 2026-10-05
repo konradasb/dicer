@@ -11,137 +11,84 @@ import (
 	"testing"
 )
 
-func TestCPIOConverter_Convert(t *testing.T) {
-	// Create temporary directories
-	tmpDir := t.TempDir()
-	dir := filepath.Join(tmpDir, "rootfs")
-	outputPath := filepath.Join(tmpDir, "disk.img")
+func TestWriteCPIOReturnsTheArchiveSize(t *testing.T) {
+	testDir := t.TempDir()
+	dir := filepath.Join(testDir, "rootfs")
+	path := filepath.Join(testDir, "initrd")
 
-	// Create test directory structure
-	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
-		t.Fatalf("create bin dir: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "etc"), 0o755); err != nil {
-		t.Fatalf("create etc dir: %v", err)
-	}
-
-	// Create some test files
-	if err := os.WriteFile(filepath.Join(dir, "bin", "test"), []byte("#!/bin/sh\necho test"), 0o755); err != nil {
-		t.Fatalf("create test file: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "etc", "config"), []byte("config=value"), 0o644); err != nil {
-		t.Fatalf("create config file: %v", err)
+	for name, content := range map[string]string{
+		"bin/test":   "#!/bin/sh\necho test",
+		"etc/config": "config=value",
+	} {
+		file := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	packer := cpioPacker{}
-	ctx := context.Background()
-
-	// Convert
-	size, err := packer.Pack(ctx, dir, outputPath)
+	size, err := writeCPIO(context.Background(), dir, path)
 	if err != nil {
-		t.Fatalf("Convert() error = %v", err)
+		t.Fatalf("writeCPIO: %v", err)
 	}
 
-	// Verify output file exists
-	info, err := os.Stat(outputPath)
+	info, err := os.Stat(path)
 	if err != nil {
-		t.Fatalf("output file not created: %v", err)
+		t.Fatalf("archive not written: %v", err)
 	}
-
-	// Verify size matches
-	if size != info.Size() {
-		t.Errorf("size = %d, stat size = %d", size, info.Size())
+	if size == 0 || size != info.Size() {
+		t.Errorf("size = %d, want the archive's, %d", size, info.Size())
 	}
+}
 
-	// Verify size is reasonable (should be > 0)
+// TestWriteCPIOOfAnEmptyDirectoryHasATrailer checks that an empty tree still
+// makes an archive, holding only the trailer.
+func TestWriteCPIOOfAnEmptyDirectoryHasATrailer(t *testing.T) {
+	size, err := writeCPIO(context.Background(), t.TempDir(), filepath.Join(t.TempDir(), "initrd"))
+	if err != nil {
+		t.Fatalf("writeCPIO: %v", err)
+	}
 	if size == 0 {
-		t.Error("size is 0")
+		t.Error("size = 0, want the trailer's")
 	}
 }
 
-func TestCPIOConverter_ConvertEmpty(t *testing.T) {
-	tmpDir := t.TempDir()
-	dir := filepath.Join(tmpDir, "empty")
-	outputPath := filepath.Join(tmpDir, "disk.img")
-
-	// Create empty directory
+func TestWriteCPIOFails(t *testing.T) {
+	testDir := t.TempDir()
+	dir := filepath.Join(testDir, "rootfs")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("create dir: %v", err)
+		t.Fatal(err)
 	}
-
-	packer := cpioPacker{}
-	ctx := context.Background()
-
-	// Convert empty dir should work
-	size, err := packer.Pack(ctx, dir, outputPath)
-	if err != nil {
-		t.Fatalf("Convert() error = %v", err)
-	}
-
-	if size == 0 {
-		t.Error("size should be > 0 even for empty dir (trailer)")
-	}
-}
-
-func TestCPIOConverter_ConvertNonExistent(t *testing.T) {
-	tmpDir := t.TempDir()
-	outputPath := filepath.Join(tmpDir, "disk.img")
-
-	packer := cpioPacker{}
-	ctx := context.Background()
-
-	// Pack non-existent dir should fail
-	_, err := packer.Pack(ctx, filepath.Join(tmpDir, "nonexistent"), outputPath)
-	if err == nil {
-		t.Error("Convert() should fail with non-existent dir")
-	}
-}
-
-func TestCPIOConverter_ConvertCancellation(t *testing.T) {
-	tmpDir := t.TempDir()
-	dir := filepath.Join(tmpDir, "rootfs")
-	outputPath := filepath.Join(tmpDir, "disk.img")
-
-	// Create a simple directory
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("create dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte("data"), 0o644); err != nil {
-		t.Fatalf("create test file: %v", err)
-	}
-
-	packer := cpioPacker{}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
-
-	// Pack with cancelled context may or may not fail depending on timing
-	// This test mainly ensures context is checked during conversion
-	_, err := packer.Pack(ctx, dir, outputPath)
-	if err != nil && !errors.Is(err, context.Canceled) {
-		t.Logf("Got error: %v (conversion may complete before context check)", err)
-	}
-}
-
-func TestCPIOConverter_ConvertInvalidOutput(t *testing.T) {
-	tmpDir := t.TempDir()
-	dir := filepath.Join(tmpDir, "rootfs")
-
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("create dir: %v", err)
-	}
-
-	packer := cpioPacker{}
-	ctx := context.Background()
 
 	// A file cannot be created beneath a regular file, whoever the test runs
 	// as -- unlike a path under /nonexistent, which root can create.
-	file := filepath.Join(tmpDir, "file")
+	file := filepath.Join(testDir, "file")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := packer.Pack(ctx, dir, filepath.Join(file, "disk.img"))
-	if err == nil {
-		t.Error("Pack() should fail with invalid output path")
+	for _, tc := range []struct {
+		name, dir, path string
+	}{
+		{"missing directory", filepath.Join(testDir, "nonexistent"), filepath.Join(testDir, "initrd")},
+		{"unwritable path", dir, filepath.Join(file, "initrd")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := writeCPIO(context.Background(), tc.dir, tc.path); err == nil {
+				t.Error("writeCPIO succeeded, want an error")
+			}
+		})
+	}
+}
+
+func TestWriteCPIOStopsWhenCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := writeCPIO(ctx, t.TempDir(), filepath.Join(t.TempDir(), "initrd"))
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("writeCPIO = %v, want context.Canceled", err)
 	}
 }

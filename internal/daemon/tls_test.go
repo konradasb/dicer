@@ -134,10 +134,6 @@ func writeFile(t *testing.T, path string, data []byte) {
 	}
 }
 
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
-
 // serve starts a TLS listener that echoes what it is sent, which is enough
 // to drive a handshake and to carry its verdict back, and returns its
 // address.
@@ -223,7 +219,7 @@ func TestClientCAFileRequiresACertificateItIssued(t *testing.T) {
 		CertFile:     serverCert,
 		KeyFile:      serverKey,
 		ClientCAFile: ca.File,
-	}, testLogger())
+	}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("serverTLSConfig: %v", err)
 	}
@@ -249,7 +245,7 @@ func TestWithoutAClientCAFileAnyClientIsServed(t *testing.T) {
 	ca := newTestCA(t)
 	serverCert, serverKey := ca.issue("server", x509.ExtKeyUsageServerAuth)
 
-	cfg, err := serverTLSConfig(TLSConfig{CertFile: serverCert, KeyFile: serverKey}, testLogger())
+	cfg, err := serverTLSConfig(TLSConfig{CertFile: serverCert, KeyFile: serverKey}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("serverTLSConfig: %v", err)
 	}
@@ -266,7 +262,7 @@ func TestTheServerCertificateStillHasToBeTrusted(t *testing.T) {
 	ca := newTestCA(t)
 	serverCert, serverKey := ca.issue("server", x509.ExtKeyUsageServerAuth)
 
-	cfg, err := serverTLSConfig(TLSConfig{CertFile: serverCert, KeyFile: serverKey}, testLogger())
+	cfg, err := serverTLSConfig(TLSConfig{CertFile: serverCert, KeyFile: serverKey}, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("serverTLSConfig: %v", err)
 	}
@@ -283,12 +279,12 @@ func TestARenewedCertificateIsPickedUp(t *testing.T) {
 	ca := newTestCA(t)
 	certFile, keyFile := ca.issue("server", x509.ExtKeyUsageServerAuth)
 
-	cert, err := newCertificate(certFile, keyFile, testLogger())
+	cert, err := newCertificate(certFile, keyFile, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("newCertificate: %v", err)
 	}
 
-	first, err := cert.get(nil)
+	first, err := cert.current(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +294,7 @@ func TestARenewedCertificateIsPickedUp(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	ca.issueInto("server", x509.ExtKeyUsageServerAuth, certFile, keyFile)
 
-	second, err := cert.get(nil)
+	second, err := cert.current(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,11 +311,11 @@ func TestAnUnreadableRenewalKeepsTheCertificateInUse(t *testing.T) {
 	ca := newTestCA(t)
 	certFile, keyFile := ca.issue("server", x509.ExtKeyUsageServerAuth)
 
-	cert, err := newCertificate(certFile, keyFile, testLogger())
+	cert, err := newCertificate(certFile, keyFile, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("newCertificate: %v", err)
 	}
-	before, err := cert.get(nil)
+	before, err := cert.current(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,9 +324,9 @@ func TestAnUnreadableRenewalKeepsTheCertificateInUse(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	writeFile(t, certFile, []byte("-----BEGIN CERTIFICATE-----\ntruncated"))
 
-	after, err := cert.get(nil)
+	after, err := cert.current(nil)
 	if err != nil {
-		t.Fatalf("get after a bad write: %v", err)
+		t.Fatalf("current after a bad write: %v", err)
 	}
 	if after != before {
 		t.Error("a certificate that could not be read replaced the one in use")
@@ -366,7 +362,7 @@ func TestServerTLSConfigRejectsMaterialItCannotUse(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := serverTLSConfig(tc.cfg, testLogger())
+			_, err := serverTLSConfig(tc.cfg, slog.New(slog.DiscardHandler))
 			if err == nil {
 				t.Fatal("serverTLSConfig accepted it")
 			}

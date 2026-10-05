@@ -22,7 +22,7 @@ func stoppedInstance(name string, exitCode int32) *dicerdv1.Instance {
 // An instance that has already stopped is not waited for: its last status is
 // the answer, and it is there to be read.
 func TestWaitOnAStoppedInstance(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(stoppedInstance("job", 0)))
+	serveFakeDaemon(t, newFakeInstanceDaemon(stoppedInstance("job", 0)))
 
 	out, err := run(t, "wait", "job")
 	if err != nil {
@@ -37,7 +37,7 @@ func TestWaitOnAStoppedInstance(t *testing.T) {
 // reported rather than by asking again and again.
 func TestWaitWaitsForARunningInstance(t *testing.T) {
 	d := newFakeInstanceDaemon(&dicerdv1.Instance{Id: "id-job", Name: "job", ImageRef: "alpine:3.21", State: stateRunning})
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	done := make(chan string, 1)
 	go func() {
@@ -65,7 +65,7 @@ func TestWaitWaitsForARunningInstance(t *testing.T) {
 // answer.
 func TestWaitOnAnInstanceRemovedWhenItStopped(t *testing.T) {
 	d := newFakeInstanceDaemon(&dicerdv1.Instance{Id: "id-job", Name: "job", ImageRef: "alpine:3.21", State: stateRunning})
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	done := make(chan string, 1)
 	go func() {
@@ -89,7 +89,7 @@ func TestWaitOnAnInstanceRemovedWhenItStopped(t *testing.T) {
 // As docker wait does, wait prints the status rather than exiting with it: a
 // job that failed is still a wait that worked.
 func TestWaitPrintsTheStatusAndSucceeds(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(stoppedInstance("job", 3)))
+	serveFakeDaemon(t, newFakeInstanceDaemon(stoppedInstance("job", 3)))
 
 	out, err := run(t, "wait", "job")
 	if err != nil {
@@ -102,7 +102,7 @@ func TestWaitPrintsTheStatusAndSucceeds(t *testing.T) {
 
 // Several instances are waited for in turn, a line each.
 func TestWaitOnSeveralInstances(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(stoppedInstance("a", 0), stoppedInstance("b", 2)))
+	serveFakeDaemon(t, newFakeInstanceDaemon(stoppedInstance("a", 0), stoppedInstance("b", 2)))
 
 	out, err := run(t, "wait", "a", "b")
 	if err != nil {
@@ -116,7 +116,7 @@ func TestWaitOnSeveralInstances(t *testing.T) {
 // An instance that cannot be waited for fails the command, and the others
 // are waited for all the same.
 func TestWaitOnAMissingInstance(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(stoppedInstance("b", 2)))
+	serveFakeDaemon(t, newFakeInstanceDaemon(stoppedInstance("b", 2)))
 
 	out, err := run(t, "wait", "a", "b")
 	var exitErr *exitError
@@ -137,7 +137,7 @@ func TestWaitOnAnInstanceDeletedBeforeTheWait(t *testing.T) {
 	d.stopsAndRemoves("job", 4)
 	<-d.events
 	<-d.events
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	out, err := run(t, "wait", "job")
 	if err != nil {

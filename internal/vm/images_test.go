@@ -12,11 +12,11 @@ import (
 func TestImagesInUseKeepsWhatGuestsAndSnapshotsNeed(t *testing.T) {
 	h := newHarness(t)
 	h.running(t)
-	if _, err := h.mgr.CreateSnapshot(t.Context(), h.inst, "kept"); err != nil {
+	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "kept"); err != nil {
 		t.Fatalf("CreateSnapshot: %v", err)
 	}
 
-	inUse, err := h.mgr.ImagesInUse()
+	inUse, err := h.manager.ImagesInUse()
 	if err != nil {
 		t.Fatalf("ImagesInUse: %v", err)
 	}
@@ -25,10 +25,10 @@ func TestImagesInUseKeepsWhatGuestsAndSnapshotsNeed(t *testing.T) {
 	}
 
 	// Stopped, the guest no longer needs its image, but its snapshot does.
-	if err := h.mgr.clearRuntime(h.inst.ID); err != nil {
+	if err := h.manager.removeRuntimeDir(h.instance.ID); err != nil {
 		t.Fatal(err)
 	}
-	if inUse, err = h.mgr.ImagesInUse(); err != nil {
+	if inUse, err = h.manager.ImagesInUse(); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := inUse["sha256:aaaa"]; !ok {
@@ -41,12 +41,12 @@ func TestImagesInUseKeepsWhatGuestsAndSnapshotsNeed(t *testing.T) {
 // keeps nothing.
 func TestImagesInUseKeepsWhatDefinitionsName(t *testing.T) {
 	h := newHarness(t)
-	images, ok := h.mgr.images.(*fakeImages)
+	images, ok := h.manager.images.(*fakeImages)
 	if !ok {
-		t.Fatalf("images is %T", h.mgr.images)
+		t.Fatalf("images is %T", h.manager.images)
 	}
 
-	inUse, err := h.mgr.ImagesInUse()
+	inUse, err := h.manager.ImagesInUse()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,8 +54,8 @@ func TestImagesInUseKeepsWhatDefinitionsName(t *testing.T) {
 		t.Errorf("in use = %v, want nothing while the image is not held", inUse)
 	}
 
-	images.held = &types.Image{Name: h.inst.ImageRef, Digest: "sha256:bbbb"}
-	if inUse, err = h.mgr.ImagesInUse(); err != nil {
+	images.held = &types.Image{Name: h.instance.ImageRef, Digest: "sha256:bbbb"}
+	if inUse, err = h.manager.ImagesInUse(); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := inUse["sha256:bbbb"]; !ok {

@@ -12,56 +12,56 @@ import (
 
 // transition moves an instance to a new lifecycle state, rejecting moves the
 // state machine does not allow. The caller must hold the instance lock.
-func (m *Manager) transition(inst types.InstanceSpec, to types.InstanceState) error {
-	return m.transitionWith(inst, to, nil)
+func (m *Manager) transition(instance types.InstanceSpec, to types.InstanceState) error {
+	return m.transitionWith(instance, to, nil)
 }
 
 // transitionWith is transition that also applies update in the same write.
-func (m *Manager) transitionWith(inst types.InstanceSpec, to types.InstanceState, update func(*types.InstanceStatus)) error {
-	rt, err := m.Runtime(inst)
+func (m *Manager) transitionWith(instance types.InstanceSpec, to types.InstanceState, update func(*types.InstanceStatus)) error {
+	status, err := m.Status(instance)
 	if err != nil {
 		return err
 	}
 
-	if rt.State != to && !rt.State.CanTransitionTo(to) {
+	if status.State != to && !status.State.CanTransitionTo(to) {
 		return errdefs.InvalidState("instance %q is %s, and cannot become %s",
-			inst.Name, rt.State.Lower(), to.Lower())
+			instance.Name, status.State.Lowercase(), to.Lowercase())
 	}
 
-	rt.State = to
-	rt.StateError = ""
+	status.State = to
+	status.StateError = ""
 	if update != nil {
-		update(&rt)
+		update(&status)
 	}
 
-	return m.writeRuntime(rt)
+	return m.writeStatus(status)
 }
 
 // fail records an instance as Failed because of cause, clearing its process
 // and held resources. Write errors are logged. The caller must hold the
 // instance lock.
 func (m *Manager) fail(instanceID string, cause error) {
-	rt, err := m.readRuntime(instanceID)
+	status, err := m.readStatus(instanceID)
 	if err != nil {
-		m.logger.Warn("cannot read runtime state", "instance_id", instanceID, "error", err)
-		rt = types.InstanceStatus{InstanceID: instanceID}
+		m.logger.Warn("cannot read instance status", "instance_id", instanceID, "error", err)
+		status = types.InstanceStatus{InstanceID: instanceID}
 	}
 
-	forgetProcess(&rt)
-	rt.State = types.StateFailed
-	rt.StateError = cause.Error()
+	forgetProcess(&status)
+	status.State = types.InstanceStateFailed
+	status.StateError = cause.Error()
 
-	if err := m.writeRuntime(rt); err != nil {
+	if err := m.writeStatus(status); err != nil {
 		m.logger.Warn("cannot record failed state", "instance_id", instanceID, "error", err)
 	}
 }
 
-// forgetProcess clears a runtime state's VMM and held resources.
-func forgetProcess(rt *types.InstanceStatus) {
-	rt.HypervisorPID = nil
-	rt.HypervisorSocketPath = ""
-	rt.VCPUs = 0
-	rt.MemoryBytes = 0
-	rt.StartedAt = time.Time{}
-	rt.NextRestartAt = time.Time{}
+// forgetProcess clears a status's VMM and held resources.
+func forgetProcess(status *types.InstanceStatus) {
+	status.VMMPID = nil
+	status.HypervisorSocketPath = ""
+	status.VCPUs = 0
+	status.MemoryBytes = 0
+	status.StartedAt = time.Time{}
+	status.NextRestartAt = time.Time{}
 }

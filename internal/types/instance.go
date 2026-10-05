@@ -72,11 +72,23 @@ func (s InstanceSpec) Resources() Resources {
 	return Resources{VCPUs: s.VCPUs, MemoryBytes: s.MemoryBytes}
 }
 
-// Hypervisor returns the hypervisor the instance runs on, filling in the
-// default for a spec that names none.
-func (s InstanceSpec) Hypervisor() HypervisorType {
+// VolumeMount returns the mount by which the instance attaches the named
+// volume, and false if it attaches none.
+func (s InstanceSpec) VolumeMount(name string) (Mount, bool) {
+	for _, m := range s.Mounts {
+		if m.Type == MountTypeVolume && m.Source == name {
+			return m, true
+		}
+	}
+
+	return Mount{}, false
+}
+
+// EffectiveHypervisorType returns the hypervisor the instance runs on,
+// filling in the default for a spec that names none.
+func (s InstanceSpec) EffectiveHypervisorType() HypervisorType {
 	if s.HypervisorType == "" {
-		return DefaultHypervisor
+		return DefaultHypervisorType
 	}
 
 	return s.HypervisorType
@@ -89,7 +101,7 @@ type InstanceStatus struct {
 	State      InstanceState `json:"state"`
 	StateError string        `json:"state_error,omitempty"`
 
-	HypervisorPID        *int   `json:"hypervisor_pid,omitempty"`
+	VMMPID               *int   `json:"hypervisor_pid,omitempty"`
 	HypervisorSocketPath string `json:"hypervisor_socket_path,omitempty"`
 	HypervisorVersion    string `json:"hypervisor_version,omitempty"`
 	VsockCID             int64  `json:"vsock_cid,omitempty"`
@@ -131,9 +143,9 @@ type InstanceStatus struct {
 	NextRestartAt time.Time `json:"next_restart_at,omitzero"`
 }
 
-// Held returns what the instance holds of the host's CPU and memory, which
-// is nothing unless its state says it holds anything.
-func (s InstanceStatus) Held() Resources {
+// HeldResources returns what the instance holds of the host's CPU and
+// memory, which is nothing unless its state says it holds anything.
+func (s InstanceStatus) HeldResources() Resources {
 	if !s.State.HoldsResources() {
 		return Resources{}
 	}
@@ -145,108 +157,126 @@ func (s InstanceStatus) Held() Resources {
 type InstanceState string
 
 const (
-	// StateStopped means the instance is defined but not running. A freshly
+	// InstanceStateStopped means the instance is defined but not running. A freshly
 	// created instance starts here.
-	StateStopped InstanceState = "Stopped"
+	InstanceStateStopped InstanceState = "Stopped"
 
-	// StateStarting means a start is in progress. An instance found in this
+	// InstanceStateStarting means a start is in progress. An instance found in this
 	// state at daemon boot crashed mid-start and is cleaned up.
-	StateStarting InstanceState = "Starting"
+	InstanceStateStarting InstanceState = "Starting"
 
-	// StateRunning means the VM is executing.
-	StateRunning InstanceState = "Running"
+	// InstanceStateRunning means the VM is executing.
+	InstanceStateRunning InstanceState = "Running"
 
-	// StatePaused means the vCPUs are halted but the VM is resident.
-	StatePaused InstanceState = "Paused"
+	// InstanceStatePaused means the vCPUs are halted but the VM is resident.
+	InstanceStatePaused InstanceState = "Paused"
 
-	// StateStopping means a shutdown is in progress.
-	StateStopping InstanceState = "Stopping"
+	// InstanceStateStopping means a shutdown is in progress.
+	InstanceStateStopping InstanceState = "Stopping"
 
-	// StateRestarting means the instance ended without being asked to, and
+	// InstanceStateRestarting means the instance ended without being asked to, and
 	// its restart policy will start it again at
 	// InstanceStatus.NextRestartAt. It holds nothing in the meantime.
-	StateRestarting InstanceState = "Restarting"
+	InstanceStateRestarting InstanceState = "Restarting"
 
-	// StateFailed means the last operation failed; see
+	// InstanceStateFailed means the last operation failed; see
 	// InstanceStatus.StateError.
-	StateFailed InstanceState = "Failed"
+	InstanceStateFailed InstanceState = "Failed"
 )
 
 // InstanceStates returns every lifecycle state, in the order an instance
 // normally moves through them.
 func InstanceStates() []InstanceState {
 	return []InstanceState{
-		StateStopped, StateStarting, StateRunning,
-		StatePaused, StateStopping, StateRestarting, StateFailed,
+		InstanceStateStopped,
+		InstanceStateStarting,
+		InstanceStateRunning,
+		InstanceStatePaused,
+		InstanceStateStopping,
+		InstanceStateRestarting,
+		InstanceStateFailed,
 	}
 }
 
-// validTransitions defines the allowed state transitions.
-var validTransitions = map[InstanceState][]InstanceState{
-	StateStopped:    {StateStarting},
-	StateStarting:   {StateRunning, StateRestarting, StateFailed},
-	StateRunning:    {StatePaused, StateStopping, StateStopped, StateRestarting, StateFailed},
-	StatePaused:     {StateRunning, StateStopping, StateStopped, StateRestarting, StateFailed},
-	StateStopping:   {StateStopped, StateFailed},
-	StateRestarting: {StateStarting, StateStopping, StateFailed},
-	StateFailed:     {StateStarting, StateStopping, StateStopped},
+// allowedTransitions maps each state to the states it may move to.
+var allowedTransitions = map[InstanceState][]InstanceState{
+	InstanceStateStopped: {InstanceStateStarting},
+	InstanceStateStarting: {
+		InstanceStateRunning, InstanceStateRestarting, InstanceStateFailed,
+	},
+	InstanceStateRunning: {
+		InstanceStatePaused, InstanceStateStopping, InstanceStateStopped,
+		InstanceStateRestarting, InstanceStateFailed,
+	},
+	InstanceStatePaused: {
+		InstanceStateRunning, InstanceStateStopping, InstanceStateStopped,
+		InstanceStateRestarting, InstanceStateFailed,
+	},
+	InstanceStateStopping: {InstanceStateStopped, InstanceStateFailed},
+	InstanceStateRestarting: {
+		InstanceStateStarting, InstanceStateStopping, InstanceStateFailed,
+	},
+	InstanceStateFailed: {
+		InstanceStateStarting, InstanceStateStopping, InstanceStateStopped,
+	},
 }
 
 // CanTransitionTo reports whether a transition to target is allowed.
 func (s InstanceState) CanTransitionTo(target InstanceState) bool {
-	return slices.Contains(validTransitions[s], target)
+	return slices.Contains(allowedTransitions[s], target)
 }
 
 // HoldsResources reports whether an instance in the state holds the CPU and
 // memory it was admitted with: starting, running or paused.
 func (s InstanceState) HoldsResources() bool {
-	return s == StateStarting || s.IsActive()
+	return s == InstanceStateStarting || s.IsActive()
 }
 
-// IsActive reports whether the state implies a live hypervisor process.
+// IsActive reports whether the state implies a live VMM.
 func (s InstanceState) IsActive() bool {
-	return s == StateRunning || s == StatePaused
+	return s == InstanceStateRunning || s == InstanceStatePaused
 }
 
 // String returns the state as it is written: "Running".
 func (s InstanceState) String() string { return string(s) }
 
-// Lower is the state as a sentence says it: "running", not "Running".
-func (s InstanceState) Lower() string { return strings.ToLower(string(s)) }
+// Lowercase returns the state as a sentence says it: "running", not
+// "Running".
+func (s InstanceState) Lowercase() string { return strings.ToLower(string(s)) }
 
 // InitMode is how the guest starts an instance's command.
 type InitMode string
 
 const (
-	// ModeAuto has dicer-init decide, once the root filesystem is mounted:
+	// InitModeAuto has dicer-init decide, once the root filesystem is mounted:
 	// systemd if the command is systemd, else exec.
-	ModeAuto InitMode = "auto"
+	InitModeAuto InitMode = "auto"
 
-	// ModeExec runs the command as PID 1 of its own PID namespace.
-	ModeExec InitMode = "exec"
+	// InitModeExec runs the command as PID 1 of its own PID namespace.
+	InitModeExec InitMode = "exec"
 
-	// ModeSystemd hands the machine's PID 1 to systemd itself.
-	ModeSystemd InitMode = "systemd"
+	// InitModeSystemd hands the machine's PID 1 to systemd itself.
+	InitModeSystemd InitMode = "systemd"
 )
 
 // HypervisorType is the virtual machine monitor an instance runs on.
 type HypervisorType string
 
 const (
-	// HypervisorCloudHypervisor is Cloud Hypervisor, the default.
-	HypervisorCloudHypervisor HypervisorType = "cloud-hypervisor"
+	// HypervisorTypeCloudHypervisor is Cloud Hypervisor, the default.
+	HypervisorTypeCloudHypervisor HypervisorType = "cloud-hypervisor"
 
-	// HypervisorFirecracker is Firecracker.
-	HypervisorFirecracker HypervisorType = "firecracker"
+	// HypervisorTypeFirecracker is Firecracker.
+	HypervisorTypeFirecracker HypervisorType = "firecracker"
 
-	// DefaultHypervisor is what an instance that names none runs on.
-	DefaultHypervisor = HypervisorCloudHypervisor
+	// DefaultHypervisorType is what an instance that names none runs on.
+	DefaultHypervisorType = HypervisorTypeCloudHypervisor
 )
 
 // HypervisorTypes returns every hypervisor an instance may run on, the
 // default first.
 func HypervisorTypes() []HypervisorType {
-	return []HypervisorType{HypervisorCloudHypervisor, HypervisorFirecracker}
+	return []HypervisorType{HypervisorTypeCloudHypervisor, HypervisorTypeFirecracker}
 }
 
 // Valid reports whether t names a hypervisor Dicer can start instances with.
@@ -259,20 +289,20 @@ type RestartMode string
 
 // The restart modes, as Docker names them.
 const (
-	// RestartNo leaves an instance that ended as it is.
-	RestartNo RestartMode = "no"
+	// RestartModeNo leaves an instance that ended as it is.
+	RestartModeNo RestartMode = "no"
 
-	// RestartOnFailure restarts an instance whose end was not clean.
-	RestartOnFailure RestartMode = "on-failure"
+	// RestartModeOnFailure restarts an instance whose end was not clean.
+	RestartModeOnFailure RestartMode = "on-failure"
 
-	// RestartUnlessStopped restarts an instance however it ended, and
+	// RestartModeUnlessStopped restarts an instance however it ended, and
 	// starts it when the daemon starts, unless it was last stopped by a
 	// user.
-	RestartUnlessStopped RestartMode = "unless-stopped"
+	RestartModeUnlessStopped RestartMode = "unless-stopped"
 
-	// RestartAlways restarts an instance however it ended, and starts it
+	// RestartModeAlways restarts an instance however it ended, and starts it
 	// when the daemon starts, even if it was last stopped by a user.
-	RestartAlways RestartMode = "always"
+	RestartModeAlways RestartMode = "always"
 )
 
 // RestartPolicy is what the daemon does when an instance ends without being
@@ -285,14 +315,15 @@ type RestartPolicy struct {
 	MaxRetries int `yaml:"max_retries,omitempty" json:"max_retries,omitempty"`
 }
 
-// Validate checks the policy is one the daemon can follow.
+// Validate returns an invalid argument error if the daemon cannot follow
+// the policy.
 func (p RestartPolicy) Validate() error {
 	switch p.Mode {
-	case "", RestartNo, RestartUnlessStopped, RestartAlways:
+	case "", RestartModeNo, RestartModeUnlessStopped, RestartModeAlways:
 		if p.MaxRetries != 0 {
 			return errdefs.InvalidArgument("a retry limit applies only to the on-failure restart policy")
 		}
-	case RestartOnFailure:
+	case RestartModeOnFailure:
 		if p.MaxRetries < 0 {
 			return errdefs.InvalidArgument("the retry limit cannot be negative")
 		}
@@ -305,16 +336,16 @@ func (p RestartPolicy) Validate() error {
 
 // Restarts reports whether the policy ever starts an instance again.
 func (p RestartPolicy) Restarts() bool {
-	return p.Mode != "" && p.Mode != RestartNo
+	return p.Mode != "" && p.Mode != RestartModeNo
 }
 
 // StartsOnBoot reports whether an instance with this policy is started when
 // the daemon starts.
 func (p RestartPolicy) StartsOnBoot(stoppedByUser bool) bool {
 	switch p.Mode {
-	case RestartAlways:
+	case RestartModeAlways:
 		return true
-	case RestartUnlessStopped:
+	case RestartModeUnlessStopped:
 		return !stoppedByUser
 	default:
 		return false
@@ -324,7 +355,7 @@ func (p RestartPolicy) StartsOnBoot(stoppedByUser bool) bool {
 // String is the policy as the CLI and API take it: "on-failure:5".
 func (p RestartPolicy) String() string {
 	if p.Mode == "" {
-		return string(RestartNo)
+		return string(RestartModeNo)
 	}
 	if p.MaxRetries > 0 {
 		return fmt.Sprintf("%s:%d", p.Mode, p.MaxRetries)

@@ -14,18 +14,18 @@ import (
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
-// printableProcesses lists the processes in an instance's guest, a row each.
+// printableProcess lists the processes in an instance's guest, a row each.
 // Its column names are also a --format template's fields and JSON's keys.
-type printableProcesses struct {
+type printableProcess struct {
 	Processes []*dicerdv1.Process
 }
 
-func (p *printableProcesses) Cols() []string {
+func (p *printableProcess) Columns() []string {
 	return []string{"PID", "PPID", "User", "State", "Started", "CPUTime", "RSS", "Command"}
 }
 
-func (p *printableProcesses) KV() []map[string]any {
-	kv := make([]map[string]any, 0, len(p.Processes))
+func (p *printableProcess) Rows() []map[string]any {
+	rows := make([]map[string]any, 0, len(p.Processes))
 	for _, process := range p.Processes {
 		// A process without a command line, such as a zombie, is shown by
 		// its name in brackets.
@@ -33,7 +33,7 @@ func (p *printableProcesses) KV() []map[string]any {
 		if command == "" {
 			command = "[" + process.GetName() + "]"
 		}
-		kv = append(kv, map[string]any{
+		rows = append(rows, map[string]any{
 			"PID":     strconv.Itoa(int(process.GetPid())),
 			"PPID":    strconv.Itoa(int(process.GetPpid())),
 			"User":    process.GetUser(),
@@ -44,7 +44,7 @@ func (p *printableProcesses) KV() []map[string]any {
 			"Command": command,
 		})
 	}
-	return kv
+	return rows
 }
 
 func newInstanceTopCommand() *cobra.Command {
@@ -84,5 +84,5 @@ func runInstanceTopCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return render(cmd, &printableProcesses{Processes: resp.GetProcesses()})
+	return render(cmd, &printableProcess{Processes: resp.GetProcesses()})
 }

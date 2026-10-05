@@ -19,10 +19,10 @@ import (
 )
 
 // writeGuestLog puts a serial console log where the hypervisor would.
-func writeGuestLog(t *testing.T, mgr *Manager, inst types.InstanceSpec, contents string) string {
+func writeGuestLog(t *testing.T, manager *Manager, instance types.InstanceSpec, contents string) string {
 	t.Helper()
 
-	path, err := mgr.logPath(inst, LogSourceGuest)
+	path, err := manager.logPath(instance, LogSourceGuest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,12 +37,12 @@ func writeGuestLog(t *testing.T, mgr *Manager, inst types.InstanceSpec, contents
 }
 
 func TestStreamLogs(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
-	inst := seedInstance(t, definitions, "web")
-	writeGuestLog(t, mgr, inst, "booting\nready\n")
+	manager, definitions, _ := newTestManager(t)
+	instance := seedInstance(t, definitions, "web")
+	writeGuestLog(t, manager, instance, "booting\nready\n")
 
 	var out bytes.Buffer
-	if err := mgr.StreamLogs(t.Context(), inst, LogOptions{}, &out); err != nil {
+	if err := manager.StreamLogs(t.Context(), instance, LogOptions{}, &out); err != nil {
 		t.Fatalf("StreamLogs: %v", err)
 	}
 
@@ -52,14 +52,14 @@ func TestStreamLogs(t *testing.T) {
 }
 
 func TestStreamLogsTail(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
-	inst := seedInstance(t, definitions, "web")
+	manager, definitions, _ := newTestManager(t)
+	instance := seedInstance(t, definitions, "web")
 
 	var sb strings.Builder
 	for i := range 500 {
 		fmt.Fprintf(&sb, "line %d\n", i)
 	}
-	writeGuestLog(t, mgr, inst, sb.String())
+	writeGuestLog(t, manager, instance, sb.String())
 
 	tests := []struct {
 		tail      int
@@ -74,7 +74,7 @@ func TestStreamLogsTail(t *testing.T) {
 
 	for _, tt := range tests {
 		var out bytes.Buffer
-		if err := mgr.StreamLogs(t.Context(), inst, LogOptions{TailLines: tt.tail}, &out); err != nil {
+		if err := manager.StreamLogs(t.Context(), instance, LogOptions{TailLines: tt.tail}, &out); err != nil {
 			t.Fatalf("StreamLogs(tail=%d): %v", tt.tail, err)
 		}
 
@@ -91,8 +91,8 @@ func TestStreamLogsTail(t *testing.T) {
 // TestStreamLogsTailSpansChunks covers a tail that has to read back through
 // more than one chunk of the file.
 func TestStreamLogsTailSpansChunks(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
-	inst := seedInstance(t, definitions, "web")
+	manager, definitions, _ := newTestManager(t)
+	instance := seedInstance(t, definitions, "web")
 
 	line := strings.Repeat("x", 1000) + "\n"
 	var sb strings.Builder
@@ -100,10 +100,10 @@ func TestStreamLogsTailSpansChunks(t *testing.T) {
 		sb.WriteString(line)
 	}
 	sb.WriteString("last\n")
-	writeGuestLog(t, mgr, inst, sb.String())
+	writeGuestLog(t, manager, instance, sb.String())
 
 	var out bytes.Buffer
-	if err := mgr.StreamLogs(t.Context(), inst, LogOptions{TailLines: 2}, &out); err != nil {
+	if err := manager.StreamLogs(t.Context(), instance, LogOptions{TailLines: 2}, &out); err != nil {
 		t.Fatalf("StreamLogs: %v", err)
 	}
 
@@ -119,12 +119,12 @@ func TestStreamLogsTailSpansChunks(t *testing.T) {
 // when the instance does, rather than hanging on a file nothing will write
 // to again.
 func TestStreamLogsFollowStopsWithInstance(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
-	inst := seedInstance(t, definitions, "web")
-	path := writeGuestLog(t, mgr, inst, "booting\n")
+	manager, definitions, _ := newTestManager(t)
+	instance := seedInstance(t, definitions, "web")
+	path := writeGuestLog(t, manager, instance, "booting\n")
 
 	pid := os.Getpid()
-	if err := mgr.writeRuntime(types.InstanceStatus{InstanceID: inst.ID, State: types.StateRunning, HypervisorPID: &pid}); err != nil {
+	if err := manager.writeStatus(types.InstanceStatus{InstanceID: instance.ID, State: types.InstanceStateRunning, VMMPID: &pid}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,7 +134,7 @@ func TestStreamLogsFollowStopsWithInstance(t *testing.T) {
 		done = make(chan error, 1)
 	)
 	go func() {
-		done <- mgr.StreamLogs(t.Context(), inst, LogOptions{Follow: true}, &lockedWriter{mu: &mu, w: &out})
+		done <- manager.StreamLogs(t.Context(), instance, LogOptions{Follow: true}, &lockedWriter{mu: &mu, w: &out})
 	}()
 
 	// Output written while it runs is followed.
@@ -149,8 +149,8 @@ func TestStreamLogsFollowStopsWithInstance(t *testing.T) {
 
 	// Stopping the instance ends the stream.
 	time.Sleep(2 * logPollInterval)
-	forceState(t, mgr, inst.ID, types.StateStopping)
-	forceState(t, mgr, inst.ID, types.StateStopped)
+	forceState(t, manager, instance.ID, types.InstanceStateStopping)
+	forceState(t, manager, instance.ID, types.InstanceStateStopped)
 
 	select {
 	case err := <-done:
@@ -172,14 +172,14 @@ func TestStreamLogsFollowStopsWithInstance(t *testing.T) {
 // instance still starting follows its boot, rather than ending before it has
 // run: an attached 'dicer run' follows the console from the start.
 func TestStreamLogsFollowsAStartingInstance(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
-	inst := seedInstance(t, definitions, "web")
-	writeGuestLog(t, mgr, inst, "booting\n")
-	forceState(t, mgr, inst.ID, types.StateStarting)
+	manager, definitions, _ := newTestManager(t)
+	instance := seedInstance(t, definitions, "web")
+	writeGuestLog(t, manager, instance, "booting\n")
+	forceState(t, manager, instance.ID, types.InstanceStateStarting)
 
 	done := make(chan error, 1)
 	go func() {
-		done <- mgr.StreamLogs(t.Context(), inst, LogOptions{Follow: true}, &bytes.Buffer{})
+		done <- manager.StreamLogs(t.Context(), instance, LogOptions{Follow: true}, &bytes.Buffer{})
 	}()
 
 	select {
@@ -188,7 +188,7 @@ func TestStreamLogsFollowsAStartingInstance(t *testing.T) {
 	case <-time.After(3 * logPollInterval):
 	}
 
-	forceState(t, mgr, inst.ID, types.StateFailed)
+	forceState(t, manager, instance.ID, types.InstanceStateFailed)
 
 	select {
 	case <-done:
@@ -198,20 +198,20 @@ func TestStreamLogsFollowsAStartingInstance(t *testing.T) {
 }
 
 func TestStreamLogsMissing(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
-	inst := seedInstance(t, definitions, "web")
+	manager, definitions, _ := newTestManager(t)
+	instance := seedInstance(t, definitions, "web")
 
-	err := mgr.StreamLogs(t.Context(), inst, LogOptions{}, &bytes.Buffer{})
+	err := manager.StreamLogs(t.Context(), instance, LogOptions{}, &bytes.Buffer{})
 	if !errors.Is(err, errdefs.ErrNotFound) {
 		t.Errorf("StreamLogs with no log = %v, want ErrNotFound", err)
 	}
 }
 
 func TestStreamLogsUnknownSource(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
-	inst := seedInstance(t, definitions, "web")
+	manager, definitions, _ := newTestManager(t)
+	instance := seedInstance(t, definitions, "web")
 
-	err := mgr.StreamLogs(t.Context(), inst, LogOptions{Source: "syslog"}, &bytes.Buffer{})
+	err := manager.StreamLogs(t.Context(), instance, LogOptions{Source: "syslog"}, &bytes.Buffer{})
 	if !errors.Is(err, errdefs.ErrInvalidArgument) {
 		t.Errorf("StreamLogs of an unknown source = %v, want ErrInvalidArgument", err)
 	}

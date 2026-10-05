@@ -16,17 +16,17 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// CreateTAP creates a TAP device for a pre-allocated network allocation
-// (IP and MAC already assigned by internal/network). The TAP is attached to
-// the network's bridge and bandwidth limits are applied if configured.
+// CreateTAP creates the TAP device of an instance's network allocation,
+// replacing a stale one of the same name, attaches it to the network's
+// bridge and applies bw's limits. On failure the device may be left behind
+// for RemoveTAP.
 func (h *Host) CreateTAP(
-	ctx context.Context, nw *types.Network, alloc *types.NetworkAllocation, bw network.Bandwidth,
+	ctx context.Context, nw *types.Network, allocation *types.NetworkAllocation, bw network.Bandwidth,
 ) error {
-	tap := network.TAPName(alloc.InstanceID)
+	tap := network.TAPName(allocation.InstanceID)
 
-	// Remove a stale device of the same name if one exists.
 	if _, err := netlink.LinkByName(tap); err == nil {
-		if err := removeUploadLimit(nw.Bridge, tcClassID(tap)); err != nil {
+		if err := removeUploadLimit(nw.Bridge, tap); err != nil {
 			h.logger.WarnContext(ctx, "failed to remove stale upload limit",
 				"bridge", nw.Bridge, "tap", tap, "error", err)
 		}
@@ -35,9 +35,9 @@ func (h *Host) CreateTAP(
 		}
 	}
 
-	if err := createTAP(tap, nw.Bridge, nw.Isolated); err != nil {
+	if err := addTAP(tap, nw.Bridge, nw.Isolated); err != nil {
 		_ = deleteTAP(tap)
-		return fmt.Errorf("create TAP device: %w", err)
+		return err
 	}
 
 	if bw.DownloadBps > 0 {
@@ -51,7 +51,7 @@ func (h *Host) CreateTAP(
 		if burstBps <= 0 {
 			burstBps = bw.UploadBps * int64(h.config.UploadBurstMultiplier)
 		}
-		if err := limitUpload(nw.Bridge, tap, tcClassID(tap), bw.UploadBps, burstBps); err != nil {
+		if err := limitUpload(nw.Bridge, tap, bw.UploadBps, burstBps); err != nil {
 			return fmt.Errorf("apply upload limit: %w", err)
 		}
 	}
@@ -59,11 +59,11 @@ func (h *Host) CreateTAP(
 	return nil
 }
 
-// RemoveTAP removes the TAP device and its bandwidth limits for an instance.
-// Best-effort: logs failures but does not return an error.
+// RemoveTAP removes an instance's TAP device and its bandwidth limits.
+// Best-effort: it logs failures rather than returning them.
 func (h *Host) RemoveTAP(ctx context.Context, nw *types.Network, instanceID string) {
 	tap := network.TAPName(instanceID)
-	if err := removeUploadLimit(nw.Bridge, tcClassID(tap)); err != nil {
+	if err := removeUploadLimit(nw.Bridge, tap); err != nil {
 		h.logger.WarnContext(ctx, "failed to remove upload limit",
 			"network_id", nw.ID, "instance_id", instanceID, "tap", tap, "error", err)
 	}
@@ -73,7 +73,9 @@ func (h *Host) RemoveTAP(ctx context.Context, nw *types.Network, instanceID stri
 	}
 }
 
-func createTAP(name, bridge string, isolated bool) error {
+// addTAP adds a TAP device, owned by this process's user, and attaches it to
+// the bridge.
+func addTAP(name, bridge string, isolated bool) error {
 	uid, gid := os.Getuid(), os.Getgid()
 	tap := &netlink.Tuntap{
 		LinkAttrs: netlink.LinkAttrs{Name: name},
@@ -87,7 +89,7 @@ func createTAP(name, bridge string, isolated bool) error {
 
 	tapLink, err := netlink.LinkByName(name)
 	if err != nil {
-		return fmt.Errorf("get TAP link %s: %w", name, err)
+		return fmt.Errorf("look up TAP %s: %w", name, err)
 	}
 	if err := netlink.LinkSetUp(tapLink); err != nil {
 		return fmt.Errorf("set TAP %s up: %w", name, err)
@@ -95,7 +97,7 @@ func createTAP(name, bridge string, isolated bool) error {
 
 	br, err := netlink.LinkByName(bridge)
 	if err != nil {
-		return fmt.Errorf("get bridge %s: %w", bridge, err)
+		return fmt.Errorf("look up bridge %s: %w", bridge, err)
 	}
 	if err := netlink.LinkSetMaster(tapLink, br); err != nil {
 		return fmt.Errorf("attach TAP %s to bridge %s: %w", name, bridge, err)
@@ -112,6 +114,7 @@ func createTAP(name, bridge string, isolated bool) error {
 	return nil
 }
 
+// deleteTAP deletes the named TAP device, if it exists.
 func deleteTAP(name string) error {
 	link, err := netlink.LinkByName(name)
 	if err != nil {

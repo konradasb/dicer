@@ -1,7 +1,7 @@
 // Copyright 2026 Dicer Authors
 // SPDX-License-Identifier: MIT
 
-// Package kernel downloads and caches guest kernels, verifying their SHA-256
+// Package kernel fetches and caches guest kernels, verifying their SHA-256
 // when given.
 package kernel
 
@@ -29,23 +29,26 @@ import (
 
 // Config configures a Manager.
 type Config struct {
+	// DataDir holds the kernels, under kernels/<id>; it is required.
 	DataDir string
+	// Metrics and Events default to discarding what they are given.
 	Metrics Metrics
-	Events  Events
-	Logger  *slog.Logger
+	Events  Recorder
+	// Logger defaults to slog.Default.
+	Logger *slog.Logger
 }
 
-// Events records the kernels fetched. It is declared here, and satisfied by
+// Recorder records the kernels fetched. It is declared here, and satisfied by
 // internal/events, so that this package reports what it does without knowing
 // who listens.
-type Events interface {
+type Recorder interface {
 	Record(e events.Event)
 }
 
-// discardEvents is the Events used when none is configured.
-type discardEvents struct{}
+// discardRecorder is the Recorder used when none is configured.
+type discardRecorder struct{}
 
-func (discardEvents) Record(events.Event) {}
+func (discardRecorder) Record(events.Event) {}
 
 // Metrics records how fetches went. It is declared here, and satisfied by
 // internal/metrics, so this package measures itself without depending on a
@@ -66,16 +69,17 @@ func (discardMetrics) RecordKernelFetch(error, time.Duration, int64) {}
 type fetchFunc func(ctx context.Context, url, dst string) (int64, error)
 
 // Manager caches kernel binaries on local disk, fetching each on first use.
+// It is safe for concurrent use.
 type Manager struct {
 	dataDir   string
 	fetchFunc fetchFunc
-	fetches   singleflight.Group // one download per kernel at a time
+	fetches   singleflight.Group // one fetch per kernel at a time
 	metrics   Metrics
-	events    Events
+	events    Recorder
 	logger    *slog.Logger
 }
 
-// NewManager creates a kernel Manager.
+// NewManager returns a Manager for the kernels under cfg.DataDir.
 func NewManager(cfg Config) (*Manager, error) {
 	if cfg.DataDir == "" {
 		return nil, errors.New("data directory is required")
@@ -84,55 +88,56 @@ func NewManager(cfg Config) (*Manager, error) {
 		cfg.Metrics = discardMetrics{}
 	}
 	if cfg.Events == nil {
-		cfg.Events = discardEvents{}
+		cfg.Events = discardRecorder{}
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
 
-	s := &Manager{
+	return &Manager{
 		dataDir:   cfg.DataDir,
 		fetchFunc: fetchURL,
 		metrics:   cfg.Metrics,
 		events:    cfg.Events,
 		logger:    cfg.Logger.With("component", "kernel"),
-	}
-
-	return s, nil
+	}, nil
 }
 
-// kernelDir returns the directory for a specific kernel ID.
-func (m *Manager) kernelDir(id string) string {
+// dir returns the directory holding the binary of the kernel with the given
+// ID.
+func (m *Manager) dir(id string) string {
 	return filepath.Join(m.dataDir, "kernels", id)
 }
 
-// kernelPath returns the full path to a kernel binary.
-func (m *Manager) kernelPath(id string) string {
-	return filepath.Join(m.kernelDir(id), "vmlinux")
+// binaryPath returns the path of the binary of the kernel with the given ID.
+func (m *Manager) binaryPath(id string) string {
+	return filepath.Join(m.dir(id), "vmlinux")
 }
 
-// Path returns the local path to a kernel's binary, downloading it if it is
-// missing or its checksum does not match.
+// Path returns the local path to a kernel's binary, fetching it if it is
+// missing or its checksum does not match. Concurrent callers share one
+// fetch, which goes on when ctx is cancelled so that the others still get
+// the kernel.
 func (m *Manager) Path(ctx context.Context, k types.Kernel) (string, error) {
-	localPath := m.kernelPath(k.ID)
+	path := m.binaryPath(k.ID)
 
-	if m.cached(localPath, k.SHA256) {
-		return localPath, nil
+	if m.cached(path, k.SHA256) {
+		return path, nil
 	}
 
 	if k.URL == "" {
 		return "", fmt.Errorf("kernel %q has no URL to fetch from", k.Name)
 	}
 
-	// Concurrent callers share one download, bounded by fetchTimeout rather
+	// Concurrent callers share one fetch, bounded by fetchTimeout rather
 	// than any caller's cancellation.
 	results := m.fetches.DoChan(k.ID, func() (any, error) {
-		if m.cached(localPath, k.SHA256) {
-			return localPath, nil
+		if m.cached(path, k.SHA256) {
+			return path, nil
 		}
 		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), fetchTimeout)
 		defer cancel()
-		return localPath, m.fetch(fetchCtx, k, localPath)
+		return path, m.fetch(fetchCtx, k, path)
 	})
 
 	select {
@@ -140,38 +145,38 @@ func (m *Manager) Path(ctx context.Context, k types.Kernel) (string, error) {
 		if r.Err != nil {
 			return "", r.Err
 		}
-		return localPath, nil
+		return path, nil
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}
 }
 
-// fetchTimeout bounds a kernel download.
+// fetchTimeout bounds a kernel fetch.
 const fetchTimeout = 10 * time.Minute
 
-// fetch downloads a kernel beside path, verifies it and only then renames it
-// into place, so that path never holds a partial or unverified kernel -- which
-// a copy without a checksum to check it against would be trusted as.
+// fetch fetches a kernel beside path, verifies it and only then renames it
+// into place, so that path never holds a partial or unverified kernel: a copy
+// without a checksum to check it against is trusted as it is.
 func (m *Manager) fetch(ctx context.Context, k types.Kernel, path string) (err error) {
 	var fetched int64
 	started := time.Now()
 	defer func() { m.metrics.RecordKernelFetch(err, time.Since(started), fetched) }()
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return fmt.Errorf("create kernel dir: %w", err)
+		return fmt.Errorf("create kernel directory: %w", err)
 	}
 
-	m.logger.InfoContext(ctx, "downloading kernel", "kernel", k.Name, "url", k.URL)
+	m.logger.InfoContext(ctx, "fetching kernel", "kernel", k.Name, "url", k.URL)
 
-	tmp := path + ".download"
-	defer func() { _ = os.Remove(tmp) }()
+	partial := path + ".download"
+	defer func() { _ = os.Remove(partial) }()
 
-	if fetched, err = m.fetchFunc(ctx, k.URL, tmp); err != nil {
-		return fmt.Errorf("download kernel %q: %w", k.Name, err)
+	if fetched, err = m.fetchFunc(ctx, k.URL, partial); err != nil {
+		return fmt.Errorf("fetch kernel %q: %w", k.Name, err)
 	}
 
 	if k.SHA256 != "" {
-		computed, err := computeSHA256(tmp)
+		computed, err := fileSHA256(partial)
 		if err != nil {
 			return fmt.Errorf("checksum kernel %q: %w", k.Name, err)
 		}
@@ -180,7 +185,7 @@ func (m *Manager) fetch(ctx context.Context, k types.Kernel, path string) (err e
 		}
 	}
 
-	if err := os.Rename(tmp, path); err != nil {
+	if err := os.Rename(partial, path); err != nil {
 		return fmt.Errorf("install kernel %q: %w", k.Name, err)
 	}
 
@@ -201,28 +206,27 @@ func (m *Manager) recordFetched(k types.Kernel, d time.Duration, fetchedBytes in
 		ID:     k.ID,
 		Name:   k.Name,
 		Action: events.ActionFetched,
-		Message: fmt.Sprintf("Fetched kernel from %s in %s: %s, %s", k.URL, humanize.Duration(d),
-			humanize.Bytes(fetchedBytes),
-			verified),
+		Message: fmt.Sprintf("Fetched kernel from %s in %s: %s, %s",
+			k.URL, humanize.Duration(d), humanize.Bytes(fetchedBytes), verified),
 		Attributes: map[string]string{"url": k.URL, "fetched_bytes": strconv.FormatInt(fetchedBytes, 10)},
 	})
 }
 
 // cached reports whether a usable copy is already on disk. An unverifiable or
 // mismatched copy counts as absent.
-func (m *Manager) cached(path, wantSHA string) bool {
+func (m *Manager) cached(path, wantSHA256 string) bool {
 	if _, err := os.Stat(path); err != nil {
 		return false
 	}
-	if wantSHA == "" {
+	if wantSHA256 == "" {
 		return true
 	}
 
-	got, err := computeSHA256(path)
+	got, err := fileSHA256(path)
 	if err != nil {
 		return false
 	}
-	if got != wantSHA {
+	if got != wantSHA256 {
 		m.logger.Warn("cached kernel failed checksum, refetching", "path", path)
 		return false
 	}
@@ -231,9 +235,9 @@ func (m *Manager) cached(path, wantSHA string) bool {
 }
 
 // DiskBytes returns the size of a kernel's binary on local disk, or 0 if it
-// has not been downloaded.
+// has not been fetched.
 func (m *Manager) DiskBytes(id string) int64 {
-	info, err := os.Stat(m.kernelPath(id))
+	info, err := os.Stat(m.binaryPath(id))
 	if err != nil {
 		return 0
 	}
@@ -241,13 +245,14 @@ func (m *Manager) DiskBytes(id string) int64 {
 	return info.Size()
 }
 
-// Delete removes a kernel's binary from local disk.
+// Delete removes a kernel's binary from local disk. Deleting one that is not
+// on disk is not an error.
 func (m *Manager) Delete(id string) error {
-	return os.RemoveAll(m.kernelDir(id))
+	return os.RemoveAll(m.dir(id))
 }
 
-// computeSHA256 returns the lower-hex SHA-256 digest of the file at path.
-func computeSHA256(path string) (string, error) {
+// fileSHA256 returns the lower-hex SHA-256 digest of the file at path.
+func fileSHA256(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", fmt.Errorf("open file: %w", err)
@@ -265,8 +270,13 @@ func computeSHA256(path string) (string, error) {
 // fetchURL downloads from an http(s) URL, or copies from a local path given
 // as file:// or as an absolute path.
 func fetchURL(ctx context.Context, url, dst string) (int64, error) {
-	if local := localSource(url); local != "" {
-		return copyLocal(local, dst)
+	if local := localPath(url); local != "" {
+		f, err := os.Open(local)
+		if err != nil {
+			return 0, fmt.Errorf("open local file: %w", err)
+		}
+		defer func() { _ = f.Close() }()
+		return createFile(dst, f)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
@@ -284,12 +294,12 @@ func fetchURL(ctx context.Context, url, dst string) (int64, error) {
 		return 0, fmt.Errorf("unexpected HTTP status %s", resp.Status)
 	}
 
-	return writeTo(dst, resp.Body)
+	return createFile(dst, resp.Body)
 }
 
-// localSource returns the filesystem path a URL refers to, or "" if it is not
+// localPath returns the filesystem path a URL refers to, or "" if it is not
 // a local reference.
-func localSource(url string) string {
+func localPath(url string) string {
 	if after, ok := strings.CutPrefix(url, "file://"); ok {
 		return after
 	}
@@ -300,19 +310,9 @@ func localSource(url string) string {
 	return ""
 }
 
-func copyLocal(src, dst string) (int64, error) {
-	f, err := os.Open(src)
-	if err != nil {
-		return 0, fmt.Errorf("open local file: %w", err)
-	}
-	defer func() { _ = f.Close() }()
-
-	return writeTo(dst, f)
-}
-
-// writeTo streams src into a new file at dst, checking the Close error, and
-// returns the bytes it wrote, even on failure.
-func writeTo(dst string, src io.Reader) (n int64, err error) {
+// createFile streams src into a new executable file at dst, synced to disk,
+// and returns the bytes it wrote, even on failure. On failure it removes dst.
+func createFile(dst string, src io.Reader) (n int64, err error) {
 	f, err := os.Create(dst)
 	if err != nil {
 		return 0, fmt.Errorf("create file: %w", err)

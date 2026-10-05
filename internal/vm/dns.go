@@ -18,12 +18,12 @@ import (
 // are running, or starting, are found: a stopped one's address answers
 // nothing.
 func (m *Manager) LookupHost(network, name string) []netip.Addr {
-	found := m.answerableInstances(network, func(inst types.InstanceSpec) bool {
-		return strings.EqualFold(inst.Name, name) || strings.EqualFold(inst.Hostname, name)
+	found := m.answerableInstances(network, func(instance types.InstanceSpec) bool {
+		return strings.EqualFold(instance.Name, name) || strings.EqualFold(instance.Hostname, name)
 	})
 	out := make([]netip.Addr, 0, len(found))
-	for _, inst := range found {
-		out = append(out, inst.addr)
+	for _, instance := range found {
+		out = append(out, instance.addr)
 	}
 	return out
 }
@@ -36,7 +36,7 @@ func (m *Manager) LookupAddr(network string, addr netip.Addr) []string {
 		return nil
 	}
 
-	found := m.answerableInstances(network, func(inst types.InstanceSpec) bool { return inst.ID == instanceID })
+	found := m.answerableInstances(network, func(instance types.InstanceSpec) bool { return instance.ID == instanceID })
 	if len(found) == 0 {
 		return nil
 	}
@@ -59,25 +59,25 @@ type answerableInstance struct {
 // every query asks, most of them about names no instance has, and an
 // instance's state is read from disk.
 func (m *Manager) answerableInstances(network string, matches func(types.InstanceSpec) bool) []answerableInstance {
-	instances := m.definitions.MatchingInstances(func(inst types.InstanceSpec) bool {
-		return inst.NetworkName == network && matches(inst)
+	instances := m.definitions.MatchingInstances(func(instance types.InstanceSpec) bool {
+		return instance.NetworkName == network && matches(instance)
 	})
 
 	var out []answerableInstance
-	for _, inst := range instances {
-		rt, err := m.Runtime(inst)
-		if err != nil || (!rt.State.IsActive() && rt.State != types.StateStarting) {
+	for _, instance := range instances {
+		status, err := m.Status(instance)
+		if err != nil || (!status.State.IsActive() && status.State != types.InstanceStateStarting) {
 			continue
 		}
-		alloc, err := m.networks.Get(network, inst.ID)
+		allocation, err := m.networks.Allocation(network, instance.ID)
 		if err != nil {
 			continue
 		}
-		addr, err := netip.ParseAddr(alloc.IP)
+		addr, err := netip.ParseAddr(allocation.IP)
 		if err != nil {
 			continue
 		}
-		out = append(out, answerableInstance{spec: inst, addr: addr})
+		out = append(out, answerableInstance{spec: instance, addr: addr})
 	}
 	return out
 }

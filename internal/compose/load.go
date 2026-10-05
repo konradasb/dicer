@@ -11,13 +11,9 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"regexp"
-	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/konradasb/dicer/internal/naming"
 )
 
 // FileNames are the names a compose file is looked for under, in order.
@@ -59,7 +55,7 @@ func Load(opts Options) (*Project, error) {
 		return nil, err
 	}
 
-	lookup, err := environment(opts, dir)
+	lookup, err := variableLookup(opts, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -113,9 +109,9 @@ func findFile(opts Options) (string, error) {
 	}
 }
 
-// environment returns what variables are looked up in: the process's, then
-// the env file's.
-func environment(opts Options, dir string) (Lookup, error) {
+// variableLookup returns what variables are looked up in: the environment's,
+// then the env file's.
+func variableLookup(opts Options, dir string) (Lookup, error) {
 	lookup := opts.Lookup
 	if lookup == nil {
 		lookup = os.LookupEnv
@@ -221,6 +217,8 @@ func expandAliases(n *yaml.Node) {
 	}
 }
 
+// deepCopy returns a copy of n and everything under it, with aliases
+// resolved and anchors dropped.
 func deepCopy(n *yaml.Node) *yaml.Node {
 	for n.Kind == yaml.AliasNode {
 		n = n.Alias
@@ -282,7 +280,7 @@ func applyMerges(n *yaml.Node) {
 // dropExtensions removes the x- keys Docker Compose leaves for tools and
 // anchors: at the top level, and in each service, network and volume.
 func dropExtensions(root *yaml.Node) {
-	dropXKeys(root)
+	dropExtensionKeys(root)
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		switch root.Content[i].Value {
 		case "services", "networks", "volumes":
@@ -291,13 +289,14 @@ func dropExtensions(root *yaml.Node) {
 				continue
 			}
 			for j := 1; j < len(section.Content); j += 2 {
-				dropXKeys(section.Content[j])
+				dropExtensionKeys(section.Content[j])
 			}
 		}
 	}
 }
 
-func dropXKeys(n *yaml.Node) {
+// dropExtensionKeys removes the x- keys of a mapping.
+func dropExtensionKeys(n *yaml.Node) {
 	if n.Kind != yaml.MappingNode {
 		return
 	}
@@ -415,210 +414,4 @@ func refuseUnsupported(root *yaml.Node) error {
 		}
 	}
 	return nil
-}
-
-// notProjectNameChars are what a directory's name loses to become a
-// project's.
-var notProjectNameChars = regexp.MustCompile(`[^a-z0-9-]+`)
-
-// projectNameFromDir makes a project name from a directory's name, as Docker
-// Compose does: lower case, with what a name cannot hold replaced.
-func projectNameFromDir(dir string) string {
-	name := notProjectNameChars.ReplaceAllString(strings.ToLower(filepath.Base(dir)), "-")
-	return strings.Trim(name, "-")
-}
-
-// builder turns a decoded file into a project.
-type builder struct {
-	dir    string
-	lookup Lookup
-	p      *Project
-}
-
-func (b *builder) project(raw *rawFile, name string) (*Project, error) {
-	if name == "" {
-		name = raw.Name
-	}
-	if name == "" {
-		name = projectNameFromDir(b.dir)
-	}
-	if err := naming.Validate(name); err != nil {
-		return nil, fmt.Errorf("project name %q: use letters, digits and hyphens, starting and ending "+
-			"with a letter or digit; set another with -p or name", name)
-	}
-
-	b.p = &Project{
-		Name:     name,
-		Dir:      b.dir,
-		Services: make(map[string]*Service),
-		Networks: make(map[string]*Network),
-		Volumes:  make(map[string]*Volume),
-	}
-
-	if len(raw.Services) == 0 {
-		return nil, errors.New("the file has no services")
-	}
-
-	for key, n := range raw.Networks {
-		network, err := b.network(key, n)
-		if err != nil {
-			return nil, fmt.Errorf("network %s: %w", key, err)
-		}
-		b.p.Networks[key] = network
-	}
-	// Services that name no network join one of the project's own, so that
-	// their names are theirs alone: a db of another project's is not on it.
-	if _, ok := b.p.Networks["default"]; !ok && slices.ContainsFunc(
-		slices.Collect(maps.Values(raw.Services)),
-		func(s *rawService) bool { return s != nil && len(s.Networks.names) == 0 },
-	) {
-		network, err := b.network("default", nil)
-		if err != nil {
-			return nil, fmt.Errorf("network default: %w", err)
-		}
-		b.p.Networks["default"] = network
-	}
-	for key, v := range raw.Volumes {
-		volume, err := b.volume(key, v)
-		if err != nil {
-			return nil, fmt.Errorf("volume %s: %w", key, err)
-		}
-		b.p.Volumes[key] = volume
-	}
-
-	for _, key := range slices.Sorted(maps.Keys(raw.Services)) {
-		s := raw.Services[key]
-		if s == nil {
-			return nil, fmt.Errorf("service %s: it needs an image", key)
-		}
-		service, err := b.service(key, s)
-		if err != nil {
-			return nil, fmt.Errorf("service %s: %w", key, err)
-		}
-		b.p.Services[key] = service
-	}
-
-	if err := b.checkDependencies(); err != nil {
-		return nil, err
-	}
-	if err := b.checkInstanceNames(); err != nil {
-		return nil, err
-	}
-	return b.p, nil
-}
-
-// resourceName is the daemon's name for a project's own network or volume:
-// the project's name, then the file's.
-func (b *builder) resourceName(key, name string, external bool) (string, error) {
-	switch {
-	case name != "":
-	case external:
-		name = key
-	default:
-		name = b.p.Name + "-" + key
-	}
-
-	if err := naming.Validate(name); err != nil {
-		return "", fmt.Errorf("%q cannot be a name: use letters, digits and hyphens", name)
-	}
-	return name, nil
-}
-
-// checkDependencies refuses a dependency on a service that is not there, or
-// a cycle of them.
-func (b *builder) checkDependencies() error {
-	for _, name := range b.p.ServiceNames() {
-		for _, dep := range b.p.Services[name].DependsOn {
-			if dep.Service == name {
-				return fmt.Errorf("service %s depends on itself", name)
-			}
-			if _, ok := b.p.Services[dep.Service]; !ok {
-				return fmt.Errorf("service %s depends on %s, which is not a service", name, dep.Service)
-			}
-		}
-	}
-
-	const (
-		unvisited = iota
-		visiting
-		done
-	)
-	state := make(map[string]int)
-	var path []string
-	var visit func(name string) error
-	visit = func(name string) error {
-		switch state[name] {
-		case visiting:
-			start := slices.Index(path, name)
-			cycle := append(slices.Clone(path[start:]), name)
-			return fmt.Errorf("services depend on each other in a cycle: %s", strings.Join(cycle, " -> "))
-		case done:
-			return nil
-		}
-
-		state[name] = visiting
-		path = append(path, name)
-		for _, dep := range b.p.Services[name].DependsOn {
-			if err := visit(dep.Service); err != nil {
-				return err
-			}
-		}
-		path = path[:len(path)-1]
-		state[name] = done
-		return nil
-	}
-
-	for _, name := range b.p.ServiceNames() {
-		if err := visit(name); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// checkInstanceNames refuses two services with one instance name, which
-// container_name can give them.
-func (b *builder) checkInstanceNames() error {
-	seen := make(map[string]string)
-	for _, name := range b.p.ServiceNames() {
-		instance := b.p.Services[name].Instance.GetName()
-		if other, ok := seen[instance]; ok {
-			return fmt.Errorf("services %s and %s would both be instance %s", other, name, instance)
-		}
-		seen[instance] = name
-	}
-	return nil
-}
-
-// resolvePath makes a path from the file absolute: from the project
-// directory, or from the home directory for one starting ~.
-func (b *builder) resolvePath(path string) (string, error) {
-	if rest, ok := strings.CutPrefix(path, "~"); ok && (rest == "" || strings.HasPrefix(rest, "/")) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(home, rest), nil
-	}
-	if filepath.IsAbs(path) {
-		return filepath.Clean(path), nil
-	}
-	return filepath.Join(b.dir, path), nil
-}
-
-// readEnvFile reads an env_file, relative to the project directory.
-func (b *builder) readEnvFile(path string) (map[string]*string, error) {
-	abs, err := b.resolvePath(path)
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(abs)
-	if err != nil {
-		return nil, fmt.Errorf("env_file: %w", err)
-	}
-	vars, err := parseEnvFile(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("env_file %s: %w", path, err)
-	}
-	return vars, nil
 }

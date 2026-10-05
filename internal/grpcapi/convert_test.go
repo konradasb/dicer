@@ -4,17 +4,15 @@
 package grpcapi
 
 import (
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/types"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
-func TestInstanceToProtoRuntimeFields(t *testing.T) {
-	inst := types.InstanceSpec{
+func TestInstanceToProtoStatusFields(t *testing.T) {
+	instance := types.InstanceSpec{
 		ID:          "id-web",
 		Name:        "web",
 		ImageRef:    "docker.io/library/alpine:3.21",
@@ -26,8 +24,8 @@ func TestInstanceToProtoRuntimeFields(t *testing.T) {
 		CreatedAt:   time.Now(),
 	}
 
-	t.Run("stopped instance carries no runtime detail", func(t *testing.T) {
-		got := instanceToProto(types.Instance{Spec: inst, Status: types.InstanceStatus{State: types.StateStopped}})
+	t.Run("stopped instance carries no status detail", func(t *testing.T) {
+		got := instanceToProto(types.Instance{Spec: instance, Status: types.InstanceStatus{State: types.InstanceStateStopped}})
 
 		if got.GetState() != dicerdv1.InstanceState_INSTANCE_STATE_STOPPED {
 			t.Errorf("state = %v, want stopped", got.GetState())
@@ -39,21 +37,21 @@ func TestInstanceToProtoRuntimeFields(t *testing.T) {
 			t.Errorf("pid = %d, want 0 for a stopped instance", got.GetHypervisorPid())
 		}
 		if got.GetStartTime() != nil {
-			t.Error("startedAt should be unset for a stopped instance")
+			t.Errorf("start time = %v, want unset for a stopped instance", got.GetStartTime())
 		}
 	})
 
 	t.Run("running instance carries pid and address", func(t *testing.T) {
 		pid := 4242
-		rt := types.InstanceStatus{
-			State:             types.StateRunning,
-			HypervisorPID:     &pid,
+		status := types.InstanceStatus{
+			State:             types.InstanceStateRunning,
+			VMMPID:            &pid,
 			HypervisorVersion: "v49.0.0",
 			StartedAt:         time.Now(),
 		}
-		rt.IP, rt.MAC = "10.0.0.5", "02:00:00:00:00:01"
+		status.IP, status.MAC = "10.0.0.5", "02:00:00:00:00:01"
 
-		got := instanceToProto(types.Instance{Spec: inst, Status: rt})
+		got := instanceToProto(types.Instance{Spec: instance, Status: status})
 
 		if got.GetHypervisorPid() != int64(pid) {
 			t.Errorf("pid = %d, want %d", got.GetHypervisorPid(), pid)
@@ -68,7 +66,7 @@ func TestInstanceToProtoRuntimeFields(t *testing.T) {
 	})
 
 	t.Run("sizes are carried as bytes", func(t *testing.T) {
-		got := instanceToProto(types.Instance{Spec: inst, Status: types.InstanceStatus{State: types.StateStopped}})
+		got := instanceToProto(types.Instance{Spec: instance, Status: types.InstanceStatus{State: types.InstanceStateStopped}})
 
 		if got.GetMemoryBytes() != 2<<30 {
 			t.Errorf("memory = %d, want %d", got.GetMemoryBytes(), 2<<30)
@@ -80,17 +78,17 @@ func TestInstanceToProtoRuntimeFields(t *testing.T) {
 }
 
 func TestInstanceToProtoMounts(t *testing.T) {
-	inst := types.InstanceSpec{
+	instance := types.InstanceSpec{
 		ID:   "id-web",
 		Name: "web",
 		Mounts: []types.Mount{
-			{Type: types.MountVolume, Source: "data", Target: "/var/lib/data"},
-			{Type: types.MountFile, Source: "/etc/dicer/db-password", Target: "/run/secrets/db-password", ReadOnly: true},
+			{Type: types.MountTypeVolume, Source: "data", Target: "/var/lib/data"},
+			{Type: types.MountTypeFile, Source: "/etc/dicer/db-password", Target: "/run/secrets/db-password", ReadOnly: true},
 		},
 		Ports: []types.PortMapping{{HostPort: 8080, GuestPort: 80}},
 	}
 
-	got := instanceToProto(types.Instance{Spec: inst, Status: types.InstanceStatus{State: types.StateStopped}})
+	got := instanceToProto(types.Instance{Spec: instance, Status: types.InstanceStatus{State: types.InstanceStateStopped}})
 
 	mounts := got.GetMounts()
 	if len(mounts) != 2 {
@@ -143,43 +141,9 @@ func TestAllocationToProtoDerivesTAP(t *testing.T) {
 	}
 }
 
-func TestPortMappings(t *testing.T) {
-	t.Run("defaults the protocol to tcp", func(t *testing.T) {
-		got, err := portMappings([]*dicerdv1.PortMapping{{HostPort: 8080, GuestPort: 80}})
-		if err != nil {
-			t.Fatalf("portMappings: %v", err)
-		}
-		want := types.PortMapping{HostPort: 8080, GuestPort: 80, Protocol: types.ProtocolTCP}
-		if len(got) != 1 || got[0] != want {
-			t.Errorf("got %+v, want [%+v]", got, want)
-		}
-	})
-
-	t.Run("rejects invalid mappings", func(t *testing.T) {
-		cases := map[string][]*dicerdv1.PortMapping{
-			"port out of range": {{HostPort: 65536 + 80, GuestPort: 80}},
-			"missing port":      {{HostPort: 8080}},
-			"loopback":          {{HostIp: "127.0.0.1", HostPort: 8080, GuestPort: 80}},
-			"overlapping":       {{HostPort: 8080, GuestPort: 80}, {HostPort: 8080, GuestPort: 81}},
-		}
-		for name, in := range cases {
-			if _, err := portMappings(in); !errors.Is(err, errdefs.ErrInvalidArgument) {
-				t.Errorf("%s: err = %v, want InvalidArgument", name, err)
-			}
-		}
-	})
-
-	t.Run("empty input yields no mappings", func(t *testing.T) {
-		got, err := portMappings(nil)
-		if err != nil || got != nil {
-			t.Errorf("portMappings(nil) = %v, %v; want nil, nil", got, err)
-		}
-	})
-}
-
 // An instance that leaves the init mode to the guest says it is auto.
 func TestInstanceInitModeDefaultsToAuto(t *testing.T) {
-	if got := instanceToProto(types.Instance{Status: types.InstanceStatus{State: types.StateStopped}}).GetInitMode(); got != dicerdv1.InitMode_INIT_MODE_AUTO {
+	if got := instanceToProto(types.Instance{Status: types.InstanceStatus{State: types.InstanceStateStopped}}).GetInitMode(); got != dicerdv1.InitMode_INIT_MODE_AUTO {
 		t.Errorf("init mode of an instance with none = %v, want auto", got)
 	}
 }

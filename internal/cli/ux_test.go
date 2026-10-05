@@ -27,7 +27,7 @@ func TestResourcesCommandIsGone(t *testing.T) {
 func TestPsCompactByDefault(t *testing.T) {
 	instances := fakeInstances()
 	instances[0].StartTime = timestamppb.New(time.Now().Add(-3 * time.Minute))
-	serveInstanceDaemon(t, newFakeInstanceDaemon(instances...))
+	serveFakeDaemon(t, newFakeInstanceDaemon(instances...))
 
 	out, err := run(t, "ps")
 	if err != nil {
@@ -59,7 +59,7 @@ func TestPsCompactByDefault(t *testing.T) {
 }
 
 func TestDebugTracesCalls(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
+	serveFakeDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
 
 	out, err := run(t, "--debug", "ps", "-q")
 	if err != nil {
@@ -80,7 +80,7 @@ func TestDebugTracesCalls(t *testing.T) {
 func TestTimeout(t *testing.T) {
 	d := newFakeInstanceDaemon()
 	d.hostDelay = time.Second
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	_, err := run(t, "--timeout", "50ms", "info")
 	if err == nil || !strings.Contains(err.Error(), "GetHostInfo took longer than --timeout 50ms") {
@@ -89,7 +89,7 @@ func TestTimeout(t *testing.T) {
 }
 
 func TestDidYouMean(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
+	serveFakeDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
 
 	for _, args := range [][]string{{"stop", "wbe"}, {"inspect", "weeb"}} {
 		_, err := run(t, args...)
@@ -126,7 +126,7 @@ func TestCloseNames(t *testing.T) {
 func TestRunWithCachedImageSaysNothingOfIt(t *testing.T) {
 	d := newFakeInstanceDaemon()
 	d.cached["alpine:3.21"] = true
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	out, err := run(t, "run", "-d", "--name", "a", "alpine:3.21")
 	if err != nil {
@@ -144,7 +144,7 @@ func TestRunWithCachedImageSaysNothingOfIt(t *testing.T) {
 
 func TestImagePullReportsUpToDate(t *testing.T) {
 	d := newFakeInstanceDaemon()
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	if out, err := run(t, "pull", "nginx:1.27"); err != nil || !strings.Contains(out, "Image nginx:1.27 pulled in") ||
 		!strings.Contains(out, "sha256:0123456789ab,") {
@@ -156,7 +156,7 @@ func TestImagePullReportsUpToDate(t *testing.T) {
 }
 
 func TestPsWatch(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
+	serveFakeDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
 
 	cmd := NewCommand()
 	var out bytes.Buffer
@@ -189,7 +189,7 @@ func TestPsWatch(t *testing.T) {
 func TestInfoShowsDefaults(t *testing.T) {
 	d := newFakeInstanceDaemon()
 	d.host = &dicerdv1.GetHostInfoResponse{Version: "v1", DefaultNetwork: "default"}
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	out, err := run(t, "info")
 	if err != nil {
@@ -206,8 +206,8 @@ func TestInstanceStatusForAnInstanceThatEnded(t *testing.T) {
 	code := func(c int32) *int32 { return &c }
 
 	tests := []struct {
-		inst *dicerdv1.Instance
-		want string
+		instance *dicerdv1.Instance
+		want     string
 	}{
 		{&dicerdv1.Instance{State: stateStopped, ExitCode: code(0), FinishTime: ago}, "Exited (0) 2 minutes ago"},
 		{
@@ -222,9 +222,9 @@ func TestInstanceStatusForAnInstanceThatEnded(t *testing.T) {
 	for _, tt := range tests {
 		// The wait before a restart is only compared as far as it does not
 		// depend on how long the test takes.
-		if got := instanceStatus(tt.inst); !strings.HasPrefix(got, tt.want) ||
-			(tt.inst.GetNextRestartTime() == nil && got != tt.want) {
-			t.Errorf("instanceStatus(%v) = %q, want %q", tt.inst, got, tt.want)
+		if got := instanceStatus(tt.instance); !strings.HasPrefix(got, tt.want) ||
+			(tt.instance.GetNextRestartTime() == nil && got != tt.want) {
+			t.Errorf("instanceStatus(%v) = %q, want %q", tt.instance, got, tt.want)
 		}
 	}
 }

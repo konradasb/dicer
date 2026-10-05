@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/konradasb/dicer/internal/events"
@@ -38,46 +38,46 @@ type healthMonitor struct {
 	// cannot probe. Only the monitor goroutine uses it.
 	warnedOutdated bool
 
-	mu    sync.Mutex
-	state types.Health
+	mu     sync.Mutex
+	health types.Health
 }
 
 func newHealthMonitor(check types.HealthCheck, startedAt time.Time) *healthMonitor {
-	return &healthMonitor{check: check, startedAt: startedAt, state: types.NewHealth()}
+	return &healthMonitor{check: check, startedAt: startedAt, health: types.NewHealth()}
 }
 
-// observe adds a probe's result and returns the state before and after.
+// observe adds a probe's result and returns the health before and after.
 func (h *healthMonitor) observe(r probeResult) (before, after types.Health) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	before = h.state
-	h.state = observe(h.state, h.check, r, r.At.Sub(h.startedAt))
+	before = h.health
+	h.health = healthAfter(h.health, h.check, r, r.At.Sub(h.startedAt))
 
-	return before, h.state
+	return before, h.health
 }
 
-// snapshot returns the check and what it has found so far.
-func (h *healthMonitor) snapshot() (types.HealthCheck, types.Health) {
+// checkAndHealth returns the check and what it has found so far.
+func (h *healthMonitor) checkAndHealth() (types.HealthCheck, types.Health) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.check, h.state
+	return h.check, h.health
 }
 
 // Health returns an instance's check and its findings, or false if it is not
 // being monitored.
-func (m *Manager) Health(inst types.InstanceSpec) (types.HealthCheck, types.Health, bool) {
-	s := m.supervision(inst.ID)
+func (m *Manager) Health(instance types.InstanceSpec) (types.HealthCheck, types.Health, bool) {
+	s := m.supervision(instance.ID)
 	if s == nil || s.health == nil {
 		return types.HealthCheck{}, types.Health{}, false
 	}
-	check, state := s.health.snapshot()
-	return check, state, true
+	check, health := s.health.checkAndHealth()
+	return check, health, true
 }
 
 // monitor probes an instance's health until ctx is done or the Manager
 // closes. Each probe starts an interval after the previous one finished.
-func (m *Manager) monitor(ctx context.Context, inst types.InstanceSpec, p *process.Process, vsockPath string, h *healthMonitor) {
+func (m *Manager) monitor(ctx context.Context, instance types.InstanceSpec, vmm *process.Process, vsockPath string, h *healthMonitor) {
 	timer := time.NewTimer(h.check.Interval)
 	defer timer.Stop()
 
@@ -90,15 +90,15 @@ func (m *Manager) monitor(ctx context.Context, inst types.InstanceSpec, p *proce
 		case <-timer.C:
 		}
 
-		m.probeOnce(ctx, inst, p, vsockPath, h)
+		m.probeOnce(ctx, instance, vmm, vsockPath, h)
 		timer.Reset(h.check.Interval)
 	}
 }
 
 // probeOnce runs one probe, records the result and acts on unhealthy.
-func (m *Manager) probeOnce(ctx context.Context, inst types.InstanceSpec, p *process.Process, vsockPath string, h *healthMonitor) {
+func (m *Manager) probeOnce(ctx context.Context, instance types.InstanceSpec, vmm *process.Process, vsockPath string, h *healthMonitor) {
 	// A paused guest cannot answer, and has not failed for it.
-	if rt, err := m.Runtime(inst); err != nil || rt.State != types.StateRunning {
+	if status, err := m.Status(instance); err != nil || status.State != types.InstanceStateRunning {
 		return
 	}
 
@@ -106,11 +106,11 @@ func (m *Manager) probeOnce(ctx context.Context, inst types.InstanceSpec, p *pro
 	switch {
 	case ctx.Err() != nil:
 		return
-	case status.Code(err) == codes.Unimplemented:
+	case grpcstatus.Code(err) == codes.Unimplemented:
 		// The guest's agent cannot probe; that is not a failure.
 		if !h.warnedOutdated {
 			m.logger.WarnContext(ctx, "the guest agent cannot run health checks until the instance restarts",
-				"instance", inst.Name)
+				"instance", instance.Name)
 			h.warnedOutdated = true
 		}
 		return
@@ -118,13 +118,13 @@ func (m *Manager) probeOnce(ctx context.Context, inst types.InstanceSpec, p *pro
 
 	before, after := h.observe(result)
 	if after.Status != before.Status {
-		m.logger.InfoContext(ctx, "instance health changed", "instance", inst.Name,
+		m.logger.InfoContext(ctx, "instance health changed", "instance", instance.Name,
 			"health", after.Status, "check", h.check.String(), "output", firstLine(after.LastOutput))
-		m.recordHealth(inst, h.check, after)
+		m.recordHealth(instance, h.check, after)
 	}
 	// Checked on every probe: the restart policy may have changed.
-	if after.Status == types.HealthUnhealthy {
-		m.handleUnhealthy(ctx, inst, p, h.check, after)
+	if after.Status == types.HealthStatusUnhealthy {
+		m.handleUnhealthy(ctx, instance, vmm, h.check, after)
 	}
 }
 
@@ -134,21 +134,22 @@ func probeGuest(ctx context.Context, vsockPath string, check types.HealthCheck) 
 	ctx, cancel := context.WithTimeout(ctx, check.Timeout+agentGrace)
 	defer cancel()
 
-	resp, err := askAgent(ctx, vsockPath, probeRequest(check))
+	resp, err := probeAgent(ctx, vsockPath, check)
 	if err != nil {
 		return probeResult{Output: "the guest agent did not answer: " + err.Error(), At: time.Now()}, err
 	}
 	return probeResult{Healthy: resp.GetHealthy(), Output: resp.GetOutput(), At: time.Now()}, nil
 }
 
-func askAgent(ctx context.Context, vsockPath string, req *diceragentv1.ProbeRequest) (*diceragentv1.ProbeResponse, error) {
+// probeAgent asks the guest agent behind vsockPath to run check once.
+func probeAgent(ctx context.Context, vsockPath string, check types.HealthCheck) (*diceragentv1.ProbeResponse, error) {
 	agent, closeAgent, err := dialAgent(vsockPath)
 	if err != nil {
 		return nil, err
 	}
 	defer closeAgent()
 
-	return agent.Probe(ctx, req)
+	return agent.Probe(ctx, probeRequest(check))
 }
 
 // probeRequest is check as the agent takes it.
@@ -170,50 +171,50 @@ func probeRequest(check types.HealthCheck) *diceragentv1.ProbeRequest {
 
 // handleUnhealthy stops an unhealthy instance and ends it as failed, if its
 // restart policy would restart it.
-func (m *Manager) handleUnhealthy(ctx context.Context, inst types.InstanceSpec, p *process.Process, check types.HealthCheck, state types.Health) {
-	lock := m.lock(inst.ID)
+func (m *Manager) handleUnhealthy(ctx context.Context, instance types.InstanceSpec, vmm *process.Process, check types.HealthCheck, health types.Health) {
+	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
 
-	if m.vmm(inst.ID) != p {
+	if m.vmm(instance.ID) != vmm {
 		// Stopped, deleted or replaced while we waited for the lock.
 		return
 	}
-	if current, err := m.definitions.GetInstance(inst.ID); err == nil {
-		inst = current
+	if current, err := m.definitions.Instance(instance.ID); err == nil {
+		instance = current
 	}
-	rt, err := m.Runtime(inst)
-	if err != nil || rt.State != types.StateRunning {
+	status, err := m.Status(instance)
+	if err != nil || status.State != types.InstanceStateRunning {
 		return
 	}
 
-	exit := failedExit(fmt.Errorf("health check %q failed %d times in a row: %s",
-		check.String(), state.FailingStreak, firstLine(state.LastOutput)))
-	if !decide(inst.Restart, exit, rt.RestartCount, time.Since(rt.StartedAt)).restart {
+	exit := Exit{Failure: fmt.Errorf("health check %q failed %d times in a row: %s",
+		check.String(), health.FailingStreak, firstLine(health.LastOutput))}
+	if !decideRestart(instance.Restart, exit, status.RestartCount, time.Since(status.StartedAt)).restart {
 		return
 	}
 
 	m.logger.WarnContext(ctx, "instance is unhealthy, stopping it for its restart policy",
-		"instance", inst.Name, "restart_policy", inst.Restart.String())
+		"instance", instance.Name, "restart_policy", instance.Restart.String())
 
 	// Stopping the VMM cancels this monitor's ctx.
 	ctx = context.WithoutCancel(ctx)
-	m.stopVMM(ctx, inst, rt, true)
-	m.ended(ctx, inst, rt, exit)
+	m.stopVMM(ctx, instance, status, true)
+	m.ended(ctx, instance, status, exit)
 }
 
 // recordHealth records a healthy or unhealthy verdict.
-func (m *Manager) recordHealth(inst types.InstanceSpec, check types.HealthCheck, state types.Health) {
-	switch state.Status {
-	case types.HealthHealthy:
-		m.record(inst, events.ActionHealthy,
-			fmt.Sprintf("Health check %q passed: %s", check.String(), firstLine(state.LastOutput)), nil)
-	case types.HealthUnhealthy:
-		m.record(inst, events.ActionUnhealthy,
+func (m *Manager) recordHealth(instance types.InstanceSpec, check types.HealthCheck, health types.Health) {
+	switch health.Status {
+	case types.HealthStatusHealthy:
+		m.record(instance, events.ActionHealthy,
+			fmt.Sprintf("Health check %q passed: %s", check.String(), firstLine(health.LastOutput)), nil)
+	case types.HealthStatusUnhealthy:
+		m.record(instance, events.ActionUnhealthy,
 			fmt.Sprintf("Health check %q failed %d times in a row: %s",
-				check.String(), state.FailingStreak, firstLine(state.LastOutput)),
-			map[string]string{"failing_streak": strconv.Itoa(state.FailingStreak)})
-	case types.HealthStarting:
+				check.String(), health.FailingStreak, firstLine(health.LastOutput)),
+			map[string]string{"failing_streak": strconv.Itoa(health.FailingStreak)})
+	case types.HealthStatusStarting:
 	}
 }
 
@@ -226,20 +227,18 @@ func firstLine(s string) string {
 // probeResult is what one probe found.
 type probeResult struct {
 	Healthy bool
-
-	Output string
-
-	At time.Time
+	Output  string
+	At      time.Time
 }
 
-// observe returns the health after a probe. Failures during the start period
-// do not count against the retries.
-func observe(h types.Health, c types.HealthCheck, r probeResult, sinceStart time.Duration) types.Health {
+// healthAfter returns the health after a probe. Failures during the start
+// period do not count against the retries.
+func healthAfter(h types.Health, c types.HealthCheck, r probeResult, sinceStart time.Duration) types.Health {
 	h.LastCheck = r.At
-	h.LastOutput = guest.TruncateOutput(r.Output)
+	h.LastOutput = guest.TruncateProbeOutput(r.Output)
 
 	if r.Healthy {
-		h.Status = types.HealthHealthy
+		h.Status = types.HealthStatusHealthy
 		h.FailingStreak = 0
 
 		return h
@@ -251,7 +250,7 @@ func observe(h types.Health, c types.HealthCheck, r probeResult, sinceStart time
 
 	h.FailingStreak++
 	if h.FailingStreak >= c.Retries {
-		h.Status = types.HealthUnhealthy
+		h.Status = types.HealthStatusUnhealthy
 	}
 
 	return h

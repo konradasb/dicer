@@ -17,14 +17,14 @@ type printableSnapshot struct {
 	Snapshots []*dicerdv1.Snapshot
 }
 
-func (p *printableSnapshot) Cols() []string {
+func (p *printableSnapshot) Columns() []string {
 	return []string{"Name", "Instance", "Hypervisor", "Memory", "Size", "Created"}
 }
 
-func (p *printableSnapshot) KV() []map[string]any {
-	kv := make([]map[string]any, 0, len(p.Snapshots))
+func (p *printableSnapshot) Rows() []map[string]any {
+	rows := make([]map[string]any, 0, len(p.Snapshots))
 	for _, s := range p.Snapshots {
-		kv = append(kv, map[string]any{
+		rows = append(rows, map[string]any{
 			"Name":       s.GetName(),
 			"Instance":   s.GetInstanceName(),
 			"Hypervisor": enumName(s.GetHypervisorType()) + " " + s.GetHypervisorVersion(),
@@ -33,7 +33,7 @@ func (p *printableSnapshot) KV() []map[string]any {
 			"Created":    age(timeOf(s.GetCreateTime())),
 		})
 	}
-	return kv
+	return rows
 }
 
 func newInstanceSnapshotCommand() *cobra.Command {
@@ -80,9 +80,9 @@ func newSnapshotCreateCommand() *cobra.Command {
 
 			return runTask(cmd, "Snapshotting "+args[0], func() (*dicerdv1.Snapshot, error) {
 				return client.CreateSnapshot(cmd.Context(), &dicerdv1.CreateSnapshotRequest{Instance: args[0], Name: name})
-			}, func(snap *dicerdv1.Snapshot, took string) string {
+			}, func(snapshot *dicerdv1.Snapshot, took string) string {
 				return fmt.Sprintf("Snapshot %s of instance %s created in %s (%s)",
-					snap.GetName(), snap.GetInstanceName(), took, humanize.Bytes(snap.GetSizeBytes()))
+					snapshot.GetName(), snapshot.GetInstanceName(), took, humanize.Bytes(snapshot.GetSizeBytes()))
 			})
 		},
 	}
@@ -130,12 +130,12 @@ func newSnapshotShowCommand() *cobra.Command {
 			}
 			defer cleanup()
 
-			snap, err := client.GetSnapshot(cmd.Context(), &dicerdv1.GetSnapshotRequest{Instance: args[0], Name: args[1]})
+			snapshot, err := client.GetSnapshot(cmd.Context(), &dicerdv1.GetSnapshotRequest{Instance: args[0], Name: args[1]})
 			if err != nil {
 				return err
 			}
 
-			return render(cmd, &printableSnapshot{Snapshots: []*dicerdv1.Snapshot{snap}})
+			return render(cmd, &printableSnapshot{Snapshots: []*dicerdv1.Snapshot{snapshot}})
 		},
 	}
 
@@ -161,9 +161,9 @@ func newSnapshotRestoreCommand() *cobra.Command {
 
 			return runTask(cmd, "Restoring "+args[0], func() (*dicerdv1.Instance, error) {
 				return client.RestoreSnapshot(cmd.Context(), &dicerdv1.RestoreSnapshotRequest{Instance: args[0], Name: args[1]})
-			}, func(inst *dicerdv1.Instance, took string) string {
+			}, func(instance *dicerdv1.Instance, took string) string {
 				return fmt.Sprintf("Instance %s restored from snapshot %s in %s (%s)",
-					inst.GetName(), args[1], took, orDash(inst.GetIp()))
+					instance.GetName(), args[1], took, orDash(instance.GetIp()))
 			})
 		},
 	}
@@ -219,20 +219,20 @@ func deleteAllSnapshots(cmd *cobra.Command, client *dicer.Client, args []string)
 		if err != nil {
 			return err
 		}
-		for _, inst := range resp.GetInstances() {
-			instances = append(instances, inst.GetName())
+		for _, instance := range resp.GetInstances() {
+			instances = append(instances, instance.GetName())
 		}
 	}
 
 	type snapshot struct{ instance, name string }
 	var snapshots []snapshot
-	for _, inst := range instances {
-		resp, err := client.ListSnapshots(cmd.Context(), &dicerdv1.ListSnapshotsRequest{Instance: inst})
+	for _, instance := range instances {
+		resp, err := client.ListSnapshots(cmd.Context(), &dicerdv1.ListSnapshotsRequest{Instance: instance})
 		if err != nil {
-			return suggest(cmd.Context(), client, instancesIn(), inst, err)
+			return suggest(cmd.Context(), client, instancesIn(), instance, err)
 		}
 		for _, s := range resp.GetSnapshots() {
-			snapshots = append(snapshots, snapshot{instance: inst, name: s.GetName()})
+			snapshots = append(snapshots, snapshot{instance: instance, name: s.GetName()})
 		}
 	}
 

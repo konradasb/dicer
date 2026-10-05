@@ -77,6 +77,20 @@ func (t *task) succeed(format string, args ...any) {
 	_, _ = fmt.Fprintf(t.out, format+"\n", args...)
 }
 
+// runTask runs a slow call, showing a spinner while it lasts, and says how
+// it went: "Instance web started in 1.4s (172.20.0.7)".
+func runTask[T any](cmd *cobra.Command, doing string, call func() (T, error), done func(T, string) string) error {
+	t := startTask(cmd, doing)
+	result, err := call()
+	if err != nil {
+		t.end()
+		return err
+	}
+
+	t.succeed("%s", done(result, humanize.Duration(t.elapsed())))
+	return nil
+}
+
 // succeeded writes a line saying something went well.
 func succeeded(cmd *cobra.Command, format string, args ...any) {
 	cmd.PrintErrf(format+"\n", args...)

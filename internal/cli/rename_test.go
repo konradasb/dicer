@@ -13,7 +13,7 @@ import (
 
 func TestRename(t *testing.T) {
 	d := newFakeInstanceDaemon(&dicerdv1.Instance{Name: "web", ImageRef: "nginx:1.27", State: stateStopped})
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	out, err := run(t, "rename", "web", "web-2")
 	if err != nil {

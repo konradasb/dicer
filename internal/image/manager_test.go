@@ -22,13 +22,13 @@ import (
 // discardLogger keeps expected failures out of the test output.
 var discardLogger = slog.New(slog.DiscardHandler)
 
-// mockRegistryClient mocks the registry client for testing.
-type mockRegistryClient struct {
+// fakeRegistryClient stands in for a registry, pulling a one-file image.
+type fakeRegistryClient struct {
 	resolveFunc       func(ctx context.Context, ref *reference.Ref) (string, error)
-	pullAndExportFunc func(ctx context.Context, imageRef, digest, exportDir string) (*registry.PullResult, error)
+	pullAndExportFunc func(ctx context.Context, imageRef, digest, exportDir string) (*registry.Metadata, error)
 
-	// events, when set, are reported by PullAndExport as a real pull would.
-	events []registry.Event
+	// progress, when set, is reported by PullAndExport as a real pull would.
+	progress []registry.Progress
 
 	prunedKeep    []string
 	pruneReclaims int64
@@ -37,26 +37,26 @@ type mockRegistryClient struct {
 	cacheSize int64
 }
 
-func (m *mockRegistryClient) Resolve(ctx context.Context, ref *reference.Ref) (string, error) {
+func (m *fakeRegistryClient) Resolve(ctx context.Context, ref *reference.Ref) (string, error) {
 	if m.resolveFunc != nil {
 		return m.resolveFunc(ctx, ref)
 	}
 	return "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", nil
 }
 
-func (m *mockRegistryClient) CacheSize() (int64, error) { return m.cacheSize, nil }
+func (m *fakeRegistryClient) CacheSize() (int64, error) { return m.cacheSize, nil }
 
-func (m *mockRegistryClient) PruneCache(keep []string) (int64, error) {
+func (m *fakeRegistryClient) PruneCache(keep []string) (int64, error) {
 	m.prunedKeep = keep
 	return m.pruneReclaims, nil
 }
 
-func (m *mockRegistryClient) PullAndExport(
-	ctx context.Context, imageRef, digest, exportDir string, onEvent registry.EventFunc,
-) (*registry.PullResult, error) {
-	for _, ev := range m.events {
-		if onEvent != nil {
-			onEvent(ev)
+func (m *fakeRegistryClient) PullAndExport(
+	ctx context.Context, imageRef, digest, exportDir string, onProgress registry.ProgressFunc,
+) (*registry.Metadata, error) {
+	for _, p := range m.progress {
+		if onProgress != nil {
+			onProgress(p)
 		}
 	}
 
@@ -72,23 +72,20 @@ func (m *mockRegistryClient) PullAndExport(
 		return nil, err
 	}
 
-	return &registry.PullResult{
-		Metadata: &registry.Metadata{
-			Entrypoint: []string{"/bin/sh"},
-			Cmd:        []string{},
-			Env:        map[string]string{"PATH": "/usr/bin"},
-			WorkingDir: "/",
-		},
-		Digest: digest,
+	return &registry.Metadata{
+		Entrypoint: []string{"/bin/sh"},
+		Cmd:        []string{},
+		Env:        map[string]string{"PATH": "/usr/bin"},
+		WorkingDir: "/",
 	}, nil
 }
 
-// mockPacker mocks the filesystem packer for testing.
-type mockPacker struct {
+// fakePacker stands in for mkfs.erofs, writing a 15-byte disk.
+type fakePacker struct {
 	packFunc func(ctx context.Context, dir, outputPath string) (int64, error)
 }
 
-func (m *mockPacker) Pack(ctx context.Context, dir, outputPath string) (int64, error) {
+func (m *fakePacker) Pack(ctx context.Context, dir, outputPath string) (int64, error) {
 	if m.packFunc != nil {
 		return m.packFunc(ctx, dir, outputPath)
 	}
@@ -105,11 +102,11 @@ func (m *mockPacker) Pack(ctx context.Context, dir, outputPath string) (int64, e
 }
 
 func TestNewManager(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	cfg := Config{
 		Logger:             discardLogger,
-		DataDir:            tmpDir,
+		DataDir:            testDir,
 		MaxConcurrentPulls: 3,
 	}
 
@@ -124,8 +121,8 @@ func TestNewManager(t *testing.T) {
 
 	// Verify directories created
 	dirs := []string{
-		filepath.Join(tmpDir, "images"),
-		filepath.Join(tmpDir, "tmp"),
+		filepath.Join(testDir, "images"),
+		filepath.Join(testDir, "tmp"),
 	}
 
 	for _, dir := range dirs {
@@ -136,11 +133,11 @@ func TestNewManager(t *testing.T) {
 }
 
 func TestNewManager_Defaults(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -154,11 +151,11 @@ func TestNewManager_Defaults(t *testing.T) {
 }
 
 func TestManager_Pull(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	cfg := Config{
 		Logger:             discardLogger,
-		DataDir:            tmpDir,
+		DataDir:            testDir,
 		MaxConcurrentPulls: 1,
 	}
 
@@ -167,27 +164,27 @@ func TestManager_Pull(t *testing.T) {
 		t.Fatalf("NewManager() error = %v", err)
 	}
 
-	// Replace registry client and converter with mocks
-	manager.registry = &mockRegistryClient{}
-	manager.packer = &mockPacker{}
+	// Replace the registry client and packer with fakes
+	manager.registry = &fakeRegistryClient{}
+	manager.packer = &fakePacker{}
 
 	ctx := context.Background()
 
 	// Get image (will pull since it doesn't exist)
-	img, err := manager.Pull(ctx, "alpine:latest", nil)
+	image, err := manager.Pull(ctx, "alpine:latest", nil)
 	if err != nil {
 		t.Fatalf("Pull() error = %v", err)
 	}
 
-	if img == nil {
+	if image == nil {
 		t.Fatal("Pull() returned nil")
 	}
 
-	if img.DiskPath == "" {
+	if image.DiskPath == "" {
 		t.Error("DiskPath not set")
 	}
 
-	if img.SizeBytes == 0 {
+	if image.SizeBytes == 0 {
 		t.Error("SizeBytes not set")
 	}
 
@@ -197,17 +194,17 @@ func TestManager_Pull(t *testing.T) {
 		t.Fatalf("second Pull() error = %v", err)
 	}
 
-	if img2.Digest != img.Digest {
+	if img2.Digest != image.Digest {
 		t.Error("second Pull() should return same image")
 	}
 }
 
 func TestManager_Pull_PullError(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -215,14 +212,14 @@ func TestManager_Pull_PullError(t *testing.T) {
 		t.Fatalf("NewManager() error = %v", err)
 	}
 
-	// Mock client that fails
+	// A registry that fails
 	testErr := errors.New("registry unavailable")
-	manager.registry = &mockRegistryClient{
-		pullAndExportFunc: func(context.Context, string, string, string) (*registry.PullResult, error) {
+	manager.registry = &fakeRegistryClient{
+		pullAndExportFunc: func(context.Context, string, string, string) (*registry.Metadata, error) {
 			return nil, testErr
 		},
 	}
-	manager.packer = &mockPacker{}
+	manager.packer = &fakePacker{}
 
 	ctx := context.Background()
 
@@ -237,11 +234,11 @@ func TestManager_Pull_PullError(t *testing.T) {
 }
 
 func TestManager_Pull_ConvertError(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -250,8 +247,8 @@ func TestManager_Pull_ConvertError(t *testing.T) {
 	}
 
 	testErr := errors.New("conversion failed")
-	manager.registry = &mockRegistryClient{}
-	manager.packer = &mockPacker{
+	manager.registry = &fakeRegistryClient{}
+	manager.packer = &fakePacker{
 		packFunc: func(ctx context.Context, dir, outputPath string) (int64, error) {
 			return 0, testErr
 		},
@@ -271,11 +268,11 @@ func TestManager_Pull_ConvertError(t *testing.T) {
 }
 
 func TestManager_Pull_InvalidReference(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -296,11 +293,11 @@ func TestManager_Pull_InvalidReference(t *testing.T) {
 }
 
 func TestManager_List(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -308,8 +305,8 @@ func TestManager_List(t *testing.T) {
 		t.Fatalf("NewManager() error = %v", err)
 	}
 
-	manager.registry = &mockRegistryClient{}
-	manager.packer = &mockPacker{}
+	manager.registry = &fakeRegistryClient{}
+	manager.packer = &fakePacker{}
 
 	ctx := context.Background()
 
@@ -334,11 +331,11 @@ func TestManager_List(t *testing.T) {
 }
 
 func TestManager_Delete(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -346,13 +343,13 @@ func TestManager_Delete(t *testing.T) {
 		t.Fatalf("NewManager() error = %v", err)
 	}
 
-	manager.registry = &mockRegistryClient{}
-	manager.packer = &mockPacker{}
+	manager.registry = &fakeRegistryClient{}
+	manager.packer = &fakePacker{}
 
 	ctx := context.Background()
 
 	// Pull image
-	img, err := manager.Pull(ctx, "alpine:latest", nil)
+	image, err := manager.Pull(ctx, "alpine:latest", nil)
 	if err != nil {
 		t.Fatalf("Pull() error = %v", err)
 	}
@@ -370,17 +367,17 @@ func TestManager_Delete(t *testing.T) {
 	}
 
 	// Verify disk file removed
-	if _, err := os.Stat(img.DiskPath); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(image.DiskPath); !errors.Is(err, fs.ErrNotExist) {
 		t.Error("disk file should be removed")
 	}
 }
 
 func TestManager_Delete_NotFound(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -394,11 +391,11 @@ func TestManager_Delete_NotFound(t *testing.T) {
 }
 
 func TestManager_LoadExistingImages(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	// Create a fake existing image on disk
 	digestHex := "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-	imageDir := filepath.Join(tmpDir, "images", digestHex)
+	imageDir := filepath.Join(testDir, "images", digestHex)
 	if err := os.MkdirAll(imageDir, 0o755); err != nil {
 		t.Fatalf("create image dir: %v", err)
 	}
@@ -408,22 +405,22 @@ func TestManager_LoadExistingImages(t *testing.T) {
 		t.Fatalf("create disk file: %v", err)
 	}
 
-	m := newTestManager(tmpDir)
-	img := &types.Image{
+	m := newTestManager(testDir)
+	image := &types.Image{
 		Name:      "docker.io/library/alpine:latest",
 		Digest:    "sha256:" + digestHex,
 		DiskPath:  diskPath,
 		SizeBytes: 9,
 	}
 
-	if err := m.saveMetadata(digestHex, img); err != nil {
+	if err := m.saveMetadata(digestHex, image); err != nil {
 		t.Fatalf("save metadata: %v", err)
 	}
 
 	// Create manager (should load existing image)
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -438,17 +435,17 @@ func TestManager_LoadExistingImages(t *testing.T) {
 		t.Fatalf("List() length = %d, want 1", len(images))
 	}
 
-	if images[0].Digest != img.Digest {
-		t.Errorf("loaded image digest = %v, want %v", images[0].Digest, img.Digest)
+	if images[0].Digest != image.Digest {
+		t.Errorf("loaded image digest = %v, want %v", images[0].Digest, image.Digest)
 	}
 }
 
 func TestManager_ConcurrentPulls(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	cfg := Config{
 		Logger:             discardLogger,
-		DataDir:            tmpDir,
+		DataDir:            testDir,
 		MaxConcurrentPulls: 2,
 	}
 
@@ -457,8 +454,8 @@ func TestManager_ConcurrentPulls(t *testing.T) {
 		t.Fatalf("NewManager() error = %v", err)
 	}
 
-	manager.registry = &mockRegistryClient{}
-	manager.packer = &mockPacker{}
+	manager.registry = &fakeRegistryClient{}
+	manager.packer = &fakePacker{}
 
 	ctx := context.Background()
 
@@ -487,11 +484,11 @@ func TestManager_ConcurrentPulls(t *testing.T) {
 }
 
 func TestManager_Pull_LoadFromDisk(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	// Create a fake existing image on disk first
 	digestHex := "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-	imageDir := filepath.Join(tmpDir, "images", digestHex)
+	imageDir := filepath.Join(testDir, "images", digestHex)
 	if err := os.MkdirAll(imageDir, 0o755); err != nil {
 		t.Fatalf("create image dir: %v", err)
 	}
@@ -501,22 +498,22 @@ func TestManager_Pull_LoadFromDisk(t *testing.T) {
 		t.Fatalf("create disk file: %v", err)
 	}
 
-	m := newTestManager(tmpDir)
-	img := &types.Image{
+	m := newTestManager(testDir)
+	image := &types.Image{
 		Name:      "docker.io/library/alpine:latest",
 		Digest:    "sha256:" + digestHex,
 		DiskPath:  diskPath,
 		SizeBytes: 13,
 	}
 
-	if err := m.saveMetadata(digestHex, img); err != nil {
+	if err := m.saveMetadata(digestHex, image); err != nil {
 		t.Fatalf("save metadata: %v", err)
 	}
 
-	// Now create manager and mock that returns same digest
+	// Now create manager and fakeRegistry that returns same digest
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -524,16 +521,16 @@ func TestManager_Pull_LoadFromDisk(t *testing.T) {
 		t.Fatalf("NewManager() error = %v", err)
 	}
 
-	manager.registry = &mockRegistryClient{
+	manager.registry = &fakeRegistryClient{
 		resolveFunc: func(ctx context.Context, ref *reference.Ref) (string, error) {
 			return "sha256:" + digestHex, nil
 		},
 	}
-	manager.packer = &mockPacker{}
+	manager.packer = &fakePacker{}
 
 	ctx := context.Background()
 
-	// GetImage should load from disk instead of pulling
+	// Pull should load from disk instead of pulling
 	loaded, err := manager.Pull(ctx, "alpine:latest", nil)
 	if err != nil {
 		t.Fatalf("Pull() error = %v", err)
@@ -545,11 +542,11 @@ func TestManager_Pull_LoadFromDisk(t *testing.T) {
 }
 
 func TestManager_Pull_CorruptMetadata(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	// Create corrupt metadata
 	digestHex := "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-	imageDir := filepath.Join(tmpDir, "images", digestHex)
+	imageDir := filepath.Join(testDir, "images", digestHex)
 	if err := os.MkdirAll(imageDir, 0o755); err != nil {
 		t.Fatalf("create image dir: %v", err)
 	}
@@ -567,7 +564,7 @@ func TestManager_Pull_CorruptMetadata(t *testing.T) {
 
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -575,45 +572,45 @@ func TestManager_Pull_CorruptMetadata(t *testing.T) {
 		t.Fatalf("NewManager() error = %v", err)
 	}
 
-	manager.registry = &mockRegistryClient{
+	manager.registry = &fakeRegistryClient{
 		resolveFunc: func(ctx context.Context, ref *reference.Ref) (string, error) {
 			return "sha256:" + digestHex, nil
 		},
 	}
-	manager.packer = &mockPacker{}
+	manager.packer = &fakePacker{}
 
 	ctx := context.Background()
 
 	// Should re-pull since metadata is corrupt
-	img, err := manager.Pull(ctx, "alpine:latest", nil)
+	image, err := manager.Pull(ctx, "alpine:latest", nil)
 	if err != nil {
 		t.Fatalf("Pull() should succeed by re-pulling: %v", err)
 	}
-	if img.DiskPath == "" {
+	if image.DiskPath == "" {
 		t.Error("re-pulled image has no disk path")
 	}
 }
 
 func TestManager_Pull_MissingDiskFile(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	// Create metadata but no disk file
 	digestHex := "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-	imageDir := filepath.Join(tmpDir, "images", digestHex)
+	imageDir := filepath.Join(testDir, "images", digestHex)
 	if err := os.MkdirAll(imageDir, 0o755); err != nil {
 		t.Fatalf("create image dir: %v", err)
 	}
 
 	diskPath := filepath.Join(imageDir, "disk.img")
-	m := newTestManager(tmpDir)
-	img := &types.Image{
+	m := newTestManager(testDir)
+	image := &types.Image{
 		Name:      "docker.io/library/alpine:latest",
 		Digest:    "sha256:" + digestHex,
 		DiskPath:  diskPath,
 		SizeBytes: 100,
 	}
 
-	if err := m.saveMetadata(digestHex, img); err != nil {
+	if err := m.saveMetadata(digestHex, image); err != nil {
 		t.Fatalf("save metadata: %v", err)
 	}
 
@@ -621,7 +618,7 @@ func TestManager_Pull_MissingDiskFile(t *testing.T) {
 
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -629,12 +626,12 @@ func TestManager_Pull_MissingDiskFile(t *testing.T) {
 		t.Fatalf("NewManager() error = %v", err)
 	}
 
-	manager.registry = &mockRegistryClient{
+	manager.registry = &fakeRegistryClient{
 		resolveFunc: func(ctx context.Context, ref *reference.Ref) (string, error) {
 			return "sha256:" + digestHex, nil
 		},
 	}
-	manager.packer = &mockPacker{}
+	manager.packer = &fakePacker{}
 
 	ctx := context.Background()
 
@@ -649,11 +646,11 @@ func TestManager_Pull_MissingDiskFile(t *testing.T) {
 }
 
 func TestManager_Delete_PartialCleanup(t *testing.T) {
-	tmpDir := t.TempDir()
+	testDir := t.TempDir()
 
 	cfg := Config{
 		Logger:  discardLogger,
-		DataDir: tmpDir,
+		DataDir: testDir,
 	}
 
 	manager, err := NewManager(cfg)
@@ -661,8 +658,8 @@ func TestManager_Delete_PartialCleanup(t *testing.T) {
 		t.Fatalf("NewManager() error = %v", err)
 	}
 
-	manager.registry = &mockRegistryClient{}
-	manager.packer = &mockPacker{}
+	manager.registry = &fakeRegistryClient{}
+	manager.packer = &fakePacker{}
 
 	ctx := context.Background()
 
@@ -685,25 +682,25 @@ func TestManager_Delete_PartialCleanup(t *testing.T) {
 	}
 }
 
-func TestManager_GetDoesNotPull(t *testing.T) {
+func TestImageDoesNotPull(t *testing.T) {
 	manager, err := NewManager(Config{DataDir: t.TempDir(), Logger: discardLogger})
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
 
 	pulled := false
-	manager.registry = &mockRegistryClient{
-		pullAndExportFunc: func(context.Context, string, string, string) (*registry.PullResult, error) {
+	manager.registry = &fakeRegistryClient{
+		pullAndExportFunc: func(context.Context, string, string, string) (*registry.Metadata, error) {
 			pulled = true
 			return nil, errors.New("unexpected pull")
 		},
 	}
 
-	if _, err := manager.Get("alpine:latest"); !errors.Is(err, errdefs.ErrNotFound) {
-		t.Errorf("Get() of an absent image = %v, want ErrNotFound", err)
+	if _, err := manager.Image("alpine:latest"); !errors.Is(err, errdefs.ErrNotFound) {
+		t.Errorf("Image() of an absent image = %v, want ErrNotFound", err)
 	}
 	if pulled {
-		t.Error("Get() pulled the image; it must only consult local state")
+		t.Error("Image() pulled the image; it must only consult local state")
 	}
 }
 
@@ -712,17 +709,17 @@ func TestManager_DeleteAfterTagMoved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
-	manager.packer = &mockPacker{}
+	manager.packer = &fakePacker{}
 
 	const before = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
 	const after = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
 
 	digest := before
-	manager.registry = &mockRegistryClient{
+	manager.registry = &fakeRegistryClient{
 		resolveFunc: func(context.Context, *reference.Ref) (string, error) { return digest, nil },
 	}
 
-	img, err := manager.Pull(context.Background(), "alpine:latest", nil)
+	image, err := manager.Pull(context.Background(), "alpine:latest", nil)
 	if err != nil {
 		t.Fatalf("Pull() error = %v", err)
 	}
@@ -733,13 +730,14 @@ func TestManager_DeleteAfterTagMoved(t *testing.T) {
 	if err := manager.Delete("alpine:latest"); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
-	if _, ok := manager.index.get(img.Digest); ok {
-		t.Errorf("image %s still present after Delete()", img.Digest)
+	if _, ok := manager.index.get(image.Digest); ok {
+		t.Errorf("image %s still present after Delete()", image.Digest)
 	}
 }
 
 // TestEnsureFollowsThePullPolicy checks when Ensure asks a registry, and that
-// PullNever refuses an image the host does not hold rather than fetching it.
+// PullPolicyNever refuses an image the host does not hold rather than
+// fetching it.
 func TestEnsureFollowsThePullPolicy(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -748,12 +746,12 @@ func TestEnsureFollowsThePullPolicy(t *testing.T) {
 		wantRegistry bool
 		wantErr      error
 	}{
-		{name: "missing pulls an image the host lacks", policy: types.PullMissing, wantRegistry: true},
-		{name: "missing uses the image held", policy: types.PullMissing, held: true},
+		{name: "missing pulls an image the host lacks", policy: types.PullPolicyMissing, wantRegistry: true},
+		{name: "missing uses the image held", policy: types.PullPolicyMissing, held: true},
 		{name: "unset is missing", policy: "", held: true},
-		{name: "always asks the registry for an image held", policy: types.PullAlways, held: true, wantRegistry: true},
-		{name: "never uses the image held", policy: types.PullNever, held: true},
-		{name: "never refuses an image the host lacks", policy: types.PullNever, wantErr: errdefs.ErrNotFound},
+		{name: "always asks the registry for an image held", policy: types.PullPolicyAlways, held: true, wantRegistry: true},
+		{name: "never uses the image held", policy: types.PullPolicyNever, held: true},
+		{name: "never refuses an image the host lacks", policy: types.PullPolicyNever, wantErr: errdefs.ErrNotFound},
 	}
 
 	for _, tt := range tests {
@@ -762,10 +760,10 @@ func TestEnsureFollowsThePullPolicy(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewManager() error = %v", err)
 			}
-			manager.packer = &mockPacker{}
+			manager.packer = &fakePacker{}
 
 			asked := 0
-			manager.registry = &mockRegistryClient{
+			manager.registry = &fakeRegistryClient{
 				resolveFunc: func(context.Context, *reference.Ref) (string, error) {
 					asked++
 					return "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef", nil
@@ -779,13 +777,13 @@ func TestEnsureFollowsThePullPolicy(t *testing.T) {
 				asked = 0
 			}
 
-			img, err := manager.Ensure(t.Context(), "alpine:latest", tt.policy)
+			image, err := manager.Ensure(t.Context(), "alpine:latest", tt.policy)
 			if tt.wantErr != nil {
 				if !errors.Is(err, tt.wantErr) {
 					t.Fatalf("Ensure() error = %v, want %v", err, tt.wantErr)
 				}
-			} else if err != nil || img == nil {
-				t.Fatalf("Ensure() = %v, %v, want the image", img, err)
+			} else if err != nil || image == nil {
+				t.Fatalf("Ensure() = %v, %v, want the image", image, err)
 			}
 
 			if got := asked > 0; got != tt.wantRegistry {
@@ -798,27 +796,27 @@ func TestEnsureFollowsThePullPolicy(t *testing.T) {
 // TestEnsureMarksTheImageUsed checks that an image held is marked used, so
 // that garbage collection spares it until the instance it is for is defined.
 func TestEnsureMarksTheImageUsed(t *testing.T) {
-	for _, policy := range []types.PullPolicy{types.PullMissing, types.PullAlways, types.PullNever} {
+	for _, policy := range []types.PullPolicy{types.PullPolicyMissing, types.PullPolicyAlways, types.PullPolicyNever} {
 		t.Run(string(policy), func(t *testing.T) {
 			manager, err := NewManager(Config{DataDir: t.TempDir(), Logger: discardLogger})
 			if err != nil {
 				t.Fatalf("NewManager() error = %v", err)
 			}
-			manager.registry = &mockRegistryClient{}
-			manager.packer = &mockPacker{}
+			manager.registry = &fakeRegistryClient{}
+			manager.packer = &fakePacker{}
 
-			img, err := manager.Pull(t.Context(), "alpine:latest", nil)
+			image, err := manager.Pull(t.Context(), "alpine:latest", nil)
 			if err != nil {
 				t.Fatalf("Pull() error = %v", err)
 			}
 			stale := time.Now().Add(-24 * time.Hour)
-			manager.index.images[img.Digest].LastUsedAt = stale
+			manager.index.images[image.Digest].LastUsedAt = stale
 
 			if _, err := manager.Ensure(t.Context(), "alpine:latest", policy); err != nil {
 				t.Fatalf("Ensure() error = %v", err)
 			}
 
-			got, ok := manager.index.get(img.Digest)
+			got, ok := manager.index.get(image.Digest)
 			if !ok {
 				t.Fatal("image gone after Ensure()")
 			}

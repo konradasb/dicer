@@ -8,8 +8,9 @@ Shows the guest's serial console: the kernel's boot messages, dicer-init's,
 and whatever the workload writes to the console. It is kept with the
 instance, so it can be read after a stop to explain one.
 
-Use `--source` hypervisor for the VMM's own log, which explains a guest that
-never got as far as booting. That one is discarded when the instance stops.
+Use `--source` hypervisor for the hypervisor's own log, which explains a guest
+that never got as far as booting. That one is discarded when the instance
+stops.
 
 ## Usage
 

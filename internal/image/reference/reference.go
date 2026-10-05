@@ -11,15 +11,17 @@ import (
 	"github.com/distribution/reference"
 )
 
-// Ref represents a parsed and normalized OCI image reference.
+// Ref is a parsed OCI image reference in its normalised form, such as
+// docker.io/library/alpine:latest.
 type Ref struct {
-	raw        string
+	normalised string
 	repository string
-	tag        string
 	digest     string
 }
 
-// Parse validates and normalizes an image reference.
+// Parse validates and normalises an image reference: the registry and
+// library path Docker assumes are filled in, and a reference with neither tag
+// nor digest is tagged latest.
 func Parse(s string) (*Ref, error) {
 	named, err := reference.ParseNormalizedNamed(s)
 	if err != nil {
@@ -29,52 +31,32 @@ func Parse(s string) (*Ref, error) {
 	ref := &Ref{
 		repository: reference.Domain(named) + "/" + reference.Path(named),
 	}
-
-	// Handle digest references
 	if canonical, ok := named.(reference.Canonical); ok {
 		ref.digest = canonical.Digest().String()
-		ref.raw = canonical.String()
+		ref.normalised = canonical.String()
 		return ref, nil
 	}
-
-	// Handle tagged references (add :latest if missing)
-	tagged := reference.TagNameOnly(named)
-	if t, ok := tagged.(reference.Tagged); ok {
-		ref.tag = t.Tag()
-	}
-	ref.raw = tagged.String()
+	ref.normalised = reference.TagNameOnly(named).String()
 
 	return ref, nil
 }
 
-// String returns the normalized reference.
-func (r *Ref) String() string { return r.raw }
+// String returns the normalised reference.
+func (r *Ref) String() string { return r.normalised }
 
-// Repository returns the repository portion of the reference.
+// Repository returns the reference without its tag or digest, such as
+// docker.io/library/alpine.
 func (r *Ref) Repository() string { return r.repository }
 
-// Tag returns the tag, or "" if the reference is by digest.
-func (r *Ref) Tag() string { return r.tag }
-
-// Digest returns the digest, or "" if the reference is by tag.
+// Digest returns the digest the reference names, or "" if it names a tag.
 func (r *Ref) Digest() string { return r.digest }
 
 // HasDigest reports whether the reference names an immutable digest.
 func (r *Ref) HasDigest() bool { return r.digest != "" }
 
-// DigestHex returns the digest without its algorithm prefix, suitable for
-// use as a directory name.
-func (r *Ref) DigestHex() string {
-	if r.digest == "" {
-		return ""
-	}
-	_, hex, _ := strings.Cut(r.digest, ":")
-	return hex
-}
-
-// Familiar returns a reference in its short form: busybox:latest for
+// FamiliarString returns a reference in its short form: busybox:latest for
 // docker.io/library/busybox:latest. An invalid reference is returned as is.
-func Familiar(s string) string {
+func FamiliarString(s string) string {
 	named, err := reference.ParseNormalizedNamed(s)
 	if err != nil {
 		return s

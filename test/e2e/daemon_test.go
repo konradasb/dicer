@@ -47,17 +47,17 @@ func TestDaemonRestartReadoptsRunningInstance(t *testing.T) {
 	env.dicer(t, "instance", "stop", name)
 	env.waitForState(t, name, "Stopped")
 	if env.processAlive(t, pid) {
-		t.Errorf("hypervisor %d is still running after its adopted instance was stopped", pid)
+		t.Errorf("VMM %d is still running after its adopted instance was stopped", pid)
 	}
 }
 
-// TestDaemonNoticesCrashOfAdoptedHypervisor kills a VMM the daemon adopted
+// TestDaemonNoticesCrashOfAdoptedVMM kills a VMM the daemon adopted
 // rather than started.
 //
 // An adopted VMM is not the daemon's child, so its exit cannot be collected
 // with wait(2); the daemon watches it through a pidfd instead. This is the
 // only test that exercises that path.
-func TestDaemonNoticesCrashOfAdoptedHypervisor(t *testing.T) {
+func TestDaemonNoticesCrashOfAdoptedVMM(t *testing.T) {
 	name := instanceName(t)
 
 	env.createInstance(t, name)
@@ -71,17 +71,17 @@ func TestDaemonNoticesCrashOfAdoptedHypervisor(t *testing.T) {
 	// A VMM that is not the daemon's child leaves no exit status to read,
 	// so all the daemon can say is that it went.
 	if reason := env.waitForFailure(t, name); !strings.Contains(reason, "hypervisor exited") {
-		t.Errorf("failure reason = %q, want the hypervisor's exit", reason)
+		t.Errorf("failure reason = %q, want the VMM's exit", reason)
 	}
 
 	env.dicer(t, "instance", "stop", name)
 	env.waitForState(t, name, "Stopped")
 }
 
-// TestDaemonReportsHypervisorThatDiedWhileItWasDown kills a VMM while no
+// TestDaemonReportsVMMThatDiedWhileItWasDown kills a VMM while no
 // daemon is running, and checks that the next one does not pass the instance
 // off as running -- or as cleanly stopped.
-func TestDaemonReportsHypervisorThatDiedWhileItWasDown(t *testing.T) {
+func TestDaemonReportsVMMThatDiedWhileItWasDown(t *testing.T) {
 	name := instanceName(t)
 
 	env.createInstance(t, name)
@@ -95,7 +95,7 @@ func TestDaemonReportsHypervisorThatDiedWhileItWasDown(t *testing.T) {
 		t.Errorf("failure reason = %q, want the VMM to have died while dicerd was down", reason)
 	}
 	if env.processAlive(t, pid) {
-		t.Errorf("hypervisor %d is running after being killed", pid)
+		t.Errorf("VMM %d is running after being killed", pid)
 	}
 
 	env.startInstance(t, name)

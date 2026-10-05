@@ -43,14 +43,7 @@ type Servers struct {
 	logger *slog.Logger
 
 	mu      sync.Mutex
-	servers map[string]*runningServer
-}
-
-// runningServer is a network's server, and what it was started with.
-type runningServer struct {
-	server  *server
-	listen  string
-	network network
+	servers map[string]*server
 }
 
 // NewServers returns servers for networks, none of them started.
@@ -68,25 +61,23 @@ func NewServers(cfg Config) *Servers {
 	return &Servers{
 		cfg:     cfg,
 		logger:  cfg.Logger.With("component", "dns"),
-		servers: make(map[string]*runningServer),
+		servers: make(map[string]*server),
 	}
 }
 
 // Serve starts a server for nw on its gateway address, unless one is
-// already serving it as it is: it is restarted if the network's gateway or
-// upstreams have changed. The gateway address must already be on the host,
-// on the network's bridge.
+// already serving it as it is: it is restarted if the network's gateway,
+// subnet, upstreams or isolation have changed. The gateway address must
+// already be on the host, on the network's bridge.
 func (s *Servers) Serve(ctx context.Context, nw types.Network) error {
-	want, listenAddr, err := s.target(nw)
+	want, err := s.networkOf(nw)
 	if err != nil {
 		return err
 	}
 
 	s.mu.Lock()
-	r, ok := s.servers[nw.Name]
-	if ok && r.listen == listenAddr && slices.Equal(r.network.upstreams, want.upstreams) &&
-		r.network.gateway == want.gateway &&
-		r.network.subnet == want.subnet && r.network.answersInstances == want.answersInstances {
+	running, ok := s.servers[nw.Name]
+	if ok && sameNetwork(running.network, want) {
 		s.mu.Unlock()
 		return nil
 	}
@@ -95,29 +86,30 @@ func (s *Servers) Serve(ctx context.Context, nw types.Network) error {
 
 	// Closing waits for the queries in flight, so not under the lock.
 	if ok {
-		r.server.close()
+		running.close()
 	}
-	srv, err := listen(ctx, listenAddr, want, s.cfg.Resolver, s.cfg.Metrics, s.logger)
+	addr := net.JoinHostPort(want.gateway.String(), strconv.Itoa(s.cfg.Port))
+	srv, err := listen(ctx, addr, want, s.cfg.Resolver, s.cfg.Metrics, s.logger)
 	if err != nil {
-		return fmt.Errorf("serve DNS for network %q on %s: %w", nw.Name, listenAddr, err)
+		return fmt.Errorf("serve DNS for network %q on %s: %w", nw.Name, addr, err)
 	}
 	s.mu.Lock()
-	s.servers[nw.Name] = &runningServer{server: srv, listen: listenAddr, network: want}
+	s.servers[nw.Name] = srv
 	s.mu.Unlock()
 
 	s.logger.InfoContext(ctx, "serving DNS", "network", nw.Name, "address", srv.addr(), "upstreams", want.upstreams)
 	return nil
 }
 
-// target is what a network's server serves, and the address it listens on.
-func (s *Servers) target(nw types.Network) (network, string, error) {
+// networkOf returns what a server needs to know of nw.
+func (s *Servers) networkOf(nw types.Network) (network, error) {
 	subnet, err := netip.ParsePrefix(nw.Subnet)
 	if err != nil {
-		return network{}, "", fmt.Errorf("network %q: subnet: %w", nw.Name, err)
+		return network{}, fmt.Errorf("network %q: subnet: %w", nw.Name, err)
 	}
 	gateway, err := netip.ParseAddr(nw.Gateway)
 	if err != nil {
-		return network{}, "", fmt.Errorf("network %q: gateway: %w", nw.Name, err)
+		return network{}, fmt.Errorf("network %q: gateway: %w", nw.Name, err)
 	}
 
 	nameservers := nw.Nameservers
@@ -136,18 +128,24 @@ func (s *Servers) target(nw types.Network) (network, string, error) {
 		gateway:          gateway,
 		upstreams:        upstreams,
 		answersInstances: !nw.Isolated,
-	}, net.JoinHostPort(gateway.String(), strconv.Itoa(s.cfg.Port)), nil
+	}, nil
+}
+
+// sameNetwork reports whether a server for a serves b as it is.
+func sameNetwork(a, b network) bool {
+	return a.name == b.name && a.subnet == b.subnet && a.gateway == b.gateway &&
+		slices.Equal(a.upstreams, b.upstreams) && a.answersInstances == b.answersInstances
 }
 
 // Stop stops a network's server, if it has one.
 func (s *Servers) Stop(networkName string) {
 	s.mu.Lock()
-	r, ok := s.servers[networkName]
+	srv, ok := s.servers[networkName]
 	delete(s.servers, networkName)
 	s.mu.Unlock()
 
 	if ok {
-		r.server.close()
+		srv.close()
 		s.logger.Info("stopped serving DNS", "network", networkName)
 	}
 }
@@ -156,10 +154,10 @@ func (s *Servers) Stop(networkName string) {
 func (s *Servers) Close() {
 	s.mu.Lock()
 	servers := s.servers
-	s.servers = make(map[string]*runningServer)
+	s.servers = make(map[string]*server)
 	s.mu.Unlock()
 
-	for _, r := range servers {
-		r.server.close()
+	for _, srv := range servers {
+		srv.close()
 	}
 }

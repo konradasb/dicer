@@ -23,8 +23,8 @@ import (
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
-// inspectEvents is how many of an instance's events inspect shows.
-const inspectEvents = 10
+// maxRecentEvents is how many of an instance's events inspect shows.
+const maxRecentEvents = 10
 
 // maxNameWidth is the widest the name column grows: a longer name is cut
 // short in the middle, keeping an image's registry and tag.
@@ -99,7 +99,7 @@ func runEventsCommand(cmd *cobra.Command, _ []string) error {
 
 	// Gather the history to size the columns, then show new events as they
 	// come.
-	table := &eventTable{w: cmd.OutOrStdout(), format: format, p: paletteFor(cmd.OutOrStdout())}
+	table := &eventTable{w: cmd.OutOrStdout(), format: format, palette: paletteFor(cmd.OutOrStdout())}
 
 	var (
 		history  []*dicerdv1.Event
@@ -148,21 +148,22 @@ func runEventsCommand(cmd *cobra.Command, _ []string) error {
 //
 // or, for scripts, one JSON object a line.
 type eventTable struct {
-	w      io.Writer
-	format string
-	p      palette
+	w       io.Writer
+	format  string
+	palette palette
 
-	kind, name, action int
+	// The widths of the kind, name and action columns so far.
+	kindWidth, nameWidth, actionWidth int
 }
 
-// write widens the columns to fit list, then writes it.
-func (t *eventTable) write(list []*dicerdv1.Event) error {
-	for _, e := range list {
-		t.kind = max(t.kind, width(eventLabel(enumName(e.GetKind()))))
-		t.name = max(t.name, width(eventName(e)))
-		t.action = max(t.action, width(eventLabel(enumName(e.GetAction()))))
+// write widens the columns to fit events, then writes them.
+func (t *eventTable) write(events []*dicerdv1.Event) error {
+	for _, e := range events {
+		t.kindWidth = max(t.kindWidth, width(eventLabel(enumName(e.GetKind()))))
+		t.nameWidth = max(t.nameWidth, width(eventName(e)))
+		t.actionWidth = max(t.actionWidth, width(eventLabel(enumName(e.GetAction()))))
 	}
-	for _, e := range list {
+	for _, e := range events {
 		if err := t.writeOne(e); err != nil {
 			return err
 		}
@@ -170,6 +171,7 @@ func (t *eventTable) write(list []*dicerdv1.Event) error {
 	return nil
 }
 
+// writeOne writes one event, a line of its own.
 func (t *eventTable) writeOne(e *dicerdv1.Event) error {
 	if t.format == "json" {
 		data, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(e)
@@ -182,9 +184,9 @@ func (t *eventTable) writeOne(e *dicerdv1.Event) error {
 	}
 
 	line := timeOf(e.GetTime()).Local().Format(time.DateTime) + "  " +
-		pad(eventLabel(enumName(e.GetKind())), t.kind) + "  " +
-		pad(eventName(e), t.name) + "  " +
-		eventAction(e, t.action, t.p)
+		pad(eventLabel(enumName(e.GetKind())), t.kindWidth) + "  " +
+		pad(eventName(e), t.nameWidth) + "  " +
+		eventAction(e, t.actionWidth, t.palette)
 	_, err := fmt.Fprintln(t.w, line)
 	return err
 }
@@ -194,7 +196,7 @@ func (t *eventTable) writeOne(e *dicerdv1.Event) error {
 func eventName(e *dicerdv1.Event) string {
 	name := e.GetName()
 	if e.GetKind() == dicerdv1.EventKind_EVENT_KIND_IMAGE {
-		name = reference.Familiar(name)
+		name = reference.FamiliarString(name)
 	}
 	return shorten(name, maxNameWidth)
 }
@@ -280,7 +282,7 @@ func recentEvents(ctx context.Context, client *dicer.Client, instanceID string) 
 	err := streamEvents(ctx, client, &dicerdv1.GetEventsRequest{
 		Kind:  dicerdv1.EventKind_EVENT_KIND_INSTANCE,
 		Id:    instanceID,
-		Limit: inspectEvents,
+		Limit: maxRecentEvents,
 	}, func(e *dicerdv1.Event) { out = append(out, e) }, nil)
 	switch {
 	case errors.Is(err, io.EOF), err == nil:

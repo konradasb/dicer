@@ -5,108 +5,69 @@ package remote
 
 import (
 	"errors"
-	"slices"
+	"strings"
 	"testing"
 
-	"github.com/konradasb/dicer"
 	"github.com/konradasb/dicer/internal/errdefs"
 )
 
-func TestLoadWithoutAFileHasOnlyLocal(t *testing.T) {
-	cfg, err := Load(t.TempDir())
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	if got := cfg.CurrentName(); got != Local {
-		t.Errorf("current = %q, want %q", got, Local)
-	}
-	if got := cfg.Names(); !slices.Equal(got, []string{Local}) {
-		t.Errorf("names = %v, want only %q", got, Local)
-	}
-
-	r, err := cfg.Get(Local)
-	if err != nil {
-		t.Fatalf("Get(local): %v", err)
-	}
-	if r.Address != dicer.DefaultAddress {
-		t.Errorf("local address = %q, want %q", r.Address, dicer.DefaultAddress)
-	}
-}
-
-func TestCreateUseSaveLoad(t *testing.T) {
-	dir := t.TempDir()
-	cfg, _ := Load(dir)
-
-	if err := cfg.Create("prod", Remote{Address: "192.0.2.1:7443"}); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	if err := cfg.Use("prod"); err != nil {
-		t.Fatalf("Use: %v", err)
-	}
-	if err := cfg.Save(dir); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-
-	loaded, err := Load(dir)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if loaded.CurrentName() != "prod" {
-		t.Errorf("current = %q, want prod", loaded.CurrentName())
-	}
-	r, err := loaded.Get("prod")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if r.Address != "192.0.2.1:7443" {
-		t.Errorf("remote = %+v, want the one created", r)
-	}
-}
-
-func TestDeletingCurrentFallsBackToLocal(t *testing.T) {
-	cfg, _ := Load(t.TempDir())
-	_ = cfg.Create("prod", Remote{Address: "192.0.2.1:7443"})
-	_ = cfg.Use("prod")
-
-	if err := cfg.Delete("prod"); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if cfg.CurrentName() != Local {
-		t.Errorf("current = %q after deleting it, want %q", cfg.CurrentName(), Local)
-	}
-}
-
-func TestCreateRejections(t *testing.T) {
-	cfg, _ := Load(t.TempDir())
-	_ = cfg.Create("prod", Remote{Address: "192.0.2.1:7443"})
-
+func TestRemoteValidate(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		remote Remote
 		want   error
 	}{
-		{Local, Remote{Address: "unix:///tmp/dicer.sock"}, errdefs.ErrInvalidArgument},
-		{"prod", Remote{Address: "unix:///tmp/dicer.sock"}, errdefs.ErrExists},
-		{"../x", Remote{Address: "unix:///tmp/dicer.sock"}, errdefs.ErrInvalidArgument},
-		{"relative", Remote{Address: "unix://dicer.sock"}, errdefs.ErrInvalidArgument},
-		{"no-port", Remote{Address: "192.0.2.1"}, errdefs.ErrInvalidArgument},
+		{"socket", Remote{Address: "unix:///run/dicer/dicer.sock"}, nil},
+		{"host and port", Remote{Address: "192.0.2.1:7443"}, nil},
+		{"dns target", Remote{Address: "dns:///dicer1.example.com:7443"}, nil},
+		{"with tls", Remote{Address: "192.0.2.1:7443", TLS: &TLS{CAFile: "ca.pem"}}, nil},
+		{"relative socket", Remote{Address: "unix://dicer.sock"}, errdefs.ErrInvalidArgument},
+		{"no port", Remote{Address: "192.0.2.1"}, errdefs.ErrInvalidArgument},
+		{"half a keypair", Remote{Address: "192.0.2.1:7443", TLS: &TLS{CertFile: "c.pem"}}, errdefs.ErrInvalidArgument},
 	} {
-		err := cfg.Create(tc.name, tc.remote)
-		if err == nil {
-			t.Errorf("Create(%q, %+v) succeeded", tc.name, tc.remote)
-			continue
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.remote.Validate()
+			switch {
+			case tc.want == nil && err != nil:
+				t.Errorf("Validate = %v, want no error", err)
+			case tc.want != nil && !errors.Is(err, tc.want):
+				t.Errorf("Validate = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+// A socket is controlled by its file permissions; TLS on it would be
+// configuration that does nothing, which is worse than being refused.
+func TestSocketRemoteRefusesTLS(t *testing.T) {
+	err := Remote{Address: "unix:///run/dicer/dicer.sock", TLS: &TLS{CAFile: "ca.pem"}}.Validate()
+	if !errors.Is(err, errdefs.ErrInvalidArgument) || !strings.Contains(err.Error(), "file permissions") {
+		t.Errorf("a unix remote with TLS = %v, want it refused, saying why", err)
+	}
+}
+
+func TestIsAddress(t *testing.T) {
+	for _, s := range []string{"unix:///run/dicer/dicer.sock", "192.0.2.1:7443", "dns:///host:7443"} {
+		if !IsAddress(s) {
+			t.Errorf("IsAddress(%q) = false", s)
 		}
-		if tc.want != nil && !errors.Is(err, tc.want) {
-			t.Errorf("Create(%q) = %v, want %v", tc.name, err, tc.want)
+	}
+	for _, s := range []string{"local", "prod", "dicer1.example.com", ""} {
+		if IsAddress(s) {
+			t.Errorf("IsAddress(%q) = true", s)
 		}
 	}
 }
 
-func TestLocalCannotBeDeleted(t *testing.T) {
-	cfg, _ := Load(t.TempDir())
+func TestClientOptions(t *testing.T) {
+	opts, err := Remote{Address: "unix:///run/dicer/dicer.sock"}.ClientOptions()
+	if err != nil || len(opts) != 1 {
+		t.Errorf("a socket's options = %d, %v; want its address alone", len(opts), err)
+	}
 
-	if err := cfg.Delete(Local); !errors.Is(err, errdefs.ErrInvalidArgument) {
-		t.Errorf("Delete(local) = %v, want ErrInvalidArgument", err)
+	// The TLS files are read for the options, so a missing one is reported
+	// then.
+	if _, err := (Remote{Address: "192.0.2.1:7443", TLS: &TLS{CAFile: "does-not-exist.pem"}}).ClientOptions(); err == nil {
+		t.Error("a missing CA file was accepted")
 	}
 }

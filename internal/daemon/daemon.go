@@ -45,7 +45,7 @@ type daemon struct {
 	definitions *filestore.Manager
 	networks    *network.Manager
 	instances   *vm.Manager
-	hostnet     *hostnet.Host
+	hostNetwork *hostnet.Host
 	// dnsServers serves each network's guests their nameserver. Nil if
 	// the configuration turns it off.
 	dnsServers *dns.Servers
@@ -61,11 +61,9 @@ type daemon struct {
 	events  *events.Log
 }
 
+// newDaemon returns a daemon for cfg, which must be valid, as loadConfig
+// returns it. Nothing is opened or started until Run.
 func newDaemon(cfg *Config) (*daemon, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("config: %w", err)
-	}
-
 	level, err := cfg.logLevel()
 	if err != nil {
 		return nil, err
@@ -84,7 +82,7 @@ func (d *daemon) Run(ctx context.Context) error {
 	d.logger.Info("starting Dicer",
 		"version", version.Version, "commit", version.Commit, "date", version.BuildDate)
 
-	if err := d.openDefinitions(); err != nil {
+	if err := d.openDefinitionsAndAllocations(); err != nil {
 		return err
 	}
 
@@ -99,7 +97,7 @@ func (d *daemon) Run(ctx context.Context) error {
 			d.logger.Warn("not every event reached the events file", "error", err)
 		}
 	}()
-	defer d.hostnet.Close()
+	defer d.hostNetwork.Close()
 
 	// Deferred before the instance manager's close, so it runs after: the
 	// instance manager stops networks' DNS servers until it is closed.
@@ -108,9 +106,7 @@ func (d *daemon) Run(ctx context.Context) error {
 	}
 
 	// Reconcile recorded state with what is running before serving.
-	if err := d.instances.Recover(ctx); err != nil {
-		return fmt.Errorf("recover instances: %w", err)
-	}
+	d.instances.Recover(ctx)
 	defer d.instances.Close()
 
 	listeners, err := d.listenAPI(ctx)
@@ -142,7 +138,7 @@ func (d *daemon) Run(ctx context.Context) error {
 		}
 	})
 
-	background.Go(func() { d.hostnet.WatchFirewalld(ctx) })
+	background.Go(func() { d.hostNetwork.WatchFirewalld(ctx) })
 
 	// Started after the API is up so slow boots do not delay it.
 	background.Go(func() { d.instances.StartOnBoot(ctx) })
@@ -183,40 +179,42 @@ func stopServers(listeners []apiListener, timeout time.Duration) {
 	wg.Wait()
 }
 
-// stopServer stops srv gracefully, forcing it after timeout.
-func stopServer(srv *grpc.Server, timeout time.Duration) {
+// stopServer stops server gracefully, forcing it after timeout.
+func stopServer(server *grpc.Server, timeout time.Duration) {
 	stopped := make(chan struct{})
 	go func() {
-		srv.GracefulStop()
+		server.GracefulStop()
 		close(stopped)
 	}()
 
 	select {
 	case <-stopped:
 	case <-time.After(timeout):
-		srv.Stop()
+		server.Stop()
 		<-stopped
 	}
 }
 
-func (d *daemon) openDefinitions() error {
-	s, err := filestore.NewManager(filestore.Config{
+// openDefinitionsAndAllocations opens what the daemon keeps on disk about
+// instances, networks, volumes and kernels: their definitions, and the
+// networks' address allocations.
+func (d *daemon) openDefinitionsAndAllocations() error {
+	var err error
+	d.definitions, err = filestore.NewManager(filestore.Config{
 		DataDir: d.cfg.DataDir,
 		Logger:  d.logger,
 	})
 	if err != nil {
-		return fmt.Errorf("open store: %w", err)
+		return fmt.Errorf("open definitions: %w", err)
 	}
-	d.definitions = s
 
-	networkManager, err := network.NewManager(network.Config{
+	d.networks, err = network.NewManager(network.Config{
 		Dir:    filepath.Join(d.cfg.DataDir, "allocations"),
 		Logger: d.logger,
 	})
 	if err != nil {
 		return fmt.Errorf("open network manager: %w", err)
 	}
-	d.networks = networkManager
 
 	return nil
 }
@@ -224,6 +222,8 @@ func (d *daemon) openDefinitions() error {
 // eventsFile is the events log, in the data directory.
 const eventsFile = "events.jsonl"
 
+// initServices creates the managers the API and the instance manager use,
+// and the instance manager itself.
 func (d *daemon) initServices() error {
 	var err error
 	d.events, err = events.Open(events.Config{
@@ -255,10 +255,10 @@ func (d *daemon) initServices() error {
 		Logger:             d.logger,
 	})
 	if err != nil {
-		return fmt.Errorf("create image store: %w", err)
+		return fmt.Errorf("create image manager: %w", err)
 	}
 
-	d.hostnet = hostnet.NewHost(hostnet.Config{
+	d.hostNetwork = hostnet.NewHost(hostnet.Config{
 		UplinkInterface:         d.cfg.Network.UplinkInterface,
 		UplinkCapacityBps:       d.cfg.Network.UplinkCapacityBps,
 		UploadBurstMultiplier:   d.cfg.Network.UploadBurstMultiplier,
@@ -273,7 +273,7 @@ func (d *daemon) initServices() error {
 		Logger:  d.logger,
 	})
 	if err != nil {
-		return fmt.Errorf("create kernel store: %w", err)
+		return fmt.Errorf("create kernel manager: %w", err)
 	}
 
 	d.initrds, err = initrd.NewManager(initrd.Config{
@@ -308,7 +308,7 @@ func (d *daemon) initServices() error {
 		Kernels:     d.kernels,
 		Volumes:     d.volumes,
 		Initrds:     d.initrds,
-		HostNetwork: d.hostnet,
+		HostNetwork: d.hostNetwork,
 		Starters:    d.hypervisors,
 		Capacity:    capacity,
 		Metrics:     d.metrics,
@@ -352,19 +352,19 @@ func (d *daemon) hostCapacity() (types.Capacity, error) {
 	if err != nil {
 		return types.Capacity{}, fmt.Errorf("read the host's CPUs: %w", err)
 	}
-	mem, err := hostinfo.MemoryTotal()
+	memory, err := hostinfo.MemoryTotal()
 	if err != nil {
 		return types.Capacity{}, fmt.Errorf("read the host's memory: %w", err)
 	}
 
-	capacity, err := d.cfg.Resources.capacity(cpus, mem)
+	capacity, err := d.cfg.Resources.capacity(cpus, memory)
 	if err != nil {
 		return types.Capacity{}, err
 	}
 
 	allocatable := capacity.Allocatable()
 	d.logger.Info("admission capacity",
-		"cpus", cpus, "memory_bytes", mem,
+		"cpus", cpus, "memory_bytes", memory,
 		"cpu_overcommit", capacity.CPUOvercommit, "memory_overcommit", capacity.MemoryOvercommit,
 		"reserved_memory_bytes", capacity.ReservedMemoryBytes,
 		"allocatable_vcpus", allocatable.VCPUs, "allocatable_memory_bytes", allocatable.MemoryBytes)

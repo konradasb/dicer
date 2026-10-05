@@ -4,13 +4,19 @@
 package cloudhypervisor
 
 import (
+	"path"
+
 	"github.com/konradasb/dicer/internal/hypervisor"
 )
 
-// ToVMConfig translates a Dicer VM specification into Cloud Hypervisor's
-// API representation. The serial port is the console; the virtio console is
+// mediatedDeviceDir is the sysfs directory holding the host's mediated
+// devices, by UUID. VFIO opens a mediated device by its path there.
+const mediatedDeviceDir = "/sys/bus/mdev/devices"
+
+// vmConfig translates a VM specification into Cloud Hypervisor's API
+// representation. The serial port is the console; the virtio console is
 // off.
-func ToVMConfig(spec hypervisor.VirtualMachine) VmConfig {
+func vmConfig(spec hypervisor.VMSpec) VmConfig {
 	return VmConfig{
 		Payload: PayloadConfig{
 			Kernel:    ptr(spec.Boot.KernelPath),
@@ -20,13 +26,11 @@ func ToVMConfig(spec hypervisor.VirtualMachine) VmConfig {
 		Cpus:    ptr(cpusConfig(spec.CPU)),
 		Memory:  ptr(memoryConfig(spec.Memory)),
 		Disks:   ptr(mapSlice(spec.Disks, diskConfig)),
-		Serial:  &ConsoleConfig{Mode: ConsoleConfigMode("File"), File: ptr(spec.Console.Path)},
-		Console: &ConsoleConfig{Mode: ConsoleConfigMode("Off")},
-		Net:     optionalSlice(mapSlice(spec.NICs, netConfig)),
+		Serial:  &ConsoleConfig{Mode: ConsoleConfigModeFile, File: ptr(spec.Console.Path)},
+		Console: &ConsoleConfig{Mode: ConsoleConfigModeOff},
+		Net:     optionalSlice(mapSlice(spec.NetworkInterfaces, netConfig)),
 		Vsock:   vsockConfig(spec.Vsock),
-		Devices: optionalSlice(mapSlice(spec.Devices, func(d hypervisor.PCIDeviceConfig) DeviceConfig {
-			return DeviceConfig{Path: d.Path}
-		})),
+		Devices: optionalSlice(deviceConfigs(spec)),
 	}
 }
 
@@ -68,13 +72,13 @@ func diskConfig(d hypervisor.DiskConfig) DiskConfig {
 	if d.ReadOnly {
 		disk.Readonly = ptr(true)
 	}
-	if d.RateLimitBps > 0 {
-		burst := max(d.RateLimitBurstBps, d.RateLimitBps)
+	if d.RateLimitBytesPerSecond > 0 {
+		burst := max(d.RateLimitBurstBytesPerSecond, d.RateLimitBytesPerSecond)
 		disk.RateLimiterConfig = &RateLimiterConfig{
 			Bandwidth: &TokenBucket{
-				Size:         d.RateLimitBps,
+				Size:         d.RateLimitBytesPerSecond,
 				RefillTime:   1000,
-				OneTimeBurst: ptr(burst - d.RateLimitBps),
+				OneTimeBurst: ptr(burst - d.RateLimitBytesPerSecond),
 			},
 		}
 	}
@@ -82,18 +86,32 @@ func diskConfig(d hypervisor.DiskConfig) DiskConfig {
 }
 
 func netConfig(n hypervisor.NetworkInterfaceConfig) NetConfig {
-	nc := NetConfig{Tap: ptr(n.TapDevice), Ip: ptr(n.IP), Mac: ptr(n.MAC), Mask: ptr(n.Netmask)}
+	net := NetConfig{Tap: ptr(n.TAPDevice), Ip: ptr(n.IP), Mac: ptr(n.MAC), Mask: ptr(n.Netmask)}
 	if n.MTU > 0 {
-		nc.Mtu = ptr(n.MTU)
+		net.Mtu = ptr(n.MTU)
 	}
-	return nc
+	return net
 }
 
 func vsockConfig(v *hypervisor.VsockConfig) *VsockConfig {
 	if v == nil {
 		return nil
 	}
-	return &VsockConfig{Cid: int64(v.CID), Socket: v.Socket}
+	return &VsockConfig{Cid: int64(v.CID), Socket: v.SocketPath}
+}
+
+// deviceConfigs lists the host devices passed through to the guest over
+// VFIO: the PCI devices, then the GPU's mediated device.
+func deviceConfigs(spec hypervisor.VMSpec) []DeviceConfig {
+	devices := mapSlice(spec.PCIDevices, func(d hypervisor.PCIDeviceConfig) DeviceConfig {
+		return DeviceConfig{Path: d.Path}
+	})
+	if spec.GPU != nil {
+		devices = append(devices, DeviceConfig{
+			Path: path.Join(mediatedDeviceDir, spec.GPU.MediatedDeviceUUID),
+		})
+	}
+	return devices
 }
 
 // mapSlice returns f applied to each element of in.

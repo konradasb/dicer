@@ -14,7 +14,7 @@ import (
 )
 
 func TestCreateNetworkNormalises(t *testing.T) {
-	s, _ := newResourceServer(t)
+	s, _ := newTestServer(t)
 
 	n, err := s.CreateNetwork(t.Context(), &dicerdv1.CreateNetworkRequest{Name: "lan", Subnet: "10.9.0.77/24"})
 	if err != nil {
@@ -42,7 +42,7 @@ func TestCreateNetworkRefusesWhatCannotWork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, _ := newResourceServer(t)
+			s, _ := newTestServer(t)
 			tt.req.Name = "lan"
 
 			_, err := s.CreateNetwork(t.Context(), tt.req)
@@ -54,7 +54,7 @@ func TestCreateNetworkRefusesWhatCannotWork(t *testing.T) {
 // A subnet another network or the host is on is refused as taken, which
 // dicer compose up tells apart from a request it got wrong.
 func TestCreateNetworkRefusesATakenSubnet(t *testing.T) {
-	s, _ := newResourceServer(t)
+	s, _ := newTestServer(t)
 	s.hostSubnets = func() ([]netip.Prefix, error) {
 		return []netip.Prefix{netip.MustParsePrefix("192.168.1.0/24")}, nil
 	}
@@ -74,7 +74,7 @@ func TestCreateNetworkRefusesATakenSubnet(t *testing.T) {
 // deletion are recorded, with its subnet and gateway, and a refused request
 // is not.
 func TestNetworkCreatedAndDeletedAreRecorded(t *testing.T) {
-	s, _ := newResourceServer(t)
+	s, _ := newTestServer(t)
 	recorded := &fakeRecorder{}
 	s.networkHandler.events = recorded
 

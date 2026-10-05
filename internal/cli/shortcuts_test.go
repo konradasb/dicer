@@ -8,9 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
-	"net"
-	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -25,7 +22,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/konradasb/dicer/internal/errdefs"
-	"github.com/konradasb/dicer/internal/grpcapi"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -75,8 +71,8 @@ func newFakeInstanceDaemon(instances ...*dicerdv1.Instance) *fakeInstanceDaemon 
 		console:   make(map[string]string),
 		ran:       make(map[string]bool),
 	}
-	for _, inst := range instances {
-		d.instances[inst.GetName()] = inst
+	for _, instance := range instances {
+		d.instances[instance.GetName()] = instance
 	}
 	return d
 }
@@ -86,23 +82,23 @@ func (d *fakeInstanceDaemon) record(call string) {
 }
 
 func (d *fakeInstanceDaemon) get(name string) (*dicerdv1.Instance, error) {
-	inst, ok := d.instances[name]
+	instance, ok := d.instances[name]
 	if !ok {
 		return nil, errdefs.NotFound("no instance %q", name)
 	}
-	return inst, nil
+	return instance, nil
 }
 
 // reply copies an instance for the wire. gRPC marshals what a handler
 // returns after the handler has returned, so the lock is long released by
 // then; handing out the stored message would let a test that moves an
 // instance on -- stops, say -- write it while it is being marshalled.
-func reply(inst *dicerdv1.Instance, err error) (*dicerdv1.Instance, error) {
+func reply(instance *dicerdv1.Instance, err error) (*dicerdv1.Instance, error) {
 	if err != nil {
 		return nil, err
 	}
 
-	clone, ok := proto.Clone(inst).(*dicerdv1.Instance)
+	clone, ok := proto.Clone(instance).(*dicerdv1.Instance)
 	if !ok {
 		return nil, errors.New("clone instance")
 	}
@@ -117,17 +113,17 @@ func (d *fakeInstanceDaemon) setState(
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	inst, err := d.get(name)
+	instance, err := d.get(name)
 	if err != nil {
 		return nil, err
 	}
-	if !slices.Contains(from, inst.GetState()) {
-		return nil, errdefs.InvalidState("instance %q is %s", name, enumName(inst.GetState()))
+	if !slices.Contains(from, instance.GetState()) {
+		return nil, errdefs.InvalidState("instance %q is %s", name, enumName(instance.GetState()))
 	}
 
 	d.record(call + " " + name)
-	inst.State = state
-	return reply(inst, nil)
+	instance.State = state
+	return reply(instance, nil)
 }
 
 func (d *fakeInstanceDaemon) ListInstances(
@@ -138,11 +134,11 @@ func (d *fakeInstanceDaemon) ListInstances(
 
 	resp := &dicerdv1.ListInstancesResponse{}
 	for _, name := range slices.Sorted(maps.Keys(d.instances)) {
-		inst, err := reply(d.instances[name], nil)
+		instance, err := reply(d.instances[name], nil)
 		if err != nil {
 			return nil, err
 		}
-		resp.Instances = append(resp.Instances, inst)
+		resp.Instances = append(resp.Instances, instance)
 	}
 	return resp, nil
 }
@@ -157,7 +153,7 @@ func (d *fakeInstanceDaemon) GetInstance(_ context.Context, req *dicerdv1.GetIns
 func (d *fakeInstanceDaemon) StartInstance(
 	_ context.Context, req *dicerdv1.StartInstanceRequest,
 ) (*dicerdv1.Instance, error) {
-	inst, err := d.setState("start", req.GetName(), stateRunning, stateStopped, stateFailed)
+	instance, err := d.setState("start", req.GetName(), stateRunning, stateStopped, stateFailed)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +166,7 @@ func (d *fakeInstanceDaemon) StartInstance(
 	if onStart != nil {
 		onStart(req.GetName())
 	}
-	return inst, nil
+	return instance, nil
 }
 
 func (d *fakeInstanceDaemon) StopInstance(_ context.Context, req *dicerdv1.StopInstanceRequest) (*dicerdv1.Instance, error) {
@@ -195,11 +191,11 @@ func (d *fakeInstanceDaemon) DeleteInstance(
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	inst, err := d.get(req.GetName())
+	instance, err := d.get(req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	if inst.GetState() == stateRunning && !req.GetForce() {
+	if instance.GetState() == stateRunning && !req.GetForce() {
 		return nil, errdefs.InvalidState("instance %q is running", req.GetName())
 	}
 	d.record("delete " + req.GetName())
@@ -214,14 +210,14 @@ func (d *fakeInstanceDaemon) CreateInstance(
 	defer d.mu.Unlock()
 
 	d.created = req
-	inst := &dicerdv1.Instance{
+	instance := &dicerdv1.Instance{
 		Id: "id-" + req.GetName(), Name: req.GetName(), ImageRef: req.GetImageRef(), State: stateStopped,
 	}
 	if req.GetStart() {
-		inst.State, inst.Ip = stateRunning, "10.0.0.9"
+		instance.State, instance.Ip = stateRunning, "10.0.0.9"
 	}
-	d.instances[inst.GetName()] = inst
-	return reply(inst, nil)
+	d.instances[instance.GetName()] = instance
+	return reply(instance, nil)
 }
 
 func (d *fakeInstanceDaemon) UpdateInstance(
@@ -242,24 +238,24 @@ func (d *fakeInstanceDaemon) RenameInstance(
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	inst, err := d.get(req.GetName())
+	instance, err := d.get(req.GetName())
 	if err != nil {
 		return nil, err
 	}
-	if inst.GetState() != stateStopped {
+	if instance.GetState() != stateStopped {
 		return nil, errdefs.InvalidState(
-			"instance %q is %s", req.GetName(), enumName(inst.GetState()))
+			"instance %q is %s", req.GetName(), enumName(instance.GetState()))
 	}
 	if _, taken := d.instances[req.GetNewName()]; taken {
 		return nil, errdefs.Exists("instance %q already exists", req.GetNewName())
 	}
 
 	d.record("rename " + req.GetName() + " " + req.GetNewName())
-	delete(d.instances, inst.GetName())
-	inst.Name = req.GetNewName()
-	d.instances[inst.GetName()] = inst
+	delete(d.instances, instance.GetName())
+	instance.Name = req.GetNewName()
+	d.instances[instance.GetName()] = instance
 
-	return reply(inst, nil)
+	return reply(instance, nil)
 }
 
 // GetEvents reports the history, says so, and then streams whatever the test
@@ -295,10 +291,10 @@ func (d *fakeInstanceDaemon) GetEvents(
 func (d *fakeInstanceDaemon) stops(name string, exitCode int32) {
 	d.mu.Lock()
 	id := "id-" + name
-	if inst, ok := d.instances[name]; ok {
-		inst.State = stateStopped
-		inst.ExitCode = &exitCode
-		id = inst.GetId()
+	if instance, ok := d.instances[name]; ok {
+		instance.State = stateStopped
+		instance.ExitCode = &exitCode
+		id = instance.GetId()
 	}
 	d.mu.Unlock()
 
@@ -310,8 +306,8 @@ func (d *fakeInstanceDaemon) stops(name string, exitCode int32) {
 func (d *fakeInstanceDaemon) stopsAndRemoves(name string, exitCode int32) {
 	d.mu.Lock()
 	id := "id-" + name
-	if inst, ok := d.instances[name]; ok {
-		id = inst.GetId()
+	if instance, ok := d.instances[name]; ok {
+		id = instance.GetId()
 	}
 	delete(d.instances, name)
 	d.mu.Unlock()
@@ -360,8 +356,8 @@ func (d *fakeInstanceDaemon) GetInstanceLogs(
 
 	for req.GetFollow() {
 		d.mu.Lock()
-		inst, ok := d.instances[req.GetName()]
-		running := ok && inst.GetState() == stateRunning
+		instance, ok := d.instances[req.GetName()]
+		running := ok && instance.GetState() == stateRunning
 		d.mu.Unlock()
 		if !running {
 			return nil
@@ -481,34 +477,8 @@ func fakeInstances() []*dicerdv1.Instance {
 	}
 }
 
-// serveInstanceDaemon serves d on a socket and aims commands at it through
-// $DICER_REMOTE, as a completion, which takes no --remote, needs.
-func serveInstanceDaemon(t *testing.T, d *fakeInstanceDaemon) {
-	t.Helper()
-	isolateConfig(t)
-
-	dir, err := os.MkdirTemp("", "dicer")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-
-	socket := filepath.Join(dir, "d.sock")
-	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	server := newTestServer()
-	dicerdv1.RegisterDaemonServiceServer(server, d)
-	go func() { _ = server.Serve(listener) }()
-	t.Cleanup(server.Stop)
-
-	t.Setenv(remoteEnv, "unix://"+socket)
-}
-
 func TestPsIsInstanceList(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
+	serveFakeDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
 
 	ps, err := run(t, "ps")
 	if err != nil {
@@ -535,7 +505,7 @@ func TestPsIsInstanceList(t *testing.T) {
 }
 
 func TestPsQuietAndFilters(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
+	serveFakeDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
 
 	for _, tc := range []struct {
 		args []string
@@ -566,7 +536,7 @@ func TestPsQuietAndFilters(t *testing.T) {
 }
 
 func TestPsYAMLAndColumns(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
+	serveFakeDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
 
 	out, err := run(t, "ps", "--format", "yaml", "-c", "name,ip", "--filter", "name=web")
 	if err != nil {
@@ -585,7 +555,7 @@ func TestPsYAMLAndColumns(t *testing.T) {
 
 func TestLifecycleShortcutsTakeManyNames(t *testing.T) {
 	d := newFakeInstanceDaemon(fakeInstances()...)
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	if out, err := run(t, "stop", "web", "cache"); err != nil {
 		t.Fatalf("stop: %v\n%s", err, out)
@@ -614,7 +584,7 @@ func TestLifecycleShortcutsTakeManyNames(t *testing.T) {
 // name is reported, the rest are still deleted, and the command fails.
 func TestRmCarriesOnPastAFailure(t *testing.T) {
 	d := newFakeInstanceDaemon(fakeInstances()...)
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	out, err := run(t, "rm", "-f", "web", "nope", "db")
 
@@ -632,7 +602,7 @@ func TestRmCarriesOnPastAFailure(t *testing.T) {
 
 func TestRestart(t *testing.T) {
 	d := newFakeInstanceDaemon(fakeInstances()...)
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	if out, err := run(t, "restart", "web", "db"); err != nil {
 		t.Fatalf("restart: %v\n%s", err, out)
@@ -646,7 +616,7 @@ func TestRestart(t *testing.T) {
 
 func TestRun(t *testing.T) {
 	d := newFakeInstanceDaemon()
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	out, err := run(t, "run", "-d", "--name", "web", "-p", "8080:80", "-e", "A=1,2", "-m", "1GiB",
 		"nginx:1.27", "nginx", "-g", "daemon off;")
@@ -737,7 +707,7 @@ func TestPullFlagSaysWhenTheImageIsPulled(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d := newFakeInstanceDaemon()
 			d.cached["nginx:1.27"] = tt.cached
-			serveInstanceDaemon(t, d)
+			serveFakeDaemon(t, d)
 
 			if out, err := run(t, tt.args...); err != nil {
 				t.Fatalf("%s: %v\n%s", tt.args[0], err, out)
@@ -755,7 +725,7 @@ func TestPullFlagSaysWhenTheImageIsPulled(t *testing.T) {
 
 func TestPullFlagRefusesAnUnknownPolicy(t *testing.T) {
 	d := newFakeInstanceDaemon()
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	out, err := run(t, "run", "-d", "--pull", "sometimes", "nginx:1.27")
 	if err == nil || !strings.Contains(err.Error(), `invalid --pull "sometimes": want missing, always or never`) {
@@ -768,7 +738,7 @@ func TestPullFlagRefusesAnUnknownPolicy(t *testing.T) {
 
 func TestRunNamesAfterTheImage(t *testing.T) {
 	d := newFakeInstanceDaemon()
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	if out, err := run(t, "run", "-d", "ghcr.io/acme/Web_App:2@sha256:abc", "--", "serve"); err != nil {
 		t.Fatalf("run: %v\n%s", err, out)
@@ -785,7 +755,7 @@ func TestRunNamesAfterTheImage(t *testing.T) {
 
 func TestUpdateSendsOnlyWhatChanged(t *testing.T) {
 	d := newFakeInstanceDaemon(fakeInstances()...)
-	serveInstanceDaemon(t, d)
+	serveFakeDaemon(t, d)
 
 	if out, err := run(t, "update", "db", "--memory", "2GiB", "--restart", "always", "--init-mode", "exec",
 		"-l", "tier=gold"); err != nil {
@@ -810,7 +780,7 @@ func TestUpdateSendsOnlyWhatChanged(t *testing.T) {
 }
 
 func TestInspect(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
+	serveFakeDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
 
 	out, err := run(t, "inspect", "web")
 	if err != nil {
@@ -861,7 +831,7 @@ func TestInspect(t *testing.T) {
 }
 
 func TestVersion(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon())
+	serveFakeDaemon(t, newFakeInstanceDaemon())
 
 	out, err := run(t, "version")
 	if err != nil {
@@ -888,7 +858,7 @@ func TestVersionWithoutDaemon(t *testing.T) {
 }
 
 func TestCompletionOffersInstancesInTheRightState(t *testing.T) {
-	serveInstanceDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
+	serveFakeDaemon(t, newFakeInstanceDaemon(fakeInstances()...))
 
 	for _, tc := range []struct {
 		args []string
@@ -939,12 +909,4 @@ func TestShortcutsAreGrouped(t *testing.T) {
 			t.Errorf("dicer %s is in group %q, want %q", name, cmd.GroupID, groupCommon)
 		}
 	}
-}
-
-// newTestServer returns a gRPC server that sends errors as dicerd does.
-func newTestServer() *grpc.Server {
-	return grpc.NewServer(
-		grpc.ChainUnaryInterceptor(grpcapi.UnaryStatusInterceptor),
-		grpc.ChainStreamInterceptor(grpcapi.StreamStatusInterceptor),
-	)
 }

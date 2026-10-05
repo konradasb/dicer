@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -52,41 +53,42 @@ func WithKeychain(k authn.Keychain) Option {
 	}
 }
 
-// Client handles OCI image registry operations and local caching.
+// Client resolves image references against their registries, and pulls
+// images through a layer cache: an OCI layout on disk, in which each image is
+// named by its manifest digest's hex. It is safe for concurrent use.
 type Client struct {
+	// mu serialises pulls with pruning the layer cache, so that neither sees
+	// the other's half-written changes to it.
+	mu       sync.Mutex
 	cacheDir string
+
 	platform gcr.Platform
 	keychain authn.Keychain
-	layoutMu sync.Mutex
 	logger   *slog.Logger
 }
 
-// PullResult contains the results of a successful image pull.
-type PullResult struct {
-	Metadata *Metadata
-	Digest   string
-}
-
-// Metadata contains container image metadata.
+// Metadata is the part of an image's configuration an instance runs with.
 type Metadata struct {
 	Entrypoint []string
 	Cmd        []string
 	Env        map[string]string
 	WorkingDir string
-	// Healthcheck is the image's HEALTHCHECK as Docker records it, or nil.
-	Healthcheck *gcr.HealthConfig
+
+	// HealthCheck is the image's HEALTHCHECK as Docker records it, or nil.
+	HealthCheck *gcr.HealthConfig
 }
 
-// NewClient creates a new registry client.
+// NewClient returns a client whose layer cache is under dataDir.
 func NewClient(dataDir string, opts ...Option) (*Client, error) {
 	cacheDir := filepath.Join(dataDir, "oci-cache")
 	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
-		return nil, fmt.Errorf("create cache dir: %w", err)
+		return nil, fmt.Errorf("create the layer cache directory: %w", err)
 	}
 
 	c := &Client{
 		cacheDir: cacheDir,
 		platform: gcr.Platform{OS: "linux", Architecture: runtime.GOARCH},
+		keychain: Keychain{},
 	}
 
 	for _, opt := range opts {
@@ -95,9 +97,6 @@ func NewClient(dataDir string, opts ...Option) (*Client, error) {
 
 	if c.logger == nil {
 		c.logger = slog.Default()
-	}
-	if c.keychain == nil {
-		c.keychain = NewKeychain(nil)
 	}
 
 	setUmociLogger(c.logger)
@@ -108,17 +107,12 @@ func NewClient(dataDir string, opts ...Option) (*Client, error) {
 // Resolve returns the manifest digest a reference currently points to. It
 // implements reference.Resolver.
 func (c *Client) Resolve(ctx context.Context, ref *reference.Ref) (string, error) {
-	return c.inspectManifest(ctx, ref.String())
-}
-
-// inspectManifest fetches the manifest digest for an image reference.
-func (c *Client) inspectManifest(ctx context.Context, imageRef string) (string, error) {
-	ref, err := name.ParseReference(imageRef)
+	parsed, err := name.ParseReference(ref.String())
 	if err != nil {
 		return "", fmt.Errorf("parse reference: %w", err)
 	}
 
-	img, err := remote.Image(ref,
+	image, err := remote.Image(parsed,
 		remote.WithContext(ctx),
 		remote.WithAuthFromKeychain(c.keychain),
 		remote.WithPlatform(c.platform))
@@ -126,102 +120,88 @@ func (c *Client) inspectManifest(ctx context.Context, imageRef string) (string, 
 		return "", fmt.Errorf("fetch manifest: %w", err)
 	}
 
-	digest, err := img.Digest()
+	digest, err := image.Digest()
 	if err != nil {
-		return "", fmt.Errorf("get digest: %w", err)
+		return "", fmt.Errorf("read digest: %w", err)
 	}
 
 	return digest.String(), nil
 }
 
-// PullAndExport pulls an image and exports its layers to a directory,
-// reporting progress to onEvent, which may be nil.
+// PullAndExport pulls the image with the manifest digest from imageRef's
+// repository into the layer cache, unless it is there already, and unpacks
+// its root filesystem into exportDir. It reports progress to onProgress,
+// which may be nil, and returns the image's metadata.
 func (c *Client) PullAndExport(
-	ctx context.Context, imageRef, digest, exportDir string, onEvent EventFunc,
-) (*PullResult, error) {
-	if digest == "" {
-		return nil, errors.New("digest is required")
-	}
+	ctx context.Context, imageRef, digest, exportDir string, onProgress ProgressFunc,
+) (*Metadata, error) {
 	if exportDir == "" {
 		return nil, errors.New("export directory is required")
 	}
-
-	layoutTag, err := digestToLayoutTag(digest)
+	hex, err := digestHex(digest)
 	if err != nil {
-		return nil, fmt.Errorf("invalid digest: %w", err)
+		return nil, err
 	}
 
 	// Held until the layers are unpacked: PruneCache would otherwise be
 	// free to drop an image fetched here but not yet in use, from under
 	// the unpacking.
-	c.layoutMu.Lock()
-	defer c.layoutMu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	exists, err := c.existsInLayout(ctx, layoutTag)
+	cached, err := c.isCached(ctx, hex)
 	if err != nil {
-		return nil, fmt.Errorf("check cache: %w", err)
+		return nil, fmt.Errorf("check the layer cache: %w", err)
 	}
-
-	if !exists {
-		if err := c.pullToOCILayout(ctx, imageRef, digest, layoutTag, onEvent); err != nil {
+	if !cached {
+		if err := c.pullToCache(ctx, imageRef, digest, hex, onProgress); err != nil {
 			return nil, fmt.Errorf("pull image: %w", err)
 		}
 	}
 
-	// Extract metadata
-	meta, err := c.metadata(layoutTag)
-	if err != nil {
-		return nil, fmt.Errorf("extract metadata: %w", err)
-	}
-
-	// Unpack layers to export directory
-	onEvent.send(Event{Phase: PhaseUnpacking})
-	if err := c.unpackLayers(ctx, layoutTag, exportDir); err != nil {
-		return nil, fmt.Errorf("unpack layers: %w", err)
-	}
-
-	return &PullResult{
-		Metadata: meta,
-		Digest:   digest,
-	}, nil
-}
-
-// metadata reads the container configuration of a cached image.
-func (c *Client) metadata(layoutTag string) (*Metadata, error) {
-	path, err := layout.FromPath(c.cacheDir)
-	if err != nil {
-		return nil, fmt.Errorf("open layout: %w", err)
-	}
-
-	img, err := c.imageByAnnotation(path, layoutTag)
+	image, err := c.cachedImage(hex)
 	if err != nil {
 		return nil, err
 	}
-
-	configFile, err := img.ConfigFile()
+	metadata, err := metadataOf(image)
 	if err != nil {
-		return nil, fmt.Errorf("get config: %w", err)
+		return nil, fmt.Errorf("read metadata: %w", err)
+	}
+
+	onProgress.report(Progress{Phase: PhaseUnpacking})
+	if err := c.unpackLayers(ctx, image, exportDir); err != nil {
+		return nil, fmt.Errorf("unpack layers: %w", err)
+	}
+
+	return metadata, nil
+}
+
+// metadataOf returns the metadata in an image's configuration.
+func metadataOf(image gcr.Image) (*Metadata, error) {
+	configFile, err := image.ConfigFile()
+	if err != nil {
+		return nil, fmt.Errorf("read config: %w", err)
 	}
 
 	return &Metadata{
 		Entrypoint:  configFile.Config.Entrypoint,
 		Cmd:         configFile.Config.Cmd,
-		Env:         parseEnvVars(configFile.Config.Env),
+		Env:         parseEnv(configFile.Config.Env),
 		WorkingDir:  configFile.Config.WorkingDir,
-		Healthcheck: configFile.Config.Healthcheck,
+		HealthCheck: configFile.Config.Healthcheck,
 	}, nil
 }
 
-// pullToOCILayout pulls the image with the given manifest digest from
-// imageRef's repository into the OCI layout cache. It pulls by digest since
-// the tag may have moved. The caller must hold layoutMu.
-func (c *Client) pullToOCILayout(ctx context.Context, imageRef, digest, layoutTag string, onEvent EventFunc) error {
+// pullToCache pulls the image with the manifest digest from imageRef's
+// repository into the layer cache, named hex. It pulls by digest since the
+// tag may have moved. The caller must hold c.mu.
+func (c *Client) pullToCache(ctx context.Context, imageRef, digest, hex string, onProgress ProgressFunc) error {
 	ref, err := name.ParseReference(imageRef)
 	if err != nil {
 		return fmt.Errorf("parse reference: %w", err)
 	}
 
-	img, err := remote.Image(ref.Context().Digest(digest),
+	image, err := remote.Image(ref.Context().Digest(digest),
 		remote.WithContext(ctx),
 		remote.WithAuthFromKeychain(c.keychain),
 		remote.WithPlatform(c.platform))
@@ -239,19 +219,19 @@ func (c *Client) pullToOCILayout(ctx context.Context, imageRef, digest, layoutTa
 
 	// Only the layers that are not already in the cache will be fetched, so
 	// they alone are what the progress is measured against.
-	total, err := c.bytesToFetch(img)
+	total, err := c.bytesToFetch(image)
 	if err != nil {
 		return err
 	}
 
-	var downloaded counter
-	onEvent.send(Event{Phase: PhaseDownloading, Total: total})
-	progress := progressImage{Image: img, report: func(n int64) {
-		onEvent.send(Event{Phase: PhaseDownloading, Downloaded: downloaded.add(n), Total: total})
+	var downloaded atomic.Int64 // layers are fetched in parallel
+	onProgress.report(Progress{Phase: PhaseDownloading, Total: total})
+	counted := countingImage{Image: image, count: func(n int64) {
+		onProgress.report(Progress{Phase: PhaseDownloading, Downloaded: downloaded.Add(n), Total: total})
 	}}
 
-	err = path.AppendImage(progress, layout.WithAnnotations(map[string]string{
-		"org.opencontainers.image.ref.name": layoutTag,
+	err = path.AppendImage(counted, layout.WithAnnotations(map[string]string{
+		ispec.AnnotationRefName: hex,
 	}))
 	if err != nil {
 		return fmt.Errorf("write image: %w", err)
@@ -263,8 +243,8 @@ func (c *Client) pullToOCILayout(ctx context.Context, imageRef, digest, layoutTa
 // bytesToFetch is the compressed size of the layers this pull will actually
 // download: a layer already in the cache is written from there, and counting
 // it would leave the progress short of its total.
-func (c *Client) bytesToFetch(img gcr.Image) (int64, error) {
-	layers, err := img.Layers()
+func (c *Client) bytesToFetch(image gcr.Image) (int64, error) {
+	layers, err := image.Layers()
 	if err != nil {
 		return 0, fmt.Errorf("read layers: %w", err)
 	}
@@ -294,10 +274,11 @@ func (c *Client) blobPath(digest gcr.Hash) string {
 	return filepath.Join(c.cacheDir, "blobs", digest.Algorithm, digest.Hex)
 }
 
-// existsInLayout checks if an image exists in the local OCI cache.
-func (c *Client) existsInLayout(ctx context.Context, layoutTag string) (bool, error) {
-	// If the cache dir doesn't have an OCI layout yet, nothing is cached
-	if _, err := os.Stat(filepath.Join(c.cacheDir, "oci-layout")); err != nil {
+// isCached reports whether the image named hex is in the layer cache. A
+// cache that cannot be read as a layout, or that does not name the image,
+// does not have it.
+func (c *Client) isCached(ctx context.Context, hex string) (bool, error) {
+	if _, err := os.Stat(filepath.Join(c.cacheDir, ispec.ImageLayoutFile)); err != nil {
 		return false, nil
 	}
 
@@ -306,12 +287,11 @@ func (c *Client) existsInLayout(ctx context.Context, layoutTag string) (bool, er
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}
-		return false, fmt.Errorf("open cache: %w", err)
+		return false, fmt.Errorf("open the layer cache: %w", err)
 	}
 	defer func() { _ = casEngine.Close() }()
 
-	engine := casext.NewEngine(casEngine)
-	descriptorPaths, err := engine.ResolveReference(ctx, layoutTag)
+	descriptorPaths, err := casext.NewEngine(casEngine).ResolveReference(ctx, hex)
 	if err != nil {
 		return false, nil
 	}
@@ -319,34 +299,25 @@ func (c *Client) existsInLayout(ctx context.Context, layoutTag string) (bool, er
 	return len(descriptorPaths) > 0, nil
 }
 
-// unpackLayers extracts image layers to a target directory.
-func (c *Client) unpackLayers(ctx context.Context, layoutTag, targetDir string) error {
-	path, err := layout.FromPath(c.cacheDir)
+// unpackLayers unpacks a cached image's layers into a root filesystem at
+// targetDir, owned by the daemon's user.
+func (c *Client) unpackLayers(ctx context.Context, image gcr.Image, targetDir string) error {
+	manifest, err := image.Manifest()
 	if err != nil {
-		return fmt.Errorf("open layout: %w", err)
-	}
-
-	img, err := c.imageByAnnotation(path, layoutTag)
-	if err != nil {
-		return err
-	}
-
-	gcrManifest, err := img.Manifest()
-	if err != nil {
-		return fmt.Errorf("get manifest: %w", err)
+		return fmt.Errorf("read manifest: %w", err)
 	}
 
 	casEngine, err := dir.Open(c.cacheDir)
 	if err != nil {
-		return fmt.Errorf("open layout: %w", err)
+		return fmt.Errorf("open the layer cache: %w", err)
 	}
 	defer func() { _ = casEngine.Close() }()
 
 	if err := os.MkdirAll(targetDir, 0o750); err != nil {
-		return fmt.Errorf("create target dir: %w", err)
+		return fmt.Errorf("create target directory: %w", err)
 	}
 
-	unpackOpts := &layer.UnpackOptions{
+	unpackOptions := &layer.UnpackOptions{
 		OnDiskFormat: layer.DirRootfs{
 			MapOptions: layer.MapOptions{
 				Rootless: true,
@@ -360,61 +331,65 @@ func (c *Client) unpackLayers(ctx context.Context, layoutTag, targetDir string) 
 		},
 	}
 
-	ociManifest := convertToOCIManifest(gcrManifest)
-	if err := layer.UnpackRootfs(ctx, casEngine, targetDir, ociManifest, unpackOpts); err != nil {
+	if err := layer.UnpackRootfs(ctx, casEngine, targetDir, ociManifest(manifest), unpackOptions); err != nil {
 		return fmt.Errorf("unpack rootfs: %w", err)
 	}
 
 	return nil
 }
 
-// imageByAnnotation finds an image in the layout by annotation tag.
-func (c *Client) imageByAnnotation(path layout.Path, layoutTag string) (gcr.Image, error) {
+// cachedImage returns the image named hex in the layer cache.
+func (c *Client) cachedImage(hex string) (gcr.Image, error) {
+	path, err := layout.FromPath(c.cacheDir)
+	if err != nil {
+		return nil, fmt.Errorf("open layout: %w", err)
+	}
+
 	index, err := path.ImageIndex()
 	if err != nil {
-		return nil, fmt.Errorf("get index: %w", err)
+		return nil, fmt.Errorf("read index: %w", err)
 	}
-
 	indexManifest, err := index.IndexManifest()
 	if err != nil {
-		return nil, fmt.Errorf("get manifest: %w", err)
+		return nil, fmt.Errorf("read index manifest: %w", err)
 	}
 
-	for _, desc := range indexManifest.Manifests {
-		if refName := desc.Annotations["org.opencontainers.image.ref.name"]; refName == layoutTag {
-			return path.Image(desc.Digest)
+	for _, descriptor := range indexManifest.Manifests {
+		if descriptor.Annotations[ispec.AnnotationRefName] == hex {
+			return path.Image(descriptor.Digest)
 		}
 	}
 
-	return nil, fmt.Errorf("no image %s in the layout", layoutTag)
+	return nil, fmt.Errorf("no image %s in the layer cache", hex)
 }
 
-// digestToLayoutTag converts a digest to a layout tag.
-func digestToLayoutTag(d string) (string, error) {
-	parts := strings.SplitN(d, ":", 2)
-	if len(parts) != 2 || parts[1] == "" {
-		return "", fmt.Errorf("invalid digest %q", d)
+// digestHex returns the hex of a digest such as sha256:<hex>, which names
+// its image in the layer cache.
+func digestHex(digest string) (string, error) {
+	_, hex, ok := strings.Cut(digest, ":")
+	if !ok || hex == "" {
+		return "", fmt.Errorf("invalid digest %q", digest)
 	}
-	return parts[1], nil
+	return hex, nil
 }
 
-// parseEnvVars converts environment variable list to a map.
-func parseEnvVars(envList []string) map[string]string {
-	env := make(map[string]string, len(envList))
-	for _, e := range envList {
-		key, val, _ := strings.Cut(e, "=")
-		env[key] = val
+// parseEnv returns a list of KEY=value environment variables as a map.
+func parseEnv(list []string) map[string]string {
+	env := make(map[string]string, len(list))
+	for _, variable := range list {
+		key, value, _ := strings.Cut(variable, "=")
+		env[key] = value
 	}
 	return env
 }
 
-// convertToOCIManifest converts go-containerregistry manifest to OCI spec manifest.
-func convertToOCIManifest(gcrManifest *gcr.Manifest) ispec.Manifest {
+// ociManifest returns a go-containerregistry manifest as an OCI one.
+func ociManifest(gcrManifest *gcr.Manifest) ispec.Manifest {
 	layers := make([]ispec.Descriptor, len(gcrManifest.Layers))
 	for i, layer := range gcrManifest.Layers {
 		layers[i] = ispec.Descriptor{
-			MediaType:   convertToOCIMediaType(string(layer.MediaType)),
-			Digest:      convertToOCIDigest(layer.Digest),
+			MediaType:   ociMediaType(string(layer.MediaType)),
+			Digest:      ociDigest(layer.Digest),
 			Size:        layer.Size,
 			Annotations: layer.Annotations,
 		}
@@ -422,10 +397,10 @@ func convertToOCIManifest(gcrManifest *gcr.Manifest) ispec.Manifest {
 
 	return ispec.Manifest{
 		Versioned: specs.Versioned{SchemaVersion: int(gcrManifest.SchemaVersion)},
-		MediaType: convertToOCIMediaType(string(gcrManifest.MediaType)),
+		MediaType: ociMediaType(string(gcrManifest.MediaType)),
 		Config: ispec.Descriptor{
-			MediaType:   convertToOCIMediaType(string(gcrManifest.Config.MediaType)),
-			Digest:      convertToOCIDigest(gcrManifest.Config.Digest),
+			MediaType:   ociMediaType(string(gcrManifest.Config.MediaType)),
+			Digest:      ociDigest(gcrManifest.Config.Digest),
 			Size:        gcrManifest.Config.Size,
 			Annotations: gcrManifest.Config.Annotations,
 		},
@@ -434,8 +409,9 @@ func convertToOCIManifest(gcrManifest *gcr.Manifest) ispec.Manifest {
 	}
 }
 
-// convertToOCIMediaType converts Docker media types to OCI equivalents.
-func convertToOCIMediaType(mediaType string) string {
+// ociMediaType returns the OCI media type equivalent to a Docker one, or
+// mediaType itself if it has none.
+func ociMediaType(mediaType string) string {
 	switch mediaType {
 	case "application/vnd.docker.distribution.manifest.v2+json":
 		return ispec.MediaTypeImageManifest
@@ -450,7 +426,7 @@ func convertToOCIMediaType(mediaType string) string {
 	}
 }
 
-// convertToOCIDigest converts go-containerregistry digest to opencontainers digest.
-func convertToOCIDigest(d gcr.Hash) digest.Digest {
+// ociDigest returns a go-containerregistry digest as an opencontainers one.
+func ociDigest(d gcr.Hash) digest.Digest {
 	return digest.NewDigestFromEncoded(digest.Algorithm(d.Algorithm), d.Hex)
 }

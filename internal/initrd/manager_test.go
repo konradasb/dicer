@@ -21,12 +21,12 @@ func (fakePuller) Resolve(context.Context, *reference.Ref) (string, error) {
 }
 
 func (fakePuller) PullAndExport(
-	_ context.Context, _, digest, exportDir string, _ registry.EventFunc,
-) (*registry.PullResult, error) {
+	_ context.Context, _, digest, exportDir string, _ registry.ProgressFunc,
+) (*registry.Metadata, error) {
 	if err := os.MkdirAll(filepath.Join(exportDir, "etc"), 0o755); err != nil {
 		return nil, err
 	}
-	return &registry.PullResult{Digest: digest}, nil
+	return &registry.Metadata{}, nil
 }
 
 func newTestManager(t *testing.T) *Manager {
@@ -38,19 +38,19 @@ func newTestManager(t *testing.T) *Manager {
 	return m
 }
 
-func TestBuild_ReplacesInitrdAtFixedPath(t *testing.T) {
+func TestBuildReplacesInitrdAtFixedPath(t *testing.T) {
 	m := newTestManager(t)
 	ctx := context.Background()
 	const arch = "x86_64"
 
-	if m.current(arch, "one") {
+	if m.isCurrent(arch, "one") {
 		t.Fatal("current before any build")
 	}
 
 	if err := m.build(ctx, arch, "one", []byte("init-1"), []byte("agent-1")); err != nil {
 		t.Fatalf("first build: %v", err)
 	}
-	if !m.current(arch, "one") {
+	if !m.isCurrent(arch, "one") {
 		t.Fatal("not current after first build")
 	}
 
@@ -69,7 +69,7 @@ func TestBuild_ReplacesInitrdAtFixedPath(t *testing.T) {
 	if err := m.build(ctx, arch, "two", []byte("init-2"), []byte("agent-2")); err != nil {
 		t.Fatalf("second build: %v", err)
 	}
-	if m.current(arch, "one") || !m.current(arch, "two") {
+	if m.isCurrent(arch, "one") || !m.isCurrent(arch, "two") {
 		t.Fatal("hash not updated by second build")
 	}
 

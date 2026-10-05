@@ -45,40 +45,40 @@ func (f instanceFilters) apply(instances []*dicerdv1.Instance) []*dicerdv1.Insta
 	}
 
 	matched := make([]*dicerdv1.Instance, 0, len(instances))
-	for _, inst := range instances {
-		if f.matches(inst) {
-			matched = append(matched, inst)
+	for _, instance := range instances {
+		if f.matches(instance) {
+			matched = append(matched, instance)
 		}
 	}
 	return matched
 }
 
 // matches reports whether an instance matches every key of f.
-func (f instanceFilters) matches(inst *dicerdv1.Instance) bool {
+func (f instanceFilters) matches(instance *dicerdv1.Instance) bool {
 	for key, values := range f {
-		if !slices.ContainsFunc(values, func(v string) bool { return matchInstance(inst, key, v) }) {
+		if !slices.ContainsFunc(values, func(v string) bool { return matchInstance(instance, key, v) }) {
 			return false
 		}
 	}
 	return true
 }
 
-// matchInstance reports whether inst matches one filter. Names and images
+// matchInstance reports whether instance matches one filter. Names and images
 // match on a part, "state=running" regardless of case, a network exactly,
 // and a label by key alone or by key and value.
-func matchInstance(inst *dicerdv1.Instance, key, value string) bool {
+func matchInstance(instance *dicerdv1.Instance, key, value string) bool {
 	switch key {
 	case "name":
-		return strings.Contains(inst.GetName(), value)
+		return strings.Contains(instance.GetName(), value)
 	case "state":
-		return strings.EqualFold(enumName(inst.GetState()), value)
+		return strings.EqualFold(enumName(instance.GetState()), value)
 	case "image":
-		return strings.Contains(inst.GetImageRef(), value)
+		return strings.Contains(instance.GetImageRef(), value)
 	case "network":
-		return inst.GetNetworkName() == value
+		return instance.GetNetworkName() == value
 	case "label":
 		k, v, hasValue := strings.Cut(value, "=")
-		got, ok := inst.GetLabels()[k]
+		got, ok := instance.GetLabels()[k]
 
 		return ok && (!hasValue || got == v)
 	default:

@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/konradasb/dicer/internal/cli/printer"
 	"github.com/konradasb/dicer/internal/version"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
@@ -58,11 +59,13 @@ func newVersionCommand() *cobra.Command {
 			info.Server = server
 
 			format, _ := cmd.Flags().GetString("format")
-			if format == "table" || format == "text" {
-				if err := writeVersion(cmd.OutOrStdout(), info); err != nil {
-					return err
-				}
-			} else if err := writeStructured(cmd.OutOrStdout(), format, info); err != nil {
+			var err error
+			if printer.IsTable(format) {
+				err = writeVersion(cmd.OutOrStdout(), info)
+			} else {
+				err = writeStructured(cmd.OutOrStdout(), format, info)
+			}
+			if err != nil {
 				return err
 			}
 

@@ -12,14 +12,14 @@ import (
 	"time"
 )
 
-// run runs a shell script as Exec does, under ctx, and returns the exit
-// status it would report.
-func run(ctx context.Context, script string) int32 {
+// runScript runs a shell script as Exec does, under ctx, and returns the
+// exit code it would report.
+func runScript(ctx context.Context, script string) int32 {
 	cmd := exec.CommandContext(ctx, "sh", "-c", script)
 	return exitCodeOf(ctx, cmd, cmd.Run())
 }
 
-func TestExitCodeOf(t *testing.T) {
+func TestExitCodeIsAsAShellReportsIt(t *testing.T) {
 	tests := []struct {
 		script string
 		want   int32
@@ -32,24 +32,26 @@ func TestExitCodeOf(t *testing.T) {
 		{"kill -15 $$", 143},
 	}
 	for _, tt := range tests {
-		if got := run(t.Context(), tt.script); got != tt.want {
-			t.Errorf("%q = %d, want %d", tt.script, got, tt.want)
-		}
+		t.Run(tt.script, func(t *testing.T) {
+			if got := runScript(t.Context(), tt.script); got != tt.want {
+				t.Errorf("%q = %d, want %d", tt.script, got, tt.want)
+			}
+		})
 	}
 }
 
-func TestExitCodeOfTimeout(t *testing.T) {
+func TestExitCodeOfCommandKilledByItsTimeoutIsTimedOut(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
-	if got := run(ctx, "sleep 10"); got != exitTimedOut {
+	if got := runScript(ctx, "sleep 10"); got != exitTimedOut {
 		t.Errorf("a command killed by its timeout = %d, want %d", got, exitTimedOut)
 	}
 }
 
 // A command that exits on its own is reported as it exited, even if the
 // deadline has passed by the time it is looked at.
-func TestExitCodeOfExitAfterDeadline(t *testing.T) {
+func TestExitCodeLookedAtAfterTheDeadlineIsAsTheCommandExited(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
 	cmd := exec.CommandContext(ctx, "sh", "-c", "exit 5")
 	err := cmd.Run()

@@ -43,10 +43,10 @@ func NewStarter(binaryPath string) (*Starter, error) {
 // Version returns the Firecracker binary version string.
 func (s *Starter) Version() string { return s.version }
 
-// DefaultBootArgs returns the kernel command line Firecracker guests need:
+// DefaultKernelArgs returns the kernel command line Firecracker guests need:
 // output on the serial console, no PCI bus, and a reset on panic so that a
 // wedged guest ends its VMM rather than lingering.
-func (s *Starter) DefaultBootArgs() string {
+func (s *Starter) DefaultKernelArgs() string {
 	return "console=ttyS0 reboot=k panic=1 pci=off"
 }
 
@@ -57,22 +57,30 @@ func (s *Starter) PowerOffEndsVM() bool { return false }
 // StartVM launches Firecracker, configures the guest and boots it. It
 // returns the VMM process and a client for controlling it.
 func (s *Starter) StartVM(
-	ctx context.Context, socketPath string, spec hypervisor.VirtualMachine,
+	ctx context.Context, socketPath string, spec hypervisor.VMSpec,
 ) (*process.Process, hypervisor.Hypervisor, error) {
 	// Translate before launching anything: a specification Firecracker
 	// cannot honour should fail without leaving a process behind.
-	cfg, err := newSetup(spec)
+	setup, err := newSetup(spec)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	proc, hv, cu, err := s.start(ctx, socketPath, cfg.vsock)
+	// Firecracker creates the vsock socket itself and refuses to bind over
+	// a file left by a previous run.
+	if setup.vsock != nil {
+		if err := os.Remove(setup.vsock.UDSPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return nil, nil, fmt.Errorf("remove stale vsock socket: %w", err)
+		}
+	}
+
+	proc, hv, cu, err := s.start(ctx, socketPath)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer cu.Clean()
 
-	if err := cfg.apply(ctx, hv.client); err != nil {
+	if err := setup.apply(ctx, hv.client); err != nil {
 		return nil, nil, fmt.Errorf("configure vm: %w", err)
 	}
 
@@ -89,7 +97,7 @@ func (s *Starter) StartVM(
 func (s *Starter) RestoreVM(
 	ctx context.Context, socketPath string, snapshotPath string, console hypervisor.ConsoleConfig,
 ) (*process.Process, hypervisor.Hypervisor, error) {
-	proc, hv, cu, err := s.start(ctx, socketPath, nil)
+	proc, hv, cu, err := s.start(ctx, socketPath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -128,16 +136,8 @@ func (s *Starter) Connect(socketPath string) (hypervisor.Hypervisor, error) {
 // start launches the VMM process and returns a client for it, along with a
 // cleanup that kills the process until the caller releases it.
 func (s *Starter) start(
-	ctx context.Context, socketPath string, vsock *vsock,
+	ctx context.Context, socketPath string,
 ) (*process.Process, *Hypervisor, cleanup.Cleanup, error) {
-	// Firecracker creates the vsock socket itself and refuses to bind over
-	// a file left by a previous run.
-	if vsock != nil {
-		if err := os.Remove(vsock.UDSPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return nil, nil, cleanup.Cleanup{}, fmt.Errorf("remove stale vsock socket: %w", err)
-		}
-	}
-
 	proc, err := hypervisor.StartProcess(ctx, socketPath, s.binaryPath, "--api-sock", socketPath)
 	if err != nil {
 		return nil, nil, cleanup.Cleanup{}, fmt.Errorf("start process: %w", err)

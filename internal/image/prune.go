@@ -14,19 +14,19 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// Prune removes every image whose digest is not in keep, and its cached
-// layers.
+// Prune removes every image whose digest is not in keep, and the layers in
+// the layer cache only they needed.
 func (m *Manager) Prune(keep map[string]struct{}) (types.PruneResult, error) {
 	var unused []*types.Image
-	for _, img := range m.index.list() {
-		if _, ok := keep[img.Digest]; !ok {
-			unused = append(unused, img)
+	for _, image := range m.index.list() {
+		if _, ok := keep[image.Digest]; !ok {
+			unused = append(unused, image)
 		}
 	}
 	result, err := m.remove(unused)
-	for _, img := range result.Images {
-		m.record(&img, events.ActionDeleted, fmt.Sprintf("Deleted image %s (%s) by prune: no instance uses it; %s boot disk removed",
-			img.Name, reference.ShortDigest(img.Digest), humanize.Bytes(img.SizeBytes)), map[string]string{"by": "prune"})
+	for _, image := range result.Images {
+		m.record(&image, events.ActionDeleted, fmt.Sprintf("Deleted image %s (%s) by prune: no instance uses it; %s boot disk removed",
+			image.Name, reference.ShortDigest(image.Digest), humanize.Bytes(image.SizeBytes)), map[string]string{"by": "prune"})
 	}
 	return result, err
 }
@@ -36,31 +36,31 @@ func (m *Manager) Prune(keep map[string]struct{}) (types.PruneResult, error) {
 func (m *Manager) remove(images []*types.Image) (types.PruneResult, error) {
 	var result types.PruneResult
 
-	for _, img := range images {
-		if err := m.index.delete(img.Digest); err != nil {
+	for _, image := range images {
+		if err := m.index.delete(image.Digest); err != nil {
 			if errors.Is(err, errdefs.ErrNotFound) {
 				continue // removed by someone else meanwhile
 			}
 			return result, err
 		}
-		if err := m.deleteImage(digestHex(img.Digest)); err != nil {
-			m.logger.Warn("could not remove image files", "digest", img.Digest, "error", err)
+		if err := m.deleteFiles(digestHex(image.Digest)); err != nil {
+			m.logger.Warn("failed to delete image files", "digest", image.Digest, "error", err)
 			continue
 		}
 
-		result.Images = append(result.Images, *img)
-		result.ReclaimedBytes += img.SizeBytes
+		result.Images = append(result.Images, *image)
+		result.ReclaimedBytes += image.SizeBytes
 	}
 
 	// The layer cache is keyed by the same digests, so what remains in the
 	// index is what it should keep.
 	remaining := m.index.list()
-	cached := make([]string, 0, len(remaining))
-	for _, img := range remaining {
-		cached = append(cached, digestHex(img.Digest))
+	keep := make([]string, 0, len(remaining))
+	for _, image := range remaining {
+		keep = append(keep, digestHex(image.Digest))
 	}
 
-	reclaimed, err := m.registry.PruneCache(cached)
+	reclaimed, err := m.registry.PruneCache(keep)
 	if err != nil {
 		return result, fmt.Errorf("prune layer cache: %w", err)
 	}

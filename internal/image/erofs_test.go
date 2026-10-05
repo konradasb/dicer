@@ -11,15 +11,15 @@ import (
 	"testing"
 )
 
-func TestEROFSConverter_Convert(t *testing.T) {
+func TestEROFSPack(t *testing.T) {
 	// Check if mkfs.erofs is available
 	if _, err := exec.LookPath("mkfs.erofs"); err != nil {
 		t.Skip("mkfs.erofs not found, skipping erofs tests")
 	}
 
-	tmpDir := t.TempDir()
-	dir := filepath.Join(tmpDir, "rootfs")
-	outputPath := filepath.Join(tmpDir, "disk.img")
+	testDir := t.TempDir()
+	dir := filepath.Join(testDir, "rootfs")
+	outputPath := filepath.Join(testDir, "disk.img")
 
 	// Create test directory structure
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
@@ -40,10 +40,10 @@ func TestEROFSConverter_Convert(t *testing.T) {
 	packer := erofs{}
 	ctx := context.Background()
 
-	// Convert
+	// Pack
 	size, err := packer.Pack(ctx, dir, outputPath)
 	if err != nil {
-		t.Fatalf("Convert() error = %v", err)
+		t.Fatalf("Pack() error = %v", err)
 	}
 
 	// Verify output file exists
@@ -63,14 +63,14 @@ func TestEROFSConverter_Convert(t *testing.T) {
 	}
 }
 
-func TestEROFSConverter_ConvertEmpty(t *testing.T) {
+func TestEROFSPackEmptyDirectory(t *testing.T) {
 	if _, err := exec.LookPath("mkfs.erofs"); err != nil {
 		t.Skip("mkfs.erofs not found")
 	}
 
-	tmpDir := t.TempDir()
-	dir := filepath.Join(tmpDir, "empty")
-	outputPath := filepath.Join(tmpDir, "disk.img")
+	testDir := t.TempDir()
+	dir := filepath.Join(testDir, "empty")
+	outputPath := filepath.Join(testDir, "disk.img")
 
 	// Create empty directory
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -80,10 +80,10 @@ func TestEROFSConverter_ConvertEmpty(t *testing.T) {
 	packer := erofs{}
 	ctx := context.Background()
 
-	// Convert empty dir should work
+	// Packing an empty directory should work
 	size, err := packer.Pack(ctx, dir, outputPath)
 	if err != nil {
-		t.Fatalf("Convert() error = %v", err)
+		t.Fatalf("Pack() error = %v", err)
 	}
 
 	if size == 0 {
@@ -91,32 +91,32 @@ func TestEROFSConverter_ConvertEmpty(t *testing.T) {
 	}
 }
 
-func TestEROFSConverter_ConvertNonExistent(t *testing.T) {
+func TestEROFSPackMissingDirectoryFails(t *testing.T) {
 	if _, err := exec.LookPath("mkfs.erofs"); err != nil {
 		t.Skip("mkfs.erofs not found")
 	}
 
-	tmpDir := t.TempDir()
-	outputPath := filepath.Join(tmpDir, "disk.img")
+	testDir := t.TempDir()
+	outputPath := filepath.Join(testDir, "disk.img")
 
 	packer := erofs{}
 	ctx := context.Background()
 
 	// Pack non-existent dir should fail
-	_, err := packer.Pack(ctx, filepath.Join(tmpDir, "nonexistent"), outputPath)
+	_, err := packer.Pack(ctx, filepath.Join(testDir, "nonexistent"), outputPath)
 	if err == nil {
-		t.Error("Convert() should fail with non-existent dir")
+		t.Error("Pack() should fail with non-existent dir")
 	}
 }
 
-func TestEROFSConverter_ConvertCancellation(t *testing.T) {
+func TestEROFSPackCancelled(t *testing.T) {
 	if _, err := exec.LookPath("mkfs.erofs"); err != nil {
 		t.Skip("mkfs.erofs not found")
 	}
 
-	tmpDir := t.TempDir()
-	dir := filepath.Join(tmpDir, "rootfs")
-	outputPath := filepath.Join(tmpDir, "disk.img")
+	testDir := t.TempDir()
+	dir := filepath.Join(testDir, "rootfs")
+	outputPath := filepath.Join(testDir, "disk.img")
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create dir: %v", err)
@@ -129,17 +129,17 @@ func TestEROFSConverter_ConvertCancellation(t *testing.T) {
 	// Pack with cancelled context should fail
 	_, err := packer.Pack(ctx, dir, outputPath)
 	if err == nil {
-		t.Error("Convert() should fail with cancelled context")
+		t.Error("Pack() should fail with cancelled context")
 	}
 }
 
-func TestEROFSConverter_ConvertInvalidOutput(t *testing.T) {
+func TestEROFSPackInvalidOutputFails(t *testing.T) {
 	if _, err := exec.LookPath("mkfs.erofs"); err != nil {
 		t.Skip("mkfs.erofs not found")
 	}
 
-	tmpDir := t.TempDir()
-	dir := filepath.Join(tmpDir, "rootfs")
+	testDir := t.TempDir()
+	dir := filepath.Join(testDir, "rootfs")
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create dir: %v", err)
@@ -150,7 +150,7 @@ func TestEROFSConverter_ConvertInvalidOutput(t *testing.T) {
 
 	// Beneath a regular file, which no one -- root included -- can create
 	// a directory in.
-	file := filepath.Join(tmpDir, "file")
+	file := filepath.Join(testDir, "file")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}

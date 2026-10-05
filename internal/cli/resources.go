@@ -69,7 +69,7 @@ func fraction(used, limit int64) float64 {
 func cpuLimit(cpu *dicerdv1.ResourceCapacity) string {
 	limit := humanize.Count(cpu.GetHost(), "CPU")
 	if cpu.GetOvercommit() != 1 {
-		limit += ", " + formatNumber(cpu.GetOvercommit()) + "× overcommit"
+		limit += ", " + humanize.Number(cpu.GetOvercommit()) + "× overcommit"
 	}
 
 	return limit
@@ -82,7 +82,7 @@ func memoryLimit(memory *dicerdv1.ResourceCapacity) string {
 		limit += ", " + humanize.Bytes(memory.GetReserved()) + " reserved"
 	}
 	if memory.GetOvercommit() != 1 {
-		limit += ", " + formatNumber(memory.GetOvercommit()) + "× overcommit"
+		limit += ", " + humanize.Number(memory.GetOvercommit()) + "× overcommit"
 	}
 
 	return limit

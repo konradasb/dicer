@@ -12,24 +12,38 @@ import (
 
 func TestPortMappingOverlaps(t *testing.T) {
 	tests := []struct {
+		name string
 		a, b PortMapping
 		want bool
 	}{
-		{PortMapping{HostPort: 80}, PortMapping{HostPort: 80}, true},
-		{PortMapping{HostPort: 80}, PortMapping{HostPort: 80, Protocol: "tcp"}, true},
-		{PortMapping{HostPort: 80}, PortMapping{HostPort: 80, Protocol: "udp"}, false},
-		{PortMapping{HostPort: 80}, PortMapping{HostPort: 81}, false},
-		{PortMapping{HostPort: 80}, PortMapping{HostIP: "10.0.0.1", HostPort: 80}, true},
-		{PortMapping{HostIP: "10.0.0.1", HostPort: 80}, PortMapping{HostIP: "10.0.0.1", HostPort: 80}, true},
-		{PortMapping{HostIP: "10.0.0.1", HostPort: 80}, PortMapping{HostIP: "10.0.0.2", HostPort: 80}, false},
+		{"same port", PortMapping{HostPort: 80}, PortMapping{HostPort: 80}, true},
+		{"tcp by default", PortMapping{HostPort: 80}, PortMapping{HostPort: 80, Protocol: "tcp"}, true},
+		{"other protocol", PortMapping{HostPort: 80}, PortMapping{HostPort: 80, Protocol: "udp"}, false},
+		{"other port", PortMapping{HostPort: 80}, PortMapping{HostPort: 81}, false},
+		{"every address and one", PortMapping{HostPort: 80}, PortMapping{HostIP: "10.0.0.1", HostPort: 80}, true},
+		{
+			"same address",
+			PortMapping{HostIP: "10.0.0.1", HostPort: 80},
+			PortMapping{HostIP: "10.0.0.1", HostPort: 80},
+			true,
+		},
+		{
+			"other address",
+			PortMapping{HostIP: "10.0.0.1", HostPort: 80},
+			PortMapping{HostIP: "10.0.0.2", HostPort: 80},
+			false,
+		},
 	}
+
 	for _, tt := range tests {
-		if got := tt.a.Overlaps(tt.b); got != tt.want {
-			t.Errorf("%s overlaps %s = %v, want %v", tt.a, tt.b, got, tt.want)
-		}
-		if got := tt.b.Overlaps(tt.a); got != tt.want {
-			t.Errorf("%s overlaps %s = %v, want %v", tt.b, tt.a, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.a.Overlaps(tt.b); got != tt.want {
+				t.Errorf("%s overlaps %s = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+			if got := tt.b.Overlaps(tt.a); got != tt.want {
+				t.Errorf("%s overlaps %s = %v, want %v", tt.b, tt.a, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -41,7 +55,7 @@ func TestValidatePorts(t *testing.T) {
 		{HostIP: "10.0.0.2", HostPort: 443, GuestPort: 8443},
 	}
 	if err := ValidatePorts(valid); err != nil {
-		t.Errorf("ValidatePorts(valid) = %v", err)
+		t.Errorf("ValidatePorts(valid) = %v, want nil", err)
 	}
 
 	invalid := map[string][]PortMapping{
@@ -58,8 +72,10 @@ func TestValidatePorts(t *testing.T) {
 		},
 	}
 	for name, ports := range invalid {
-		if err := ValidatePorts(ports); !errors.Is(err, errdefs.ErrInvalidArgument) {
-			t.Errorf("%s: ValidatePorts = %v, want an invalid argument error", name, err)
-		}
+		t.Run(name, func(t *testing.T) {
+			if err := ValidatePorts(ports); !errors.Is(err, errdefs.ErrInvalidArgument) {
+				t.Errorf("ValidatePorts(%+v) = %v, want an invalid argument error", ports, err)
+			}
+		})
 	}
 }

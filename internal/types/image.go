@@ -31,44 +31,44 @@ type Image struct {
 }
 
 // PullPolicy says when creating an instance pulls its image, as docker run
-// --pull does. The zero value behaves as PullMissing.
+// --pull does. The zero value behaves as PullPolicyMissing.
 type PullPolicy string
 
 const (
-	// PullMissing pulls the image only if the host does not hold it.
-	PullMissing PullPolicy = "missing"
+	// PullPolicyMissing pulls the image only if the host does not hold it.
+	PullPolicyMissing PullPolicy = "missing"
 
-	// PullAlways pulls the image even if the host holds it, so that a tag
+	// PullPolicyAlways pulls the image even if the host holds it, so that a tag
 	// that has moved is followed. Nothing is downloaded if the host already
 	// has what the tag points at.
-	PullAlways PullPolicy = "always"
+	PullPolicyAlways PullPolicy = "always"
 
-	// PullNever uses the image the host holds, and fails if it holds none.
-	PullNever PullPolicy = "never"
+	// PullPolicyNever uses the image the host holds, and fails if it holds none.
+	PullPolicyNever PullPolicy = "never"
 )
 
 // PullStage is the part of a pull that is currently working.
 type PullStage string
 
 const (
-	// StageResolving is asking the registry what the reference points at.
-	StageResolving PullStage = "resolving"
+	// PullStageResolving is asking the registry what the reference points at.
+	PullStageResolving PullStage = "resolving"
 
-	// StageDownloading is fetching the layers, the only stage with a byte
+	// PullStageDownloading is fetching the layers, the only stage with a byte
 	// count worth reporting.
-	StageDownloading PullStage = "downloading"
+	PullStageDownloading PullStage = "downloading"
 
-	// StageUnpacking is writing those layers out as a root filesystem.
-	StageUnpacking PullStage = "unpacking"
+	// PullStageUnpacking is writing those layers out as a root filesystem.
+	PullStageUnpacking PullStage = "unpacking"
 
-	// StageConverting is packing that filesystem into the disk a guest
+	// PullStageConverting is packing that filesystem into the disk a guest
 	// boots from.
-	StageConverting PullStage = "converting"
+	PullStageConverting PullStage = "converting"
 )
 
 // PullProgress reports how far a pull has got. DownloadedBytes and
 // TotalBytes are compressed layer bytes, and are zero outside
-// StageDownloading.
+// PullStageDownloading.
 type PullProgress struct {
 	Stage           PullStage
 	DownloadedBytes int64

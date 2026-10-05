@@ -49,7 +49,7 @@ func newValidateCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringP("config", "f", defaults.Config, "Configuration file; a missing file means all defaults")
+	cmd.Flags().StringP("config", "f", defaults.ConfigFile, "Configuration file; a missing file means all defaults")
 
 	return cmd
 }

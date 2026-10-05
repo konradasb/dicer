@@ -3,7 +3,7 @@
 
 // Package guest defines the contract between the host and a guest: the
 // Config written to the config disk, the Status read from the status disk,
-// and the agent's port.
+// the agent's port, and how a guest's workload and probes are reported.
 package guest
 
 import (
@@ -17,22 +17,12 @@ import (
 // AgentPort is the vsock port dicer-agent listens on inside the guest.
 const AgentPort = 2222
 
-// hostnameRe is a regex for validating hostnames according to RFC 1123.
-var hostnameRe = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`)
+// hostnamePattern matches a hostname valid under RFC 1123.
+var hostnamePattern = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`)
 
 // defaultInit is what a guest boots when neither the image nor the instance
 // names a command: the init system, as a machine would.
 const defaultInit = "/sbin/init"
-
-// Argv is the command the workload runs: the entrypoint and its arguments,
-// or the machine's init if there is none.
-func (c *Config) Argv() []string {
-	argv := append(append([]string{}, c.Entrypoint...), c.Cmd...)
-	if len(argv) == 0 {
-		return []string{defaultInit}
-	}
-	return argv
-}
 
 // Halt is how dicer-init ends the virtual machine: whichever way makes the
 // hypervisor it runs on end its VMM, so that the host sees the guest go.
@@ -52,7 +42,7 @@ const (
 const ConfigFile = "config.json"
 
 // Config is the configuration passed to the guest init binary via ConfigFile.
-// It is serialized by the host (internal/vm) and deserialized by the guest
+// It is serialised by the host (internal/vm) and deserialised by the guest
 // init binary (internal/guest/boot).
 type Config struct {
 	Entrypoint        []string          `json:"entrypoint"`
@@ -72,6 +62,16 @@ type Config struct {
 	Halt Halt `json:"halt,omitempty"`
 }
 
+// Argv is the command the workload runs: the entrypoint and its arguments,
+// or the machine's init if there is none.
+func (c *Config) Argv() []string {
+	argv := append(append([]string{}, c.Entrypoint...), c.Cmd...)
+	if len(argv) == 0 {
+		return []string{defaultInit}
+	}
+	return argv
+}
+
 // Mount is one entry of the guest's mount table: what to mount at Target.
 // Exactly one of Volume, File and Tmpfs is set.
 type Mount struct {
@@ -85,8 +85,8 @@ type Mount struct {
 
 // VolumeSource is a filesystem on a disk the VMM attached.
 type VolumeSource struct {
-	Device string `json:"device"`
-	Fstype string `json:"fstype,omitempty"` // defaults to "ext4"
+	Device         string `json:"device"`
+	FilesystemType string `json:"fstype,omitempty"` // defaults to "ext4"
 }
 
 // FileSource is a file's contents, with the permissions and owner it had on
@@ -116,7 +116,7 @@ type DNSConfig struct {
 
 // NetworkInterface describes a single guest network interface.
 type NetworkInterface struct {
-	Interface string   `json:"interface,omitempty"`
+	Name      string   `json:"interface,omitempty"`
 	Addresses []string `json:"addresses,omitempty"` // CIDR notation, e.g. "192.168.1.1/24"
 	MTU       int      `json:"mtu,omitempty"`
 }
@@ -125,28 +125,28 @@ type NetworkInterface struct {
 type NetworkRoute struct {
 	Destination string `json:"destination"`
 	Gateway     string `json:"gateway,omitempty"`
-	Dev         string `json:"dev,omitempty"`
+	Device      string `json:"dev,omitempty"`
 	Table       string `json:"table,omitempty"`
 }
 
-// ApplyDefaults fills in zero-value fields with sensible defaults.
-// Call this before Validate when deserializing config from JSON.
+// ApplyDefaults fills in zero-value fields with their defaults. Call it
+// before Validate when deserialising config from JSON.
 func (c *Config) ApplyDefaults() {
 	if c.Mode == "" {
-		c.Mode = types.ModeAuto
+		c.Mode = types.InitModeAuto
 	}
 	if c.Env == nil {
 		c.Env = make(map[string]string)
 	}
 	for _, m := range c.Mounts {
-		if m.Volume != nil && m.Volume.Fstype == "" {
-			m.Volume.Fstype = "ext4"
+		if m.Volume != nil && m.Volume.FilesystemType == "" {
+			m.Volume.FilesystemType = "ext4"
 		}
 	}
 }
 
 // Validate checks the configuration for correctness. Call ApplyDefaults first
-// when deserializing from JSON.
+// when deserialising from JSON.
 func (c *Config) Validate() error {
 	if err := c.validateProcess(); err != nil {
 		return err
@@ -170,11 +170,11 @@ func (c *Config) Validate() error {
 // validateProcess checks the init mode and what it runs.
 func (c *Config) validateProcess() error {
 	switch c.Mode {
-	case types.ModeExec:
+	case types.InitModeExec:
 		if len(c.Entrypoint) == 0 && len(c.Cmd) == 0 {
 			return errors.New("exec mode requires at least one of entrypoint or cmd")
 		}
-	case types.ModeAuto, types.ModeSystemd:
+	case types.InitModeAuto, types.InitModeSystemd:
 	default:
 		return fmt.Errorf("invalid init mode %q", c.Mode)
 	}
@@ -192,12 +192,13 @@ func ValidateHostname(name string) error {
 		return nil
 	case len(name) > 253:
 		return fmt.Errorf("hostname %q exceeds 253 characters", name)
-	case !hostnameRe.MatchString(name):
+	case !hostnamePattern.MatchString(name):
 		return fmt.Errorf("hostname %q is invalid", name)
 	}
 	return nil
 }
 
+// validate checks that m has an absolute target and exactly one source.
 func (m Mount) validate() error {
 	switch {
 	case m.Target == "":
@@ -222,12 +223,14 @@ func (m Mount) validate() error {
 	return nil
 }
 
+// validate checks that every interface is named and addressed, and every
+// route has a destination.
 func (n NetworkConfig) validate() error {
-	for i, iface := range n.Interfaces {
+	for i, ni := range n.Interfaces {
 		switch {
-		case iface.Interface == "":
+		case ni.Name == "":
 			return fmt.Errorf("network.interfaces[%d]: interface name not set", i)
-		case len(iface.Addresses) == 0:
+		case len(ni.Addresses) == 0:
 			return fmt.Errorf("network.interfaces[%d]: at least one address required", i)
 		}
 	}

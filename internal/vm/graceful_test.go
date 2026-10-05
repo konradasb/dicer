@@ -23,7 +23,7 @@ func gracefulHarness(t *testing.T, ends bool) (h *harness, asked, forced *atomic
 	h = newHarness(t)
 	asked, forced = &atomic.Int32{}, &atomic.Int32{}
 
-	h.mgr.shutdownGuest = func(context.Context, string) error {
+	h.manager.shutdownGuest = func(context.Context, string) error {
 		asked.Add(1)
 		if ends {
 			_ = h.starter.vmm().Kill()
@@ -43,7 +43,7 @@ func TestStopShutsTheGuestDownGracefully(t *testing.T) {
 	h, asked, forced := gracefulHarness(t, true)
 	h.start(t)
 
-	if err := h.mgr.Stop(t.Context(), h.inst); err != nil {
+	if err := h.manager.Stop(t.Context(), h.instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 
@@ -51,26 +51,26 @@ func TestStopShutsTheGuestDownGracefully(t *testing.T) {
 		t.Errorf("asked %d times, forced %d times; want the guest asked once and nothing forced",
 			asked.Load(), forced.Load())
 	}
-	if rt := h.runtime(t); rt.State != types.StateStopped {
-		t.Errorf("state = %s, want Stopped", rt.State)
+	if status := h.status(t); status.State != types.InstanceStateStopped {
+		t.Errorf("state = %s, want Stopped", status.State)
 	}
 }
 
 // A guest that does not shut down in its grace period is ended regardless.
 func TestStopEndsAGuestThatIgnoresTheShutdown(t *testing.T) {
 	h, asked, forced := gracefulHarness(t, false)
-	h.mgr.stopGracePeriod = 20 * time.Millisecond
+	h.manager.stopGracePeriod = 20 * time.Millisecond
 	h.start(t)
 
 	started := time.Now()
-	if err := h.mgr.Stop(t.Context(), h.inst); err != nil {
+	if err := h.manager.Stop(t.Context(), h.instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 
 	if asked.Load() != 1 || forced.Load() != 1 {
 		t.Errorf("asked %d times, forced %d times; want both once", asked.Load(), forced.Load())
 	}
-	if waited := time.Since(started); waited < h.mgr.stopGracePeriod {
+	if waited := time.Since(started); waited < h.manager.stopGracePeriod {
 		t.Errorf("Stop took %s, less than the grace period", waited)
 	}
 }
@@ -79,11 +79,11 @@ func TestStopEndsAGuestThatIgnoresTheShutdown(t *testing.T) {
 // ended at once, not after waiting out a period it was never told about.
 func TestStopEndsAGuestThatCannotBeAsked(t *testing.T) {
 	h, _, forced := gracefulHarness(t, true)
-	h.mgr.shutdownGuest = func(context.Context, string) error { return errors.New("unimplemented") }
-	h.mgr.stopGracePeriod = time.Hour
+	h.manager.shutdownGuest = func(context.Context, string) error { return errors.New("unimplemented") }
+	h.manager.stopGracePeriod = time.Hour
 	h.start(t)
 
-	if err := h.mgr.Stop(t.Context(), h.inst); err != nil {
+	if err := h.manager.Stop(t.Context(), h.instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 	if forced.Load() != 1 {
@@ -96,7 +96,7 @@ func TestForcedDeleteIsNotGraceful(t *testing.T) {
 	h, asked, _ := gracefulHarness(t, true)
 	h.start(t)
 
-	if err := h.mgr.Delete(t.Context(), h.inst, true); err != nil {
+	if err := h.manager.Delete(t.Context(), h.instance, true); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if asked.Load() != 0 {
@@ -107,13 +107,13 @@ func TestForcedDeleteIsNotGraceful(t *testing.T) {
 // A paused guest cannot answer: it is not asked.
 func TestPausedGuestIsNotAskedToShutDown(t *testing.T) {
 	h, asked, forced := gracefulHarness(t, true)
-	h.mgr.stopGracePeriod = time.Hour
+	h.manager.stopGracePeriod = time.Hour
 	h.start(t)
-	if err := h.mgr.Pause(t.Context(), h.inst); err != nil {
+	if err := h.manager.Pause(t.Context(), h.instance); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
 
-	if err := h.mgr.Stop(t.Context(), h.inst); err != nil {
+	if err := h.manager.Stop(t.Context(), h.instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 	if asked.Load() != 0 || forced.Load() != 1 {

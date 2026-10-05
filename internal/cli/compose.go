@@ -123,20 +123,20 @@ func projectInstances(ctx context.Context, client *dicer.Client, p *compose.Proj
 	}
 
 	out := make(map[string]*dicerdv1.Instance)
-	for _, inst := range resp.GetInstances() {
-		if inst.GetLabels()[compose.LabelProject] == p.Name {
-			out[inst.GetName()] = inst
+	for _, instance := range resp.GetInstances() {
+		if instance.GetLabels()[compose.LabelProject] == p.Name {
+			out[instance.GetName()] = instance
 		}
 	}
 	return out, nil
 }
 
-// orphans are the project's instances whose service is no longer in the
-// file, by name.
-func orphans(p *compose.Project, instances map[string]*dicerdv1.Instance) []string {
+// orphanNames returns the names of the project's instances whose service is
+// no longer in the file, sorted.
+func orphanNames(p *compose.Project, instances map[string]*dicerdv1.Instance) []string {
 	var names []string
-	for name, inst := range instances {
-		if _, ok := p.ServiceFor(inst); !ok {
+	for name, instance := range instances {
+		if _, ok := p.ServiceFor(instance); !ok {
 			names = append(names, name)
 		}
 	}
@@ -144,15 +144,15 @@ func orphans(p *compose.Project, instances map[string]*dicerdv1.Instance) []stri
 	return names
 }
 
-// instancesOf returns the names of a service's instances among the
+// serviceInstanceNames returns the names of a service's instances among the
 // project's, found by their label: the one named as the file names it now,
 // and any it had under another name before its container_name changed,
 // which up has yet to replace. Sorted, the current name first.
-func instancesOf(s *compose.Service, instances map[string]*dicerdv1.Instance) []string {
+func serviceInstanceNames(s *compose.Service, instances map[string]*dicerdv1.Instance) []string {
 	var current, renamed []string
-	for name, inst := range instances {
+	for name, instance := range instances {
 		switch {
-		case inst.GetLabels()[compose.LabelService] != s.Name:
+		case instance.GetLabels()[compose.LabelService] != s.Name:
 		case name == s.Instance.GetName():
 			current = append(current, name)
 		default:
@@ -167,15 +167,15 @@ func instancesOf(s *compose.Service, instances map[string]*dicerdv1.Instance) []
 // has none yet: the one named as the file names it, or else the one it had
 // under an earlier name.
 func serviceInstance(s *compose.Service, instances map[string]*dicerdv1.Instance) (*dicerdv1.Instance, error) {
-	names := instancesOf(s, instances)
+	names := serviceInstanceNames(s, instances)
 	if len(names) == 0 {
 		return nil, fmt.Errorf("service %s has no instance: create it with dicer compose up", s.Name)
 	}
 	return instances[names[0]], nil
 }
 
-// serviceNames completes the arguments of a command that takes services.
-func serviceNames(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+// completeServices completes the arguments of a command that takes services.
+func completeServices(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 	p, err := loadProject(cmd)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -185,14 +185,14 @@ func serviceNames(cmd *cobra.Command, args []string, _ string) ([]string, cobra.
 	}), cobra.ShellCompDirectiveNoFileComp
 }
 
-// lines writes whole lines from goroutines working at once, so that theirs
-// do not interleave.
-type lines struct {
+// lineWriter writes whole lines from goroutines working at once, so that
+// theirs do not interleave.
+type lineWriter struct {
 	mu  sync.Mutex
 	out io.Writer
 }
 
-func (l *lines) printf(format string, args ...any) {
+func (l *lineWriter) printf(format string, args ...any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	_, _ = fmt.Fprintf(l.out, format+"\n", args...)
@@ -205,17 +205,17 @@ var prefixColors = []string{ansiCyan, ansiYellow, ansiGreen, "\x1b[35m", "\x1b[3
 // prefixedWriter writes each line written to it with a prefix naming where
 // it came from: "shop-web  | ".
 type prefixedWriter struct {
-	lines  *lines
-	prefix string
-	buf    []byte
+	lineWriter *lineWriter
+	prefix     string
+	buf        []byte
 }
 
-func newPrefixedWriter(l *lines, name string, width, index int) *prefixedWriter {
+func newPrefixedWriter(l *lineWriter, name string, width, index int) *prefixedWriter {
 	prefix := fmt.Sprintf("%-*s | ", width, name)
 	if p := paletteFor(l.out); p.enabled {
 		prefix = p.paint(prefixColors[index%len(prefixColors)], prefix)
 	}
-	return &prefixedWriter{lines: l, prefix: prefix}
+	return &prefixedWriter{lineWriter: l, prefix: prefix}
 }
 
 func (w *prefixedWriter) Write(p []byte) (int, error) {
@@ -225,7 +225,7 @@ func (w *prefixedWriter) Write(p []byte) (int, error) {
 		if i < 0 {
 			return len(p), nil
 		}
-		w.lines.printf("%s%s", w.prefix, strings.TrimRight(string(w.buf[:i]), "\r"))
+		w.lineWriter.printf("%s%s", w.prefix, strings.TrimRight(string(w.buf[:i]), "\r"))
 		w.buf = w.buf[i+1:]
 	}
 }
@@ -233,7 +233,7 @@ func (w *prefixedWriter) Write(p []byte) (int, error) {
 // flush writes what is left of a last line with no newline.
 func (w *prefixedWriter) flush() {
 	if len(w.buf) > 0 {
-		w.lines.printf("%s%s", w.prefix, strings.TrimRight(string(w.buf), "\r"))
+		w.lineWriter.printf("%s%s", w.prefix, strings.TrimRight(string(w.buf), "\r"))
 		w.buf = nil
 	}
 }

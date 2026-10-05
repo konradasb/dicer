@@ -9,7 +9,9 @@ package cli
 import (
 	"bufio"
 	"crypto/rand"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"regexp"
 	"strconv"
@@ -78,7 +80,7 @@ func addInstanceSpecFlags(cmd *cobra.Command, withDefaults bool) {
 	_ = cmd.RegisterFlagCompletionFunc("kernel", complete(0, listKernels))
 	_ = cmd.RegisterFlagCompletionFunc("network", complete(0, listNetworks))
 	_ = cmd.RegisterFlagCompletionFunc("hypervisor-type", fixedCompletions("cloud-hypervisor", "firecracker"))
-	addHealthFlags(flags)
+	addHealthCheckFlags(flags)
 	flags.String("init-mode", "",
 		"How the guest starts the command: auto, exec (as PID 1 of its own PID namespace) or systemd (default auto)")
 	_ = cmd.RegisterFlagCompletionFunc("init-mode", fixedCompletions("auto", "exec", "systemd"))
@@ -196,8 +198,8 @@ func trimDash(args []string) []string {
 	return args
 }
 
-// applySpecFlags sets the fields of req for the flags explicitly given,
-// overriding the file.
+// applySpecFlags sets the fields of req for the flags given, and the sizes,
+// whose defaults are the command line's.
 func applySpecFlags(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) error {
 	flags := cmd.Flags()
 	setString := func(flag string, dst *string) {
@@ -243,10 +245,12 @@ func applySpecFlags(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) err
 
 	// Sizes are always given: the flags' defaults are the command line's.
 	req.Vcpus, _ = flags.GetInt32("vcpus")
-	if req.MemoryBytes, err = parseSizeFlag(cmd, "memory", parseMemoryBytes); err != nil {
+	memory, _ := flags.GetString("memory")
+	if req.MemoryBytes, err = parseMemoryBytes(memory); err != nil {
 		return err
 	}
-	if req.DiskBytes, err = parseSizeFlag(cmd, "disk", parseDiskBytes); err != nil {
+	disk, _ := flags.GetString("disk")
+	if req.DiskBytes, err = parseDiskBytes(disk); err != nil {
 		return err
 	}
 
@@ -268,12 +272,6 @@ func applySpecFlags(cmd *cobra.Command, req *dicerdv1.CreateInstanceRequest) err
 	}
 
 	return nil
-}
-
-// parseSizeFlag parses the size flag holds.
-func parseSizeFlag(cmd *cobra.Command, flag string, parse func(string) (int64, error)) (int64, error) {
-	v, _ := cmd.Flags().GetString(flag)
-	return parse(v)
 }
 
 // buildUpdateRequest assembles an update that changes only what its flags
@@ -317,15 +315,15 @@ func buildUpdateRequest(cmd *cobra.Command, args []string) (*dicerdv1.UpdateInst
 		v, _ := flags.GetInt32("vcpus")
 		req.Vcpus = &v
 	}
-	if flags.Changed("memory") {
-		bytes, err := parseSizeFlag(cmd, "memory", parseMemoryBytes)
+	if v := optionalString("memory"); v != nil {
+		bytes, err := parseMemoryBytes(*v)
 		if err != nil {
 			return nil, usagef(cmd, "%s", err)
 		}
 		req.MemoryBytes = &bytes
 	}
-	if flags.Changed("disk") {
-		bytes, err := parseSizeFlag(cmd, "disk", parseDiskBytes)
+	if v := optionalString("disk"); v != nil {
+		bytes, err := parseDiskBytes(*v)
 		if err != nil {
 			return nil, usagef(cmd, "%s", err)
 		}
@@ -566,6 +564,15 @@ func parseEnv(specs, files []string) (map[string]string, error) {
 	}
 
 	return env, nil
+}
+
+// osCause strips the operation and path from a file error.
+func osCause(err error) error {
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return pathErr.Err
+	}
+	return err
 }
 
 // setEnv sets one KEY=VALUE, or KEY from this shell, in env. Only the first

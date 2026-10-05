@@ -32,7 +32,7 @@ type driver struct {
 // drivers returns the hypervisors dicerd supports.
 func drivers() map[types.HypervisorType]driver {
 	return map[types.HypervisorType]driver{
-		types.HypervisorCloudHypervisor: {
+		types.HypervisorTypeCloudHypervisor: {
 			binary:   "cloud-hypervisor",
 			versions: versions(cloudhypervisor.SupportedVersions(), cloudhypervisor.DefaultVersion),
 			extract: func(dstPath, version string) (string, error) {
@@ -42,7 +42,7 @@ func drivers() map[types.HypervisorType]driver {
 				return cloudhypervisor.NewStarter(binaryPath)
 			},
 		},
-		types.HypervisorFirecracker: {
+		types.HypervisorTypeFirecracker: {
 			binary:   "firecracker",
 			versions: versions(firecracker.SupportedVersions(), firecracker.DefaultVersion),
 			extract: func(dstPath, version string) (string, error) {
@@ -61,21 +61,21 @@ func drivers() map[types.HypervisorType]driver {
 func buildStarters(dataDir string) (map[types.HypervisorType][]hypervisor.Starter, error) {
 	starters := make(map[types.HypervisorType][]hypervisor.Starter)
 
-	for hvType, d := range drivers() {
+	for hypervisorType, d := range drivers() {
 		for _, version := range d.versions {
 			dstPath := filepath.Join(dataDir, "bin", d.binary, version, d.binary)
 
 			binaryPath, err := d.extract(dstPath, version)
 			if err != nil {
-				return nil, fmt.Errorf("%s %s: extract binary: %w", hvType, version, err)
+				return nil, fmt.Errorf("%s %s: extract binary: %w", hypervisorType, version, err)
 			}
 
 			starter, err := d.newStarter(binaryPath)
 			if err != nil {
-				return nil, fmt.Errorf("%s %s: create starter: %w", hvType, version, err)
+				return nil, fmt.Errorf("%s %s: create starter: %w", hypervisorType, version, err)
 			}
 
-			starters[hvType] = append(starters[hvType], starter)
+			starters[hypervisorType] = append(starters[hypervisorType], starter)
 		}
 	}
 

@@ -5,7 +5,6 @@ package grpcapi
 
 import (
 	"context"
-	"log/slog"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -20,34 +19,35 @@ import (
 type snapshotHandler struct {
 	definitions *filestore.Manager
 	instances   *vm.Manager
-	logger      *slog.Logger
 }
 
+// CreateSnapshot snapshots an instance.
 func (h *snapshotHandler) CreateSnapshot(
 	ctx context.Context, req *dicerdv1.CreateSnapshotRequest,
 ) (*dicerdv1.Snapshot, error) {
-	inst, err := h.instance(req.GetInstance())
+	instance, err := h.instance(req.GetInstance())
 	if err != nil {
 		return nil, err
 	}
 
-	snap, err := h.instances.CreateSnapshot(ctx, inst, req.GetName())
+	snapshot, err := h.instances.CreateSnapshot(ctx, instance, req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	return snapshotToProto(snap, inst.Name), nil
+	return snapshotToProto(snapshot, instance.Name), nil
 }
 
+// ListSnapshots lists an instance's snapshots.
 func (h *snapshotHandler) ListSnapshots(
 	_ context.Context, req *dicerdv1.ListSnapshotsRequest,
 ) (*dicerdv1.ListSnapshotsResponse, error) {
-	inst, err := h.instance(req.GetInstance())
+	instance, err := h.instance(req.GetInstance())
 	if err != nil {
 		return nil, err
 	}
 
-	snapshots, err := h.instances.ListSnapshots(inst)
+	snapshots, err := h.instances.Snapshots(instance)
 	if err != nil {
 		return nil, err
 	}
@@ -55,59 +55,60 @@ func (h *snapshotHandler) ListSnapshots(
 	resp := &dicerdv1.ListSnapshotsResponse{
 		Snapshots: make([]*dicerdv1.Snapshot, 0, len(snapshots)),
 	}
-	for _, snap := range snapshots {
-		resp.Snapshots = append(resp.Snapshots, snapshotToProto(snap, inst.Name))
+	for _, snapshot := range snapshots {
+		resp.Snapshots = append(resp.Snapshots, snapshotToProto(snapshot, instance.Name))
 	}
 
 	return resp, nil
 }
 
+// GetSnapshot returns one of an instance's snapshots.
 func (h *snapshotHandler) GetSnapshot(
 	_ context.Context, req *dicerdv1.GetSnapshotRequest,
 ) (*dicerdv1.Snapshot, error) {
-	inst, err := h.instance(req.GetInstance())
+	instance, err := h.instance(req.GetInstance())
 	if err != nil {
 		return nil, err
 	}
 
-	snap, err := h.instances.GetSnapshot(inst, req.GetName())
+	snapshot, err := h.instances.Snapshot(instance, req.GetName())
 	if err != nil {
 		return nil, err
 	}
 
-	return snapshotToProto(snap, inst.Name), nil
+	return snapshotToProto(snapshot, instance.Name), nil
 }
 
+// DeleteSnapshot removes one of an instance's snapshots.
 func (h *snapshotHandler) DeleteSnapshot(
 	ctx context.Context, req *dicerdv1.DeleteSnapshotRequest,
 ) (*emptypb.Empty, error) {
-	inst, err := h.instance(req.GetInstance())
+	instance, err := h.instance(req.GetInstance())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.instances.DeleteSnapshot(ctx, inst, req.GetName()); err != nil {
+	if err := h.instances.DeleteSnapshot(ctx, instance, req.GetName()); err != nil {
 		return nil, err
 	}
 
 	return &emptypb.Empty{}, nil
 }
 
+// RestoreSnapshot rolls an instance back to one of its snapshots.
 func (h *snapshotHandler) RestoreSnapshot(
 	ctx context.Context, req *dicerdv1.RestoreSnapshotRequest,
 ) (*dicerdv1.Instance, error) {
-	inst, err := h.instance(req.GetInstance())
+	instance, err := h.instance(req.GetInstance())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := h.instances.RestoreSnapshot(ctx, inst, req.GetName()); err != nil {
-		h.logger.ErrorContext(ctx, "restore failed",
-			"instance", inst.Name, "snapshot", req.GetName(), "error", err)
+	if err := h.instances.RestoreSnapshot(ctx, instance, req.GetName()); err != nil {
 		return nil, err
 	}
 
-	return viewInstance(h.instances, inst)
+	return viewInstance(h.instances, instance)
 }
 
 // instance resolves the instance a snapshot request names.
@@ -116,10 +117,5 @@ func (h *snapshotHandler) instance(nameOrID string) (types.InstanceSpec, error) 
 		return types.InstanceSpec{}, errdefs.InvalidArgument("instance is required")
 	}
 
-	inst, err := h.definitions.GetInstance(nameOrID)
-	if err != nil {
-		return types.InstanceSpec{}, err
-	}
-
-	return inst, nil
+	return h.definitions.Instance(nameOrID)
 }

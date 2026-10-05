@@ -47,35 +47,36 @@ type NetworkAllocation struct {
 
 // Netmask returns the network's subnet mask in dotted-quad form.
 func (n Network) Netmask() (string, error) {
-	_, ipnet, err := net.ParseCIDR(n.Subnet)
+	subnet, err := n.subnet()
 	if err != nil {
-		return "", fmt.Errorf("invalid subnet CIDR in network %q: %w", n.ID, err)
+		return "", err
 	}
 
-	return net.IP(ipnet.Mask).String(), nil
+	return net.IP(subnet.Mask).String(), nil
 }
 
 // PrefixLen returns the length of the network's subnet prefix.
 func (n Network) PrefixLen() (int, error) {
-	_, ipnet, err := net.ParseCIDR(n.Subnet)
+	subnet, err := n.subnet()
 	if err != nil {
-		return 0, fmt.Errorf("invalid subnet CIDR in network %q: %w", n.ID, err)
+		return 0, err
 	}
 
-	ones, _ := ipnet.Mask.Size()
+	ones, _ := subnet.Mask.Size()
 
 	return ones, nil
 }
 
-// Usage returns how many addresses the network has for instances and how
-// many are free. The network, broadcast and gateway addresses are excluded.
-func (n Network) Usage(allocated int) (total, free int64) {
-	_, ipNet, err := net.ParseCIDR(n.Subnet)
+// IPCounts returns how many addresses the network has for instances and how
+// many of them are free with allocated taken. The network, broadcast and
+// gateway addresses are excluded. Both are zero if the subnet is invalid.
+func (n Network) IPCounts(allocated int) (total, free int64) {
+	subnet, err := n.subnet()
 	if err != nil {
 		return 0, 0
 	}
 
-	ones, bits := ipNet.Mask.Size()
+	ones, bits := subnet.Mask.Size()
 	if bits == 0 {
 		return 0, 0
 	}
@@ -84,6 +85,15 @@ func (n Network) Usage(allocated int) (total, free int64) {
 	free = max(total-int64(allocated), 0)
 
 	return total, free
+}
+
+func (n Network) subnet() (*net.IPNet, error) {
+	_, subnet, err := net.ParseCIDR(n.Subnet)
+	if err != nil {
+		return nil, fmt.Errorf("invalid subnet CIDR in network %q: %w", n.ID, err)
+	}
+
+	return subnet, nil
 }
 
 // The protocols a port mapping may name.
@@ -104,8 +114,8 @@ type PortMapping struct {
 	Protocol string `yaml:"protocol,omitempty" json:"protocol,omitempty"`
 }
 
-// Proto returns the mapping's protocol, filling in the default.
-func (p PortMapping) Proto() string {
+// EffectiveProtocol returns the mapping's protocol, filling in the default.
+func (p PortMapping) EffectiveProtocol() string {
 	if p.Protocol == "" {
 		return ProtocolTCP
 	}
@@ -113,9 +123,10 @@ func (p PortMapping) Proto() string {
 	return p.Protocol
 }
 
-// String is the mapping as a person writes it: "[hostIP:]hostPort:guestPort/proto".
+// String is the mapping as a person writes it:
+// "[hostIP:]hostPort:guestPort/protocol".
 func (p PortMapping) String() string {
-	s := fmt.Sprintf("%d:%d/%s", p.HostPort, p.GuestPort, p.Proto())
+	s := fmt.Sprintf("%d:%d/%s", p.HostPort, p.GuestPort, p.EffectiveProtocol())
 	if p.HostIP != "" {
 		s = p.HostIP + ":" + s
 	}
@@ -126,14 +137,15 @@ func (p PortMapping) String() string {
 // Overlaps reports whether two mappings claim the same host port. A mapping
 // on every address overlaps one on any single address.
 func (p PortMapping) Overlaps(other PortMapping) bool {
-	if p.Proto() != other.Proto() || p.HostPort != other.HostPort {
+	if p.EffectiveProtocol() != other.EffectiveProtocol() || p.HostPort != other.HostPort {
 		return false
 	}
 
 	return p.HostIP == "" || other.HostIP == "" || p.HostIP == other.HostIP
 }
 
-// ValidatePorts reports whether every mapping is valid and none overlap.
+// ValidatePorts returns an invalid argument error if a mapping is invalid
+// or two overlap.
 func ValidatePorts(ports []PortMapping) error {
 	for i, p := range ports {
 		switch {
@@ -141,7 +153,7 @@ func ValidatePorts(ports []PortMapping) error {
 			return errdefs.InvalidArgument("invalid port mapping %s: no host port", p)
 		case p.GuestPort == 0:
 			return errdefs.InvalidArgument("invalid port mapping %s: no guest port", p)
-		case p.Proto() != ProtocolTCP && p.Proto() != ProtocolUDP:
+		case p.EffectiveProtocol() != ProtocolTCP && p.EffectiveProtocol() != ProtocolUDP:
 			return errdefs.InvalidArgument("invalid port mapping %s: the protocol must be tcp or udp", p)
 		}
 

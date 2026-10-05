@@ -36,7 +36,7 @@ const composeVariables = "\n## Variables {#variables}\n\n" +
 
 // composeUnsupported returns the section listing the service keys of Docker
 // Compose's that dicer compose refuses, from those it refuses.
-func composeUnsupported(keys map[string]bool) string {
+func composeUnsupported(keys, commands map[string]bool) string {
 	var b strings.Builder
 
 	b.WriteString("\n## Not supported {#not-supported}\n\n" +
@@ -51,7 +51,7 @@ func composeUnsupported(keys map[string]bool) string {
 		if !strings.HasPrefix(why, "`") {
 			why = strings.ToUpper(why[:1]) + why[1:]
 		}
-		fmt.Fprintf(&b, "| `%s` | %s. |\n", key, cell(asCode(why, keys, commandPaths())))
+		fmt.Fprintf(&b, "| `%s` | %s. |\n", key, cell(asCode(why, keys, commands)))
 	}
 
 	return b.String()

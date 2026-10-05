@@ -30,8 +30,8 @@ func (r defaultResolver) kernel() string {
 		return r.configured.Kernel
 	}
 
-	kernels, err := r.definitions.ListKernels()
-	if err != nil || len(kernels) != 1 {
+	kernels := r.definitions.Kernels()
+	if len(kernels) != 1 {
 		return ""
 	}
 	return kernels[0].Name
@@ -43,8 +43,8 @@ func (r defaultResolver) network() string {
 		return r.configured.Network
 	}
 
-	networks, err := r.definitions.ListNetworks()
-	if err != nil || len(networks) != 1 {
+	networks := r.definitions.Networks()
+	if len(networks) != 1 {
 		return ""
 	}
 	return networks[0].Name
@@ -60,10 +60,7 @@ func (r defaultResolver) resolveKernel(name string) (string, error) {
 		return name, nil
 	}
 
-	kernels, err := r.definitions.ListKernels()
-	if err != nil {
-		return "", err
-	}
+	kernels := r.definitions.Kernels()
 	names := make([]string, 0, len(kernels))
 	for _, k := range kernels {
 		names = append(names, k.Name)
@@ -82,10 +79,7 @@ func (r defaultResolver) resolveNetwork(name string) (string, error) {
 		return name, nil
 	}
 
-	networks, err := r.definitions.ListNetworks()
-	if err != nil {
-		return "", err
-	}
+	networks := r.definitions.Networks()
 	names := make([]string, 0, len(networks))
 	for _, n := range networks {
 		names = append(names, n.Name)

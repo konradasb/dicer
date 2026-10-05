@@ -11,22 +11,21 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// A pull is shared by every caller waiting on the same image. It runs on its
-// own context and is cancelled only when every caller has gone.
-
-// pull is one image's pull, and who is waiting on it.
+// pull is one image's pull, and who is waiting on it. It is shared by every
+// caller waiting on the same image, runs on its own context, and is
+// cancelled only when every caller has gone.
 type pull struct {
-	// done is closed once img and err are set.
-	done chan struct{}
-	img  *types.Image
-	err  error
+	// done is closed once image and err are set.
+	done  chan struct{}
+	image *types.Image
+	err   error
 
 	cancel   context.CancelFunc
 	progress progressRelay
 
 	// waiters counts those waiting on the pull. abandoned is set once the
 	// last has gone, and the pull is being cancelled. Both are guarded by
-	// Manager.pullsMu.
+	// Manager.mu.
 	waiters   int
 	abandoned bool
 }
@@ -37,15 +36,15 @@ type pull struct {
 func (m *Manager) sharedPull(
 	ctx context.Context, resolved *reference.ResolvedRef, onProgress ProgressFunc,
 ) (*types.Image, error) {
-	digest := resolved.ManifestDigest()
+	digest := resolved.Digest()
 
 	for {
-		m.pullsMu.Lock()
+		m.mu.Lock()
 		p := m.pulls[digest]
 		if p != nil && p.abandoned {
 			// A pull everyone gave up on is still removing what it
 			// wrote. Another started now would write over it.
-			m.pullsMu.Unlock()
+			m.mu.Unlock()
 			select {
 			case <-p.done:
 				continue
@@ -58,11 +57,11 @@ func (m *Manager) sharedPull(
 		}
 		p.waiters++
 		listener := p.progress.add(onProgress)
-		m.pullsMu.Unlock()
+		m.mu.Unlock()
 
 		select {
 		case <-p.done:
-			return p.img, p.err
+			return p.image, p.err
 		case <-ctx.Done():
 			p.progress.remove(listener)
 			m.leavePull(p)
@@ -72,9 +71,9 @@ func (m *Manager) sharedPull(
 }
 
 // startPull starts pulling the resolved image. The caller must hold
-// pullsMu. The pull keeps ctx's values but not its cancellation.
+// m.mu. The pull keeps ctx's values but not its cancellation.
 func (m *Manager) startPull(ctx context.Context, resolved *reference.ResolvedRef) *pull {
-	digest := resolved.ManifestDigest()
+	digest := resolved.Digest()
 
 	pullCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	p := &pull{done: make(chan struct{}), cancel: cancel}
@@ -84,11 +83,11 @@ func (m *Manager) startPull(ctx context.Context, resolved *reference.ResolvedRef
 		defer close(p.done)
 		defer cancel()
 
-		p.img, p.err = m.ensureImageReady(pullCtx, resolved, p.progress.send)
+		p.image, p.err = m.loadOrPull(pullCtx, resolved, p.progress.report)
 
-		m.pullsMu.Lock()
+		m.mu.Lock()
 		delete(m.pulls, digest)
-		m.pullsMu.Unlock()
+		m.mu.Unlock()
 	}()
 
 	return p
@@ -96,8 +95,8 @@ func (m *Manager) startPull(ctx context.Context, resolved *reference.ResolvedRef
 
 // leavePull stops waiting on p, and cancels it if nobody else is.
 func (m *Manager) leavePull(p *pull) {
-	m.pullsMu.Lock()
-	defer m.pullsMu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	p.waiters--
 	if p.waiters == 0 {
@@ -134,11 +133,11 @@ func (r *progressRelay) remove(listener int) {
 	delete(r.listeners, listener)
 }
 
-// send passes p to every listener.
-func (r *progressRelay) send(p types.PullProgress) {
+// report passes p to every listener.
+func (r *progressRelay) report(p types.PullProgress) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, f := range r.listeners {
-		f.send(p)
+		f.report(p)
 	}
 }

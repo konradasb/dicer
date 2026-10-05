@@ -13,12 +13,12 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// recordedEvents remembers the events it is given.
-type recordedEvents []events.Event
+// fakeRecorder remembers the events it is given.
+type fakeRecorder []events.Event
 
-func (r *recordedEvents) Record(e events.Event) { *r = append(*r, e) }
+func (r *fakeRecorder) Record(e events.Event) { *r = append(*r, e) }
 
-func (r *recordedEvents) actions() []events.Action {
+func (r *fakeRecorder) actions() []events.Action {
 	out := make([]events.Action, 0, len(*r))
 	for _, e := range *r {
 		out = append(out, e.Action)
@@ -27,22 +27,22 @@ func (r *recordedEvents) actions() []events.Action {
 }
 
 // newRecordingManager returns a test manager whose events are recorded.
-func newRecordingManager(t *testing.T) (*Manager, *mockRegistryClient, *recordedEvents) {
+func newRecordingManager(t *testing.T) (*Manager, *fakeRegistryClient, *fakeRecorder) {
 	t.Helper()
 
-	m, mock := newPruneTestManager(t)
-	recorded := &recordedEvents{}
+	m, fakeRegistry := newManagerWithFakes(t)
+	recorded := &fakeRecorder{}
 	m.events = recorded
-	return m, mock, recorded
+	return m, fakeRegistry, recorded
 }
 
 // A pull is recorded once, when it goes to a registry; asking for an image
 // already held is not a pull.
 func TestPullIsRecorded(t *testing.T) {
-	m, mock, recorded := newRecordingManager(t)
+	m, fakeRegistry, recorded := newRecordingManager(t)
 
-	pullTestImage(t, m, mock, "docker.io/library/nginx:1.27", "sha256:aaa")
-	pullTestImage(t, m, mock, "docker.io/library/nginx:1.27", "sha256:aaa")
+	pullTestImage(t, m, fakeRegistry, "docker.io/library/nginx:1.27", "sha256:aaa")
+	pullTestImage(t, m, fakeRegistry, "docker.io/library/nginx:1.27", "sha256:aaa")
 
 	if got := recorded.actions(); !slices.Equal(got, []events.Action{events.ActionPulled}) {
 		t.Fatalf("recorded %v, want one pull", got)
@@ -58,10 +58,10 @@ func TestPullIsRecorded(t *testing.T) {
 
 // Deleting, pruning and collecting all remove an image; the events say which.
 func TestRemovalsAreRecorded(t *testing.T) {
-	m, mock, recorded := newRecordingManager(t)
-	pullTestImage(t, m, mock, "docker.io/library/a:1", "sha256:a")
-	pullTestImage(t, m, mock, "docker.io/library/b:1", "sha256:b")
-	pullTestImage(t, m, mock, "docker.io/library/c:1", "sha256:c")
+	m, fakeRegistry, recorded := newRecordingManager(t)
+	pullTestImage(t, m, fakeRegistry, "docker.io/library/a:1", "sha256:a")
+	pullTestImage(t, m, fakeRegistry, "docker.io/library/b:1", "sha256:b")
+	pullTestImage(t, m, fakeRegistry, "docker.io/library/c:1", "sha256:c")
 	setLastUsed(t, m, "sha256:c", gcNow.Add(-30*24*time.Hour))
 	*recorded = nil
 
@@ -101,7 +101,7 @@ func TestRemovalsAreRecorded(t *testing.T) {
 }
 
 func TestGCMessage(t *testing.T) {
-	img := &types.Image{
+	image := &types.Image{
 		Name: "docker.io/library/alpine:3", Digest: "sha256:1cfa4e2b09e1aaaaaaaaaaaa", SizeBytes: 5 << 20,
 		LastUsedAt: time.Date(2026, 8, 23, 10, 0, 0, 0, time.Local),
 	}
@@ -109,10 +109,10 @@ func TestGCMessage(t *testing.T) {
 
 	want := "Garbage-collected image docker.io/library/alpine:3 (sha256:1cfa4e2b09e1): " +
 		"unused since 2026-08-23 10:00:00, longer than gc_max_unused_age 30d; 5 MiB boot disk removed"
-	if got := gcMessage(p, img, GCReasonUnused); got != want {
+	if got := gcMessage(p, image, GCReasonUnused); got != want {
 		t.Errorf("gcMessage =\n%q\nwant\n%q", got, want)
 	}
-	if got := gcMessage(p, img, GCReasonSize); !strings.Contains(got, "over gc_max_size 10 GiB") {
+	if got := gcMessage(p, image, GCReasonSize); !strings.Contains(got, "over gc_max_size 10 GiB") {
 		t.Errorf("gcMessage = %q, want the size limit", got)
 	}
 }

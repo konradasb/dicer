@@ -25,8 +25,8 @@ type Hypervisor interface {
 	// Shutdown stops the VMM process itself.
 	Shutdown(ctx context.Context) error
 
-	// GetVMInfo reports the VM's state and configuration.
-	GetVMInfo(ctx context.Context) (*VirtualMachineInfo, error)
+	// VMInfo returns the VM's state and memory.
+	VMInfo(ctx context.Context) (*VMInfo, error)
 
 	// PauseVM halts the vCPUs; ResumeVM continues them.
 	PauseVM(ctx context.Context) error
@@ -45,32 +45,35 @@ type Hypervisor interface {
 	Capabilities() Capabilities
 }
 
-// Capabilities indicates which optional features a hypervisor supports.
-// Callers should check these before calling optional methods.
+// Capabilities reports which optional features a hypervisor supports.
+// Callers check them before using a feature.
 type Capabilities struct {
-	// SupportsSnapshot indicates if Snapshot/Restore are available
+	// SupportsSnapshot reports whether SnapshotVM and Starter.RestoreVM work.
 	SupportsSnapshot bool
 
-	// SupportsHotplugMemory indicates if ResizeMemory/ResizeMemoryAndWait are available.
+	// SupportsHotplugMemory reports whether ResizeVMMemory and
+	// ResizeVMMemoryAndWait work.
 	SupportsHotplugMemory bool
 
-	// SupportsHotplugCPU indicates if ResizeCPU is available.
+	// SupportsHotplugCPU reports whether ResizeVMCPU works.
 	SupportsHotplugCPU bool
 
-	// SupportsCPUAffinity indicates if per-vCPU host-CPU pinning is available.
+	// SupportsCPUAffinity reports whether vCPUs can be pinned to host CPUs.
 	SupportsCPUAffinity bool
 
-	// SupportsPause indicates if Pause/Resume are available
+	// SupportsPause reports whether PauseVM and ResumeVM work.
 	SupportsPause bool
 
-	// SupportsVsock indicates if vsock communication is available
+	// SupportsVsock reports whether the guest can have a vsock device.
 	SupportsVsock bool
 
-	// SupportsGPUPassthrough indicates if PCI device passthrough is available
+	// SupportsGPUPassthrough reports whether host PCI devices, GPUs among
+	// them, can be passed through to the guest.
 	SupportsGPUPassthrough bool
 
-	// SupportsDiskIOLimit indicates if disk I/O rate limiting is available
-	SupportsDiskIOLimit bool
+	// SupportsDiskRateLimit reports whether a disk's reads and writes can
+	// be rate limited.
+	SupportsDiskRateLimit bool
 }
 
 // Starter launches and connects to VMMs of one hypervisor version. The VMM
@@ -80,28 +83,29 @@ type Starter interface {
 	// Version returns the hypervisor binary version string (e.g. "v49.0").
 	Version() string
 
-	// DefaultBootArgs returns the kernel command-line arguments this hypervisor
-	// requires for correct operation (e.g. console device, panic behaviour).
-	// Used when the instance sets no kernel arguments of its own.
-	DefaultBootArgs() string
+	// DefaultKernelArgs returns the kernel arguments this hypervisor needs
+	// the guest booted with, such as its console device and what a panic
+	// does. They are used when the instance sets no kernel arguments of its
+	// own.
+	DefaultKernelArgs() string
 
 	// PowerOffEndsVM reports whether a guest powering off ends the VMM. If
-	// not, the guest resets instead, which DefaultBootArgs makes end it.
+	// not, the guest resets instead, which DefaultKernelArgs makes end it.
 	PowerOffEndsVM() bool
 
-	// StartVM launches the hypervisor process and boots the virtual machine
-	// with the given configuration. The returned process is the VMM; the
-	// caller owns it from then on.
-	StartVM(ctx context.Context, socketPath string, spec VirtualMachine) (vmm *process.Process, hv Hypervisor, err error)
+	// StartVM launches a VMM and boots the virtual machine with the given
+	// configuration. The returned process is the VMM; the caller owns it from
+	// then on.
+	StartVM(ctx context.Context, socketPath string, spec VMSpec) (vmm *process.Process, hypervisor Hypervisor, err error)
 
-	// RestoreVM launches the hypervisor and restores the VM from a snapshot
+	// RestoreVM launches a VMM and restores the VM from a snapshot
 	// at the given path, leaving it paused. The console is passed because
 	// not every snapshot carries it.
 	RestoreVM(
 		ctx context.Context, socketPath string, snapshotPath string, console ConsoleConfig,
-	) (vmm *process.Process, hv Hypervisor, err error)
+	) (vmm *process.Process, hypervisor Hypervisor, err error)
 
-	// Connect creates a Hypervisor client for an already-running VMM at the given socket.
-	// Used to reconnect to a VMM process for control operations (stop, resize, etc.).
+	// Connect returns a Hypervisor for a VMM already serving its API on
+	// socketPath, such as one started before the daemon restarted.
 	Connect(socketPath string) (Hypervisor, error)
 }

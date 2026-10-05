@@ -4,7 +4,9 @@
 //go:build linux
 
 // Package hostnet configures the host networking a VM needs: bridges, TAP
-// devices, iptables NAT rules and traffic shaping. Networks are host-local.
+// devices, iptables rules for NAT, isolation and published ports, the
+// bridges' places in firewalld, and bandwidth limits. Networks are
+// host-local.
 package hostnet
 
 import (
@@ -24,11 +26,20 @@ const DefaultBurstMultiplier = 4
 
 // Config configures a [Host].
 type Config struct {
-	UplinkInterface         string
-	UplinkCapacityBps       int64
+	// UplinkInterface is the interface NAT traffic leaves by. Empty detects
+	// it from the default IPv4 route.
+	UplinkInterface string
+	// UplinkCapacityBps is the rate, in bytes per second, of each bridge's
+	// root traffic class, the ceiling for upload limits. Zero sets up no
+	// class, and an upload limit then fails to apply.
+	UplinkCapacityBps int64
+	// UploadBurstMultiplier and DownloadBurstMultiplier are how far an
+	// instance may briefly exceed its rate limits, as multiples of them.
+	// Less than 1 is DefaultBurstMultiplier.
 	UploadBurstMultiplier   int
 	DownloadBurstMultiplier int
 
+	// Logger is the logger to use. Nil is slog.Default.
 	Logger *slog.Logger
 }
 
@@ -69,11 +80,9 @@ func NewHost(cfg Config) *Host {
 		logger:   cfg.Logger.With("component", "hostnet"),
 		networks: make(map[string]types.Network),
 	}
-	firewalld, err := connectFirewalld()
-	if err != nil {
+	var err error
+	if h.firewalld, err = connectFirewalld(); err != nil {
 		h.logger.Debug("not managing firewalld", "error", err)
-	} else {
-		h.firewalld = firewalld
 	}
 	return h
 }
@@ -109,9 +118,9 @@ func Subnets() ([]netip.Prefix, error) {
 	return subnets, nil
 }
 
-// resolveUplink returns the configured uplink interface name, or detects it
-// from the default IPv4 route when not explicitly configured.
-func (h *Host) resolveUplink() (string, error) {
+// uplink returns the name of the interface NAT traffic leaves by: the
+// configured one, or else the default IPv4 route's.
+func (h *Host) uplink() (string, error) {
 	if h.config.UplinkInterface != "" {
 		return h.config.UplinkInterface, nil
 	}
@@ -128,7 +137,7 @@ func (h *Host) resolveUplink() (string, error) {
 
 		link, err := netlink.LinkByIndex(route.LinkIndex)
 		if err != nil {
-			return "", fmt.Errorf("resolve link index %d: %w", route.LinkIndex, err)
+			return "", fmt.Errorf("look up link %d: %w", route.LinkIndex, err)
 		}
 
 		return link.Attrs().Name, nil

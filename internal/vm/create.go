@@ -16,20 +16,20 @@ import (
 // Create records a new instance's definition, first pulling its image as
 // pull says. It boots nothing: see Start. Nothing is recorded if the image
 // cannot be had.
-func (m *Manager) Create(ctx context.Context, inst types.InstanceSpec, pull types.PullPolicy) error {
+func (m *Manager) Create(ctx context.Context, instance types.InstanceSpec, pull types.PullPolicy) error {
 	// Before the definition, so that one whose image cannot be had is never
 	// seen, even for as long as a pull takes. The error names the image.
-	if _, err := m.images.Ensure(ctx, inst.ImageRef, pull); err != nil {
+	if _, err := m.images.Ensure(ctx, instance.ImageRef, pull); err != nil {
 		return err
 	}
 
-	if err := m.definitions.CreateInstance(inst); err != nil {
+	if err := m.definitions.CreateInstance(instance); err != nil {
 		return err
 	}
-	m.record(inst, events.ActionCreated,
+	m.record(instance, events.ActionCreated,
 		fmt.Sprintf("Created instance from image %s with %s, %s memory, %s disk; restart policy %s",
-			reference.Familiar(inst.ImageRef), humanize.Count(inst.VCPUs, "vCPU"), humanize.Bytes(inst.MemoryBytes), humanize.Bytes(inst.DiskBytes),
-			inst.Restart),
-		map[string]string{"image": inst.ImageRef})
+			reference.FamiliarString(instance.ImageRef), humanize.Count(instance.VCPUs, "vCPU"), humanize.Bytes(instance.MemoryBytes), humanize.Bytes(instance.DiskBytes),
+			instance.Restart),
+		map[string]string{"image": instance.ImageRef})
 	return nil
 }

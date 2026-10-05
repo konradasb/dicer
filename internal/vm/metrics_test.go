@@ -11,35 +11,35 @@ import (
 )
 
 func TestOperationsAreRecordedWithTheirOutcome(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
+	manager, definitions, _ := newTestManager(t)
 	recorder := &fakeMetrics{}
-	mgr.metrics = recorder
+	manager.metrics = recorder
 
-	inst := types.InstanceSpec{ID: "i-1", Name: "web", VCPUs: 1, MemoryBytes: 1 << 30}
-	definitions.instances[inst.Name] = inst
+	instance := types.InstanceSpec{ID: "i-1", Name: "web", VCPUs: 1, MemoryBytes: 1 << 30}
+	definitions.instances[instance.Name] = instance
 
 	// Stopping an already-stopped instance succeeds, and is still an
 	// operation that happened.
-	if err := mgr.Stop(context.Background(), inst); err != nil {
+	if err := manager.Stop(context.Background(), instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 
 	// Pausing one that is not running fails before it touches the host,
 	// which is exactly the kind of failure the counter should catch.
-	if err := mgr.Pause(context.Background(), inst); err == nil {
+	if err := manager.Pause(context.Background(), instance); err == nil {
 		t.Fatal("Pause on a stopped instance should fail")
 	}
 
-	want := []recordedOp{
-		{operation: opStop, failed: false},
-		{operation: opPause, failed: true},
+	want := []recordedOperation{
+		{operation: operationStop, failed: false},
+		{operation: operationPause, failed: true},
 	}
-	if len(recorder.ops) != len(want) {
-		t.Fatalf("recorded %v, want %v", recorder.ops, want)
+	if len(recorder.operations) != len(want) {
+		t.Fatalf("recorded %v, want %v", recorder.operations, want)
 	}
-	for i, op := range want {
-		if recorder.ops[i] != op {
-			t.Errorf("operation %d = %+v, want %+v", i, recorder.ops[i], op)
+	for i, operation := range want {
+		if recorder.operations[i] != operation {
+			t.Errorf("operation %d = %+v, want %+v", i, recorder.operations[i], operation)
 		}
 	}
 }
@@ -47,12 +47,12 @@ func TestOperationsAreRecordedWithTheirOutcome(t *testing.T) {
 // A Manager built without a recorder records into a discard, so the
 // lifecycle code can call it unconditionally.
 func TestOperationsWithoutAMetricsRecorder(t *testing.T) {
-	mgr, definitions, _ := newTestManager(t)
+	manager, definitions, _ := newTestManager(t)
 
-	inst := types.InstanceSpec{ID: "i-1", Name: "web"}
-	definitions.instances[inst.Name] = inst
+	instance := types.InstanceSpec{ID: "i-1", Name: "web"}
+	definitions.instances[instance.Name] = instance
 
-	if err := mgr.Stop(context.Background(), inst); err != nil {
+	if err := manager.Stop(context.Background(), instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 }

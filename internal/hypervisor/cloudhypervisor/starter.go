@@ -6,7 +6,6 @@ package cloudhypervisor
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 
 	"gvisor.dev/gvisor/pkg/cleanup"
@@ -41,9 +40,10 @@ func NewStarter(binaryPath string) (*Starter, error) {
 // Version returns the Cloud Hypervisor binary version string.
 func (s *Starter) Version() string { return s.version }
 
-// DefaultBootArgs returns the kernel arguments required for Cloud Hypervisor
-// with a virtio-serial (ttyS0) console.
-func (s *Starter) DefaultBootArgs() string {
+// DefaultKernelArgs returns the kernel command line Cloud Hypervisor guests
+// need: output on the serial port, which is the console, and a reboot on
+// panic.
+func (s *Starter) DefaultKernelArgs() string {
 	return "console=ttyS0 reboot=k panic=1"
 }
 
@@ -54,7 +54,7 @@ func (s *Starter) PowerOffEndsVM() bool { return true }
 // StartVM launches Cloud Hypervisor, configures the guest and boots it. It
 // returns the VMM process and a client for controlling it.
 func (s *Starter) StartVM(
-	ctx context.Context, socketPath string, spec hypervisor.VirtualMachine,
+	ctx context.Context, socketPath string, spec hypervisor.VMSpec,
 ) (*process.Process, hypervisor.Hypervisor, error) {
 	proc, hv, cu, err := s.start(ctx, socketPath)
 	if err != nil {
@@ -62,20 +62,12 @@ func (s *Starter) StartVM(
 	}
 	defer cu.Clean()
 
-	createResp, err := hv.client.CreateVMWithResponse(ctx, ToVMConfig(spec))
-	if err != nil {
+	if _, err := hv.client.CreateVMWithResponse(ctx, vmConfig(spec)); err != nil {
 		return nil, nil, fmt.Errorf("create vm: %w", err)
 	}
-	if createResp.StatusCode() != http.StatusNoContent {
-		return nil, nil, fmt.Errorf("create vm: status %d: %s", createResp.StatusCode(), createResp.Body)
-	}
 
-	bootResp, err := hv.client.BootVMWithResponse(ctx)
-	if err != nil {
+	if _, err := hv.client.BootVMWithResponse(ctx); err != nil {
 		return nil, nil, fmt.Errorf("boot vm: %w", err)
-	}
-	if bootResp.StatusCode() != http.StatusNoContent {
-		return nil, nil, fmt.Errorf("boot vm: status %d: %s", bootResp.StatusCode(), bootResp.Body)
 	}
 
 	cu.Release()
@@ -93,15 +85,12 @@ func (s *Starter) RestoreVM(
 	}
 	defer cu.Clean()
 
-	resp, err := hv.client.PutVmRestoreWithResponse(ctx, RestoreConfig{
+	_, err = hv.client.PutVmRestoreWithResponse(ctx, RestoreConfig{
 		SourceUrl: "file://" + snapshotPath,
 		Prefault:  ptr(false),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("restore snapshot: %w", err)
-	}
-	if resp.StatusCode() != http.StatusNoContent {
-		return nil, nil, fmt.Errorf("restore snapshot: status %d: %s", resp.StatusCode(), resp.Body)
 	}
 
 	cu.Release()
@@ -110,7 +99,7 @@ func (s *Starter) RestoreVM(
 
 // Connect returns a client for an already-running Cloud Hypervisor VMM.
 func (s *Starter) Connect(socketPath string) (hypervisor.Hypervisor, error) {
-	return NewHypervisor(socketPath)
+	return NewHypervisor(socketPath), nil
 }
 
 // start launches the VMM process and returns a client for it, along with a
@@ -122,13 +111,6 @@ func (s *Starter) start(
 	if err != nil {
 		return nil, nil, cleanup.Cleanup{}, fmt.Errorf("start process: %w", err)
 	}
-	cu := cleanup.Make(proc.Terminate)
 
-	hv, err := NewHypervisor(socketPath)
-	if err != nil {
-		cu.Clean()
-		return nil, nil, cleanup.Cleanup{}, err
-	}
-
-	return proc, hv, cu, nil
+	return proc, NewHypervisor(socketPath), cleanup.Make(proc.Terminate), nil
 }

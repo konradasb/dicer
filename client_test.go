@@ -28,8 +28,7 @@ import (
 // the socket's address reaches the server behind it.
 func TestNewClientOverASocket(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "dicer.sock")
-	var config net.ListenConfig
-	listener, err := config.Listen(t.Context(), "unix", path)
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", path)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -49,8 +48,8 @@ func TestNewClientOverASocket(t *testing.T) {
 	}
 }
 
-// A socket that is not there is reported at once, rather than by the first
-// call, and names what is missing.
+// TestNewClientWithNoSocket checks that a socket that is not there is reported
+// at once, rather than by the first call, and names what is missing.
 func TestNewClientWithNoSocket(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "dicer.sock")
 
@@ -64,11 +63,11 @@ func TestNewClientWithNoSocket(t *testing.T) {
 	}
 }
 
-// By default a client goes to the local daemon.
+// TestNewClientDefaultsToTheLocalDaemon checks that a client goes to the
+// local daemon's socket unless told otherwise.
 func TestNewClientDefaultsToTheLocalDaemon(t *testing.T) {
-	o := options{address: DefaultAddress}
-	if o.address != "unix:///run/dicer/dicer.sock" {
-		t.Errorf("default address = %q", o.address)
+	if DefaultAddress != "unix:///run/dicer/dicer.sock" {
+		t.Errorf("DefaultAddress = %q", DefaultAddress)
 	}
 
 	c, err := NewClient()
@@ -81,20 +80,31 @@ func TestNewClientDefaultsToTheLocalDaemon(t *testing.T) {
 	}
 }
 
-// A TCP address is connected to lazily, so a client is made without a
-// daemon there.
+// TestNewClientOverTCP checks that a TCP address is connected to lazily, so
+// a client is made without a daemon there.
 func TestNewClientOverTCP(t *testing.T) {
-	for _, opts := range [][]Option{
-		{WithAddress("192.0.2.1:7443")},
-		{WithAddress("dns:///dicer.example.com:7443"), WithTLS(&tls.Config{MinVersion: tls.VersionTLS13})},
-		{WithAddress("192.0.2.1:7443"), WithDialOptions(grpc.WithTransportCredentials(insecure.NewCredentials()))},
-	} {
-		c, err := NewClient(opts...)
-		if err != nil {
-			t.Errorf("NewClient: %v", err)
-			continue
-		}
-		_ = c.Close()
+	tests := []struct {
+		name string
+		opts []Option
+	}{
+		{"plain", []Option{WithAddress("192.0.2.1:7443")}},
+		{"TLS", []Option{
+			WithAddress("dns:///dicer.example.com:7443"),
+			WithTLS(&tls.Config{MinVersion: tls.VersionTLS13}),
+		}},
+		{"dial options", []Option{
+			WithAddress("192.0.2.1:7443"),
+			WithDialOptions(grpc.WithTransportCredentials(insecure.NewCredentials())),
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, err := NewClient(tt.opts...)
+			if err != nil {
+				t.Fatalf("NewClient: %v", err)
+			}
+			_ = c.Close()
+		})
 	}
 }
 
@@ -107,9 +117,9 @@ func TestKeepaliveGivesUpOnADaemonThatStopsAnswering(t *testing.T) {
 	}
 
 	daemon := &stuckDaemon{called: make(chan struct{})}
-	network := newBlackhole(t, serve(t, daemon))
+	blackhole := newBlackhole(t, serve(t, daemon))
 
-	c, err := NewClient(WithAddress(network.addr()), WithKeepalive(10*time.Second, time.Second))
+	c, err := NewClient(WithAddress(blackhole.address()), WithKeepalive(10*time.Second, time.Second))
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
@@ -125,7 +135,7 @@ func TestKeepaliveGivesUpOnADaemonThatStopsAnswering(t *testing.T) {
 	}()
 
 	<-daemon.called
-	network.drop()
+	blackhole.drop()
 
 	select {
 	case err := <-done:
@@ -145,6 +155,7 @@ type stuckDaemon struct {
 	called chan struct{}
 }
 
+// GetHostInfo waits for the call to be given up.
 func (d *stuckDaemon) GetHostInfo(ctx context.Context, _ *dicerdv1.GetHostInfoRequest) (*dicerdv1.GetHostInfoResponse, error) {
 	close(d.called)
 	<-ctx.Done()
@@ -155,51 +166,55 @@ func (d *stuckDaemon) GetHostInfo(ctx context.Context, _ *dicerdv1.GetHostInfoRe
 func serve(t *testing.T, daemon dicerdv1.DaemonServiceServer) string {
 	t.Helper()
 
-	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	s := grpc.NewServer()
-	dicerdv1.RegisterDaemonServiceServer(s, daemon)
-	go func() { _ = s.Serve(ln) }()
-	t.Cleanup(s.Stop)
+	server := grpc.NewServer()
+	dicerdv1.RegisterDaemonServiceServer(server, daemon)
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
 
-	return ln.Addr().String()
+	return listener.Addr().String()
 }
 
 // blackhole forwards TCP connections to a target until told to drop, after
 // which it keeps them open and discards whatever either end sends: what a
 // network that stopped carrying packets, or a frozen host, looks like.
 type blackhole struct {
-	ln       net.Listener
+	listener net.Listener
 	target   string
 	dropping atomic.Bool
 }
 
+// newBlackhole starts a blackhole forwarding to target, closed when the test
+// ends.
 func newBlackhole(t *testing.T, target string) *blackhole {
 	t.Helper()
 
-	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = ln.Close() })
+	t.Cleanup(func() { _ = listener.Close() })
 
-	b := &blackhole{ln: ln, target: target}
+	b := &blackhole{listener: listener, target: target}
 	go b.accept(t)
 
 	return b
 }
 
-func (b *blackhole) addr() string { return b.ln.Addr().String() }
+// address returns the address clients connect to.
+func (b *blackhole) address() string { return b.listener.Addr().String() }
 
 // drop stops carrying bytes, leaving the connections open.
 func (b *blackhole) drop() { b.dropping.Store(true) }
 
+// accept forwards each connection it is given until the listener closes.
 func (b *blackhole) accept(t *testing.T) {
 	for {
-		client, err := b.ln.Accept()
+		client, err := b.listener.Accept()
 		if err != nil {
 			return
 		}

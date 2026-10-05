@@ -19,7 +19,7 @@ import (
 // does: the shutdown must not wait on it.
 func TestStopServerEndsStreamsThatOutlastTheTimeout(t *testing.T) {
 	opened := make(chan struct{})
-	srv := grpc.NewServer(grpc.UnknownServiceHandler(func(_ any, stream grpc.ServerStream) error {
+	server := grpc.NewServer(grpc.UnknownServiceHandler(func(_ any, stream grpc.ServerStream) error {
 		close(opened)
 		<-stream.Context().Done()
 		return stream.Context().Err()
@@ -29,7 +29,7 @@ func TestStopServerEndsStreamsThatOutlastTheTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go func() { _ = srv.Serve(listener) }()
+	go func() { _ = server.Serve(listener) }()
 
 	conn, err := grpc.NewClient(listener.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -51,7 +51,7 @@ func TestStopServerEndsStreamsThatOutlastTheTimeout(t *testing.T) {
 	}
 
 	start := time.Now()
-	stopServer(srv, 100*time.Millisecond)
+	stopServer(server, 100*time.Millisecond)
 	if took := time.Since(start); took > 5*time.Second {
 		t.Errorf("stopping took %s with a stream open, want about the timeout", took)
 	}

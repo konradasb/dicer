@@ -123,14 +123,14 @@ func TestHealthRendering(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		inst := &dicerdv1.Instance{State: stateRunning, StartTime: started, Health: tt.health}
+		instance := &dicerdv1.Instance{State: stateRunning, StartTime: started, Health: tt.health}
 		if tt.health != nil {
-			inst.Health.Check = check
+			instance.Health.Check = check
 		}
-		if got := instanceStatus(inst); got != tt.status {
+		if got := instanceStatus(instance); got != tt.status {
 			t.Errorf("status = %q, want %q", got, tt.status)
 		}
-		if got := healthLines(inst, palette{}); !slices.Equal(got, tt.lines) {
+		if got := healthLines(instance, palette{}); !slices.Equal(got, tt.lines) {
 			t.Errorf("health lines = %q, want %q", got, tt.lines)
 		}
 	}

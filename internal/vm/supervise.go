@@ -21,7 +21,7 @@ import (
 
 // supervised is an active instance's VMM and its health monitor.
 type supervised struct {
-	proc *process.Process
+	vmm *process.Process
 
 	// health is the instance's health monitor, or nil if it has no check.
 	// stopMonitor ends it.
@@ -29,27 +29,28 @@ type supervised struct {
 	stopMonitor context.CancelFunc
 }
 
-// supervise registers p as the VMM of inst, watches it for exit, and monitors
-// health if rt has a check. The caller must hold the instance lock.
-func (m *Manager) supervise(ctx context.Context, inst types.InstanceSpec, p *process.Process, rt types.InstanceStatus) {
+// supervise registers vmm as the VMM of instance, watches it for exit, and
+// monitors health if status has a check. The caller must hold the instance
+// lock.
+func (m *Manager) supervise(ctx context.Context, instance types.InstanceSpec, vmm *process.Process, status types.InstanceStatus) {
 	ctx = context.WithoutCancel(ctx)
 
-	s := &supervised{proc: p, stopMonitor: func() {}}
-	if rt.HealthCheck != nil {
+	s := &supervised{vmm: vmm, stopMonitor: func() {}}
+	if status.HealthCheck != nil {
 		var monitorCtx context.Context
 		monitorCtx, s.stopMonitor = context.WithCancel(ctx)
-		s.health = newHealthMonitor(*rt.HealthCheck, rt.StartedAt)
-		m.watchers.Go(func() { m.monitor(monitorCtx, inst, p, rt.VsockPath, s.health) })
+		s.health = newHealthMonitor(*status.HealthCheck, status.StartedAt)
+		m.watchers.Go(func() { m.monitor(monitorCtx, instance, vmm, status.VsockPath, s.health) })
 	}
 
 	m.vmmsMu.Lock()
-	m.vmms[inst.ID] = s
+	m.vmms[instance.ID] = s
 	m.vmmsMu.Unlock()
 
 	m.watchers.Go(func() {
 		select {
-		case <-p.Done():
-			m.handleExit(ctx, inst, p)
+		case <-vmm.Done():
+			m.handleExit(ctx, instance, vmm)
 		case <-m.closing:
 		}
 	})
@@ -66,7 +67,7 @@ func (m *Manager) supervision(instanceID string) *supervised {
 // vmm returns the registered VMM of an instance, or nil.
 func (m *Manager) vmm(instanceID string) *process.Process {
 	if s := m.supervision(instanceID); s != nil {
-		return s.proc
+		return s.vmm
 	}
 	return nil
 }
@@ -88,37 +89,37 @@ func (m *Manager) forget(instanceID string) {
 // first asks the guest to shut down within stopGracePeriod. Otherwise, or
 // after that, the guest's disks are synced and the VMM is shut down, then
 // killed if it overstays. The caller must hold the instance lock.
-func (m *Manager) stopVMM(ctx context.Context, inst types.InstanceSpec, rt types.InstanceStatus, graceful bool) stopOutcome {
-	p := m.vmm(inst.ID)
-	if p == nil {
+func (m *Manager) stopVMM(ctx context.Context, instance types.InstanceSpec, status types.InstanceStatus, graceful bool) stopOutcome {
+	vmm := m.vmm(instance.ID)
+	if vmm == nil {
 		return stopNotRunning
 	}
-	defer m.forget(inst.ID)
+	defer m.forget(instance.ID)
 
 	outcome := stopForced
 	if graceful {
-		if outcome = m.shutdownGracefully(ctx, inst, rt, p); outcome == stopGraceful {
+		if outcome = m.shutdownGracefully(ctx, instance, status, vmm); outcome == stopGraceful {
 			return outcome
 		}
 	}
 
-	m.syncGuest(ctx, inst, rt)
+	m.syncGuest(ctx, instance, status)
 
-	if hv, err := m.connect(inst, rt); err == nil {
-		m.logger.DebugContext(ctx, "shutting down hypervisor", "instance", inst.Name)
-		_ = hv.Shutdown(ctx)
+	if hypervisor, err := m.connect(instance, status); err == nil {
+		m.logger.DebugContext(ctx, "shutting down hypervisor", "instance", instance.Name)
+		_ = hypervisor.Shutdown(ctx)
 	} else {
 		m.logger.DebugContext(ctx, "hypervisor not reachable, killing it",
-			"instance", inst.Name, "error", err)
-		_ = p.Kill()
+			"instance", instance.Name, "error", err)
+		_ = vmm.Kill()
 	}
 
 	select {
-	case <-p.Done():
+	case <-vmm.Done():
 	case <-time.After(m.shutdownTimeout):
 		m.logger.WarnContext(ctx, "hypervisor did not exit in time, killing it",
-			"instance", inst.Name, "pid", p.PID())
-		p.Terminate()
+			"instance", instance.Name, "pid", vmm.PID())
+		vmm.Terminate()
 	}
 	return outcome
 }
@@ -155,98 +156,98 @@ func stopMessage(outcome stopOutcome, grace, took, ranFor time.Duration) string 
 
 // shutdownGracefully asks a running guest to shut down and waits up to
 // stopGracePeriod for its VMM to exit.
-func (m *Manager) shutdownGracefully(ctx context.Context, inst types.InstanceSpec, rt types.InstanceStatus, p *process.Process) stopOutcome {
-	if rt.State != types.StateRunning || rt.VsockPath == "" {
+func (m *Manager) shutdownGracefully(ctx context.Context, instance types.InstanceSpec, status types.InstanceStatus, vmm *process.Process) stopOutcome {
+	if status.State != types.InstanceStateRunning || status.VsockPath == "" {
 		return stopForced
 	}
 
-	if err := m.shutdownGuest(ctx, rt.VsockPath); err != nil {
+	if err := m.shutdownGuest(ctx, status.VsockPath); err != nil {
 		m.logger.DebugContext(ctx, "cannot ask the guest to shut down, ending it",
-			"instance", inst.Name, "error", err)
+			"instance", instance.Name, "error", err)
 		return stopForced
 	}
 
 	select {
-	case <-p.Done():
-		m.logger.DebugContext(ctx, "guest shut down", "instance", inst.Name)
+	case <-vmm.Done():
+		m.logger.DebugContext(ctx, "guest shut down", "instance", instance.Name)
 		return stopGraceful
 	case <-time.After(m.stopGracePeriod):
 		m.logger.WarnContext(ctx, "guest did not shut down in time, ending it",
-			"instance", inst.Name, "grace_period", m.stopGracePeriod)
+			"instance", instance.Name, "grace_period", m.stopGracePeriod)
 		return stopTimedOut
 	}
 }
 
 // handleExit handles a VMM that exited unexpectedly. The runtime directory
 // is kept for the VMM's log.
-func (m *Manager) handleExit(ctx context.Context, inst types.InstanceSpec, p *process.Process) {
-	lock := m.lock(inst.ID)
+func (m *Manager) handleExit(ctx context.Context, instance types.InstanceSpec, vmm *process.Process) {
+	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
 
-	if m.vmm(inst.ID) != p {
+	if m.vmm(instance.ID) != vmm {
 		// Stopped, deleted or replaced while we waited for the lock.
 		return
 	}
-	m.forget(inst.ID)
+	m.forget(instance.ID)
 
 	// Apply the current definition's restart policy.
-	if current, err := m.definitions.GetInstance(inst.ID); err == nil {
-		inst = current
+	if current, err := m.definitions.Instance(instance.ID); err == nil {
+		instance = current
 	}
 
-	rt, err := m.Runtime(inst)
+	status, err := m.Status(instance)
 	if err != nil {
-		m.logger.WarnContext(ctx, "cannot read runtime state", "instance", inst.Name, "error", err)
+		m.logger.WarnContext(ctx, "cannot read instance status", "instance", instance.Name, "error", err)
 	}
 
-	m.ended(ctx, inst, rt, m.readExit(inst.ID, p.Err()))
+	m.ended(ctx, instance, status, m.readExit(instance.ID, vmm.Err()))
 }
 
 // ended records an unexpected end, releases the instance's network and
 // applies its restart policy: Stopped after a clean exit, Failed otherwise,
-// or Restarting. prev is the runtime state before it ended. The caller must
+// or Restarting. prev is the status before it ended. The caller must
 // hold the instance lock.
-func (m *Manager) ended(ctx context.Context, inst types.InstanceSpec, prev types.InstanceStatus, exit Exit) {
-	m.teardownNetwork(ctx, inst)
+func (m *Manager) ended(ctx context.Context, instance types.InstanceSpec, prev types.InstanceStatus, exit Exit) {
+	m.teardownNetwork(ctx, instance)
 
 	var ranFor time.Duration
 	if !prev.StartedAt.IsZero() {
 		ranFor = time.Since(prev.StartedAt)
 	}
-	d := decide(inst.Restart, exit, prev.RestartCount, ranFor)
+	decision := decideRestart(instance.Restart, exit, prev.RestartCount, ranFor)
 
-	rt := prev
-	rt.InstanceID = inst.ID
-	forgetProcess(&rt)
-	rt.ExitCode = exit.Code
-	rt.FinishedAt = time.Now()
-	rt.RestartCount = d.restarts
-	rt.StateError = ""
+	status := prev
+	status.InstanceID = instance.ID
+	forgetProcess(&status)
+	status.ExitCode = exit.Code
+	status.FinishedAt = time.Now()
+	status.RestartCount = decision.restarts
+	status.StateError = ""
 
 	switch {
-	case d.restart:
-		rt.State = types.StateRestarting
-		rt.NextRestartAt = rt.FinishedAt.Add(d.delay)
+	case decision.restart:
+		status.State = types.InstanceStateRestarting
+		status.NextRestartAt = status.FinishedAt.Add(decision.delay)
 		if !exit.Clean() {
-			rt.StateError = exit.Failure.Error()
+			status.StateError = exit.Failure.Error()
 		}
 	case exit.Clean():
-		rt.State = types.StateStopped
-	case d.gaveUp:
-		rt.State = types.StateFailed
-		rt.StateError = fmt.Sprintf("gave up after %s: %v", humanize.Count(d.restarts, "restart"), exit.Failure)
+		status.State = types.InstanceStateStopped
+	case decision.gaveUp:
+		status.State = types.InstanceStateFailed
+		status.StateError = fmt.Sprintf("gave up after %s: %v", humanize.Count(decision.restarts, "restart"), exit.Failure)
 	default:
-		rt.State = types.StateFailed
-		rt.StateError = exit.Failure.Error()
+		status.State = types.InstanceStateFailed
+		status.StateError = exit.Failure.Error()
 	}
 
-	if err := m.writeRuntime(rt); err != nil {
-		m.logger.WarnContext(ctx, "cannot record how the instance ended", "instance", inst.Name, "error", err)
+	if err := m.writeStatus(status); err != nil {
+		m.logger.WarnContext(ctx, "cannot record how the instance ended", "instance", instance.Name, "error", err)
 	}
-	m.recordEnd(inst, exit, d, ranFor)
+	m.recordEnd(instance, exit, decision, ranFor)
 
-	attrs := []any{"instance", inst.Name, "state", rt.State, "restart_policy", inst.Restart.String()}
+	attrs := []any{"instance", instance.Name, "state", status.State, "restart_policy", instance.Restart.String()}
 	if exit.Code != nil {
 		attrs = append(attrs, "exit_code", *exit.Code)
 	}
@@ -254,15 +255,15 @@ func (m *Manager) ended(ctx context.Context, inst types.InstanceSpec, prev types
 		attrs = append(attrs, "error", exit.Failure)
 	}
 
-	if d.restart {
+	if decision.restart {
 		m.logger.WarnContext(ctx, "instance ended, restarting it", append(attrs,
-			"restart_count", rt.RestartCount, "delay", d.delay)...)
-		m.scheduleRestart(ctx, inst.ID, rt.NextRestartAt)
+			"restart_count", status.RestartCount, "delay", decision.delay)...)
+		m.scheduleRestart(ctx, instance.ID, status.NextRestartAt)
 
 		return
 	}
 
-	m.scheduleRemoval(ctx, inst)
+	m.scheduleRemoval(ctx, instance)
 
 	if exit.Clean() {
 		m.logger.InfoContext(ctx, "instance ended", attrs...)
@@ -274,17 +275,17 @@ func (m *Manager) ended(ctx context.Context, inst types.InstanceSpec, prev types
 
 // scheduleRemoval deletes an instance with RemoveOnExit set. It runs in a
 // goroutine because callers hold the instance lock, which Delete takes.
-func (m *Manager) scheduleRemoval(ctx context.Context, inst types.InstanceSpec) {
-	if !inst.RemoveOnExit {
+func (m *Manager) scheduleRemoval(ctx context.Context, instance types.InstanceSpec) {
+	if !instance.RemoveOnExit {
 		return
 	}
 
 	ctx = context.WithoutCancel(ctx)
 
 	m.watchers.Go(func() {
-		if err := m.Delete(ctx, inst, false); err != nil {
+		if err := m.Delete(ctx, instance, false); err != nil {
 			m.logger.ErrorContext(ctx, "cannot delete the instance that asked to be deleted when it stopped",
-				"instance", inst.Name, "error", err)
+				"instance", instance.Name, "error", err)
 		}
 	})
 }
@@ -304,15 +305,15 @@ func (m *Manager) scheduleRestart(ctx context.Context, instanceID string, at tim
 	if m.isClosing() {
 		return
 	}
-	if p := m.restarts[instanceID]; p != nil {
-		p.timer.Stop()
+	if pending := m.restarts[instanceID]; pending != nil {
+		pending.timer.Stop()
 	}
 
 	ctx = context.WithoutCancel(ctx)
 
-	p := &pendingRestart{}
-	p.timer = time.AfterFunc(m.restartWait(at), func() { m.restart(ctx, instanceID, p) })
-	m.restarts[instanceID] = p
+	pending := &pendingRestart{}
+	pending.timer = time.AfterFunc(m.restartWait(at), func() { m.restart(ctx, instanceID, pending) })
+	m.restarts[instanceID] = pending
 }
 
 // cancelRestart drops an instance's pending restart, if any. The caller must
@@ -321,17 +322,17 @@ func (m *Manager) cancelRestart(instanceID string) {
 	m.restartsMu.Lock()
 	defer m.restartsMu.Unlock()
 
-	if p := m.restarts[instanceID]; p != nil {
-		p.timer.Stop()
+	if pending := m.restarts[instanceID]; pending != nil {
+		pending.timer.Stop()
 		delete(m.restarts, instanceID)
 	}
 }
 
 // restart starts an instance again for its restart policy. A failed restart
 // is handled as another end.
-func (m *Manager) restart(ctx context.Context, instanceID string, p *pendingRestart) {
+func (m *Manager) restart(ctx context.Context, instanceID string, pending *pendingRestart) {
 	m.restartsMu.Lock()
-	if m.isClosing() || m.restarts[instanceID] != p {
+	if m.isClosing() || m.restarts[instanceID] != pending {
 		m.restartsMu.Unlock()
 		return
 	}
@@ -345,24 +346,24 @@ func (m *Manager) restart(ctx context.Context, instanceID string, p *pendingRest
 	defer lock.Unlock()
 
 	// Deleted, or edited, while the restart waited.
-	inst, err := m.definitions.GetInstance(instanceID)
+	instance, err := m.definitions.Instance(instanceID)
 	if err != nil {
 		return
 	}
-	rt, err := m.Runtime(inst)
-	if err != nil || rt.State != types.StateRestarting {
+	status, err := m.Status(instance)
+	if err != nil || status.State != types.InstanceStateRestarting {
 		return
 	}
 
 	m.metrics.RecordInstanceRestart()
-	m.logger.InfoContext(ctx, "restarting instance", "instance", inst.Name, "restart_count", rt.RestartCount)
+	m.logger.InfoContext(ctx, "restarting instance", "instance", instance.Name, "restart_count", status.RestartCount)
 
-	if err := m.admit(inst, inst.Resources()); err != nil {
-		m.ended(ctx, inst, rt, failedExit(fmt.Errorf("restart: %w", err)))
+	if err := m.admit(instance, instance.Resources()); err != nil {
+		m.ended(ctx, instance, status, Exit{Failure: fmt.Errorf("restart: %w", err)})
 		return
 	}
-	if err := m.boot(ctx, inst, rt.RestartCount); err != nil {
-		m.ended(ctx, inst, rt, failedExit(fmt.Errorf("restart: %w", err)))
+	if err := m.boot(ctx, instance, status.RestartCount); err != nil {
+		m.ended(ctx, instance, status, Exit{Failure: fmt.Errorf("restart: %w", err)})
 	}
 }
 
@@ -382,8 +383,8 @@ func (m *Manager) Close() {
 	m.closeOnce.Do(func() {
 		m.restartsMu.Lock()
 		close(m.closing)
-		for _, p := range m.restarts {
-			p.timer.Stop()
+		for _, pending := range m.restarts {
+			pending.timer.Stop()
 		}
 		clear(m.restarts)
 		m.restartsMu.Unlock()

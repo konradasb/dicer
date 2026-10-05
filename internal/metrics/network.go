@@ -28,13 +28,13 @@ type networkCollector struct {
 func (m *Metrics) newNetworkCollector(source func() []NetworkSummary) *networkCollector {
 	return &networkCollector{
 		source: source,
-		allocated: m.desc(Description{
+		allocated: m.descriptor(Description{
 			Name:   "dicer_network_addresses_allocated",
 			Labels: []string{"network"},
 			Help:   "Addresses currently assigned to instances on a network.",
 			Group:  GroupNetworks,
 		}),
-		available: m.desc(Description{
+		available: m.descriptor(Description{
 			Name:   "dicer_network_addresses_available",
 			Labels: []string{"network"},
 			Help:   "Assignable addresses still free on a network.",
@@ -50,8 +50,8 @@ func (c *networkCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *networkCollector) Collect(ch chan<- prometheus.Metric) {
-	for _, nw := range c.source() {
-		ch <- gauge(c.allocated, float64(nw.Allocated), nw.Name)
-		ch <- gauge(c.available, float64(nw.Available), nw.Name)
+	for _, network := range c.source() {
+		ch <- gaugeReading(c.allocated, float64(network.Allocated), network.Name)
+		ch <- gaugeReading(c.available, float64(network.Available), network.Name)
 	}
 }

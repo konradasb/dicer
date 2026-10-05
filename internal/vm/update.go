@@ -28,22 +28,22 @@ func (m *Manager) Update(ctx context.Context, updated types.InstanceSpec) error 
 	lock.Lock()
 	defer lock.Unlock()
 
-	current, err := m.definitions.GetInstance(updated.ID)
+	current, err := m.definitions.Instance(updated.ID)
 	if err != nil {
 		return err
 	}
-	rt, err := m.Runtime(current)
+	status, err := m.Status(current)
 	if err != nil {
 		return err
 	}
-	if rt.State != types.StateStopped && !onlyRestartPolicyDiffers(current, updated) {
-		return errdefs.InvalidState("instance %q is %s; stop it before changing it", current.Name, rt.State.Lower())
+	if status.State != types.InstanceStateStopped && !onlyRestartPolicyDiffers(current, updated) {
+		return errdefs.InvalidState("instance %q is %s; stop it before changing it", current.Name, status.State.Lowercase())
 	}
 
 	if err := m.definitions.UpdateInstance(updated); err != nil {
 		return fmt.Errorf("update instance %q: %w", current.Name, err)
 	}
-	m.record(updated, events.ActionUpdated, updateMessage(current, updated, rt.State), nil)
+	m.record(updated, events.ActionUpdated, updateMessage(current, updated, status.State), nil)
 
 	if current.NetworkName != updated.NetworkName || current.StaticIP != updated.StaticIP {
 		if err := m.networks.Release(current.NetworkName, current.ID); err != nil {
@@ -62,7 +62,7 @@ func updateMessage(current, updated types.InstanceSpec, state types.InstanceStat
 		return "Updated instance: nothing changed"
 	}
 	when := "takes effect on next start"
-	if state != types.StateStopped {
+	if state != types.InstanceStateStopped {
 		when = "takes effect when the instance next ends"
 	}
 	return "Updated instance: " + strings.Join(changed, ", ") + "; " + when
@@ -83,7 +83,7 @@ func definitionChanges(a, b types.InstanceSpec) []string {
 		}
 	}
 
-	from("image", reference.Familiar(a.ImageRef), reference.Familiar(b.ImageRef))
+	from("image", reference.FamiliarString(a.ImageRef), reference.FamiliarString(b.ImageRef))
 	from("vCPUs", strconv.Itoa(a.VCPUs), strconv.Itoa(b.VCPUs))
 	from("memory", humanize.Bytes(a.MemoryBytes), humanize.Bytes(b.MemoryBytes))
 	from("disk", humanize.Bytes(a.DiskBytes), humanize.Bytes(b.DiskBytes))

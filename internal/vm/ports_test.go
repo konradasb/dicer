@@ -14,8 +14,8 @@ import (
 
 // withPorts gives the harness's instance ports, in its definition too.
 func (h *harness) withPorts(ports ...types.PortMapping) {
-	h.inst.Ports = ports
-	h.definitions.instances[h.inst.Name] = h.inst
+	h.instance.Ports = ports
+	h.definitions.instances[h.instance.Name] = h.instance
 }
 
 // seedRunning defines another instance, recorded as in state.
@@ -26,8 +26,8 @@ func (h *harness) seedRunning(t *testing.T, name string, state types.InstanceSta
 	other.Ports = ports
 	h.definitions.instances[name] = other
 
-	if err := h.mgr.writeRuntime(types.InstanceStatus{InstanceID: other.ID, State: state}); err != nil {
-		t.Fatalf("writeRuntime: %v", err)
+	if err := h.manager.writeStatus(types.InstanceStatus{InstanceID: other.ID, State: state}); err != nil {
+		t.Fatalf("writeStatus: %v", err)
 	}
 	return other
 }
@@ -37,19 +37,19 @@ func TestStartPublishesPortsAndStopUnpublishes(t *testing.T) {
 	h.withPorts(types.PortMapping{HostPort: 8080, GuestPort: 80})
 	h.start(t)
 
-	alloc, err := h.mgr.Address(h.inst)
+	allocation, err := h.manager.Allocation(h.instance)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, ok := h.hostNetwork.published[h.inst.ID]
-	if !ok || got.ip != alloc.IP || !slices.Equal(got.ports, h.inst.Ports) {
-		t.Fatalf("published = %+v, want %v at the instance's address %s", got, h.inst.Ports, alloc.IP)
+	got, ok := h.hostNetwork.published[h.instance.ID]
+	if !ok || got.ip != allocation.IP || !slices.Equal(got.ports, h.instance.Ports) {
+		t.Fatalf("published = %+v, want %v at the instance's address %s", got, h.instance.Ports, allocation.IP)
 	}
 
-	if err := h.mgr.Stop(t.Context(), h.inst); err != nil {
+	if err := h.manager.Stop(t.Context(), h.instance); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
-	if _, ok := h.hostNetwork.published[h.inst.ID]; ok {
+	if _, ok := h.hostNetwork.published[h.instance.ID]; ok {
 		t.Error("ports are still published after stop")
 	}
 }
@@ -69,9 +69,9 @@ func TestCrashUnpublishesPorts(t *testing.T) {
 	h.start(t)
 
 	h.crash(t)
-	h.waitForState(t, types.StateFailed)
+	h.waitForState(t, types.InstanceStateFailed)
 
-	if _, ok := h.hostNetwork.published[h.inst.ID]; ok {
+	if _, ok := h.hostNetwork.published[h.instance.ID]; ok {
 		t.Error("ports are still published after the VMM crashed")
 	}
 }
@@ -81,22 +81,22 @@ func TestFailedPublishUndoesNetwork(t *testing.T) {
 	h.withPorts(types.PortMapping{HostPort: 22, GuestPort: 22})
 	h.hostNetwork.publishErr = errors.New("host port is in use")
 
-	if err := h.mgr.Start(t.Context(), h.inst); err == nil {
+	if err := h.manager.Start(t.Context(), h.instance); err == nil {
 		t.Fatal("Start succeeded although its ports could not be published")
 	}
-	if !slices.Contains(h.hostNetwork.removedTAPs, h.inst.ID) {
+	if !slices.Contains(h.hostNetwork.removedTAPs, h.instance.ID) {
 		t.Errorf("removed TAPs = %v, want the instance's TAP gone after the failed start", h.hostNetwork.removedTAPs)
 	}
 }
 
 func TestStartRefusesPortHeldByAnotherInstance(t *testing.T) {
-	for _, state := range []types.InstanceState{types.StateRunning, types.StatePaused, types.StateStarting, types.StateStopping} {
+	for _, state := range []types.InstanceState{types.InstanceStateRunning, types.InstanceStatePaused, types.InstanceStateStarting, types.InstanceStateStopping} {
 		t.Run(string(state), func(t *testing.T) {
 			h := newHarness(t)
 			h.withPorts(types.PortMapping{HostIP: "192.0.2.1", HostPort: 8080, GuestPort: 80})
 			h.seedRunning(t, "db", state, types.PortMapping{HostPort: 8080, GuestPort: 5432})
 
-			err := h.mgr.Start(t.Context(), h.inst)
+			err := h.manager.Start(t.Context(), h.instance)
 			if !errors.Is(err, errdefs.ErrInvalidState) {
 				t.Fatalf("Start = %v, want a refusal for the port %s instance holds", err, state)
 			}
@@ -105,8 +105,8 @@ func TestStartRefusesPortHeldByAnotherInstance(t *testing.T) {
 			}
 			// Refused at admission: the instance was never Starting, so
 			// it is left as it was rather than Failed.
-			if rt := h.runtime(t); rt.State != types.StateStopped {
-				t.Errorf("state = %s, want %s", rt.State, types.StateStopped)
+			if status := h.status(t); status.State != types.InstanceStateStopped {
+				t.Errorf("state = %s, want %s", status.State, types.InstanceStateStopped)
 			}
 		})
 	}
@@ -117,9 +117,9 @@ func TestStartAllowsPortsThatDoNotClash(t *testing.T) {
 	h.withPorts(types.PortMapping{HostPort: 8080, GuestPort: 80})
 	// A different port, a different protocol, and the same port on an
 	// instance that is not running.
-	h.seedRunning(t, "db", types.StateRunning, types.PortMapping{HostPort: 5432, GuestPort: 5432})
-	h.seedRunning(t, "dns", types.StateRunning, types.PortMapping{HostPort: 8080, GuestPort: 80, Protocol: "udp"})
-	h.seedRunning(t, "old", types.StateStopped, types.PortMapping{HostPort: 8080, GuestPort: 80})
+	h.seedRunning(t, "db", types.InstanceStateRunning, types.PortMapping{HostPort: 5432, GuestPort: 5432})
+	h.seedRunning(t, "dns", types.InstanceStateRunning, types.PortMapping{HostPort: 8080, GuestPort: 80, Protocol: "udp"})
+	h.seedRunning(t, "old", types.InstanceStateStopped, types.PortMapping{HostPort: 8080, GuestPort: 80})
 
 	h.start(t)
 }
@@ -129,17 +129,17 @@ func TestRestoreSnapshotPublishesPorts(t *testing.T) {
 	h.withPorts(types.PortMapping{HostPort: 8080, GuestPort: 80})
 	h.running(t)
 
-	if _, err := h.mgr.CreateSnapshot(t.Context(), h.inst, "good"); err != nil {
+	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "good"); err != nil {
 		t.Fatalf("CreateSnapshot: %v", err)
 	}
-	if err := h.mgr.clearRuntime(h.inst.ID); err != nil {
+	if err := h.manager.removeRuntimeDir(h.instance.ID); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := h.mgr.RestoreSnapshot(t.Context(), h.inst, "good"); err != nil {
+	if err := h.manager.RestoreSnapshot(t.Context(), h.instance, "good"); err != nil {
 		t.Fatalf("RestoreSnapshot: %v", err)
 	}
-	if _, ok := h.hostNetwork.published[h.inst.ID]; !ok {
+	if _, ok := h.hostNetwork.published[h.instance.ID]; !ok {
 		t.Error("ports were not published for the restored instance")
 	}
 }
