@@ -90,7 +90,7 @@ type Capabilities struct {
 // boots and when a snapshot of it is restored, maybe by another VMM in
 // another directory. The caller clears stale sockets from the directory.
 type Starter interface {
-	// Version returns the hypervisor binary version string (e.g. "v49.0").
+	// Version returns the hypervisor binary version string (e.g. "v53.0.0").
 	Version() string
 
 	// DefaultKernelArgs returns the kernel arguments this hypervisor needs

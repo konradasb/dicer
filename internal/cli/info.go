@@ -190,7 +190,7 @@ func defaultsLines(host *dicerdv1.GetHostInfoResponse) []string {
 }
 
 // hypervisorLines describe what an instance may be started with, one
-// hypervisor to a line: "cloud-hypervisor v49.0.0 (default), v48.0.0".
+// hypervisor to a line: "cloud-hypervisor v53.0.0 (default), v49.0.0".
 func hypervisorLines(hypervisors []*dicerdv1.HypervisorInfo) []string {
 	if len(hypervisors) == 0 {
 		return []string{"none"}

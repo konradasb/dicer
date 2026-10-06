@@ -55,8 +55,9 @@ CH_BIN    := internal/hypervisor/cloudhypervisor/bin
 FC_BIN    := internal/hypervisor/firecracker/bin
 CH_SPEC   := specs/cloud-hypervisor/v0.3.0/spec.yaml
 # Cloud Hypervisor directory names are the full semver; its release tags
-# drop the patch, e.g. v49.0.0 is released as v49.0.
-CH_VERSIONS       := v48.0.0 v49.0.0
+# drop the patch, e.g. v49.0.0 is released as v49.0. Oldest first: the client
+# is generated from the last one's spec.
+CH_VERSIONS       := v48.0.0 v49.0.0 v53.0.0
 CH_ASSET_amd64    := cloud-hypervisor-static
 CH_ASSET_arm64    := cloud-hypervisor-static-aarch64
 ch_release_tag     = $(patsubst %.0,%,$(1))
@@ -214,9 +215,10 @@ generate-hypervisor-client: $(OAPI_CODEGEN) ## Regenerate the Cloud Hypervisor A
 	$(OAPI_CODEGEN) -config internal/hypervisor/cloudhypervisor/oapi-codegen.yaml $(CH_SPEC)
 
 .PHONY: update-hypervisor-spec
-update-hypervisor-spec: ## Download the Cloud Hypervisor OpenAPI spec
-	curl -fsSL -o $(CH_SPEC) \
-		https://raw.githubusercontent.com/cloud-hypervisor/cloud-hypervisor/refs/tags/v48.0/vmm/src/api/openapi/cloud-hypervisor.yaml
+update-hypervisor-spec: ## Download the newest Cloud Hypervisor version's OpenAPI spec
+	{ printf '# Copyright 2026 Dicer Authors\n# SPDX-License-Identifier: MIT\n\n'; \
+		curl -fsSL https://raw.githubusercontent.com/cloud-hypervisor/cloud-hypervisor/refs/tags/$(call ch_release_tag,$(lastword $(CH_VERSIONS)))/vmm/src/api/openapi/cloud-hypervisor.yaml; \
+	} > $(CH_SPEC)
 
 ##@ Documentation
 

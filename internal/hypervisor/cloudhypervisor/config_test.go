@@ -27,7 +27,7 @@ func TestVMConfigPassesThroughDevices(t *testing.T) {
 			spec: hypervisor.VMSpec{PCIDevices: []hypervisor.PCIDeviceConfig{
 				{Path: "/sys/bus/pci/devices/0000:01:00.0"},
 			}},
-			want: &[]DeviceConfig{{Path: "/sys/bus/pci/devices/0000:01:00.0"}},
+			want: &[]DeviceConfig{{Path: ptr("/sys/bus/pci/devices/0000:01:00.0")}},
 		},
 		{
 			name: "gpu",
@@ -35,7 +35,7 @@ func TestVMConfigPassesThroughDevices(t *testing.T) {
 				Profile:            "nvidia-35",
 				MediatedDeviceUUID: "c2f8e1a4-0d6b-4c3e-9f5a-2b7d8e9f0a1b",
 			}},
-			want: &[]DeviceConfig{{Path: "/sys/bus/mdev/devices/c2f8e1a4-0d6b-4c3e-9f5a-2b7d8e9f0a1b"}},
+			want: &[]DeviceConfig{{Path: ptr("/sys/bus/mdev/devices/c2f8e1a4-0d6b-4c3e-9f5a-2b7d8e9f0a1b")}},
 		},
 		{
 			name: "pci devices and gpu",
@@ -44,8 +44,8 @@ func TestVMConfigPassesThroughDevices(t *testing.T) {
 				GPU:        &hypervisor.GPUConfig{MediatedDeviceUUID: "c2f8e1a4-0d6b-4c3e-9f5a-2b7d8e9f0a1b"},
 			},
 			want: &[]DeviceConfig{
-				{Path: "/sys/bus/pci/devices/0000:01:00.0"},
-				{Path: "/sys/bus/mdev/devices/c2f8e1a4-0d6b-4c3e-9f5a-2b7d8e9f0a1b"},
+				{Path: ptr("/sys/bus/pci/devices/0000:01:00.0")},
+				{Path: ptr("/sys/bus/mdev/devices/c2f8e1a4-0d6b-4c3e-9f5a-2b7d8e9f0a1b")},
 			},
 		},
 	}

@@ -160,6 +160,24 @@ Name metrics by Prometheus's
 - `t.Helper()` in helpers; `t.Fatal` only when the test cannot go on.
 - Run with `-race`.
 
+## Prose
+
+Docs, comments, messages and release notes are written in plain, natural
+English, as a careful native speaker would write them.
+
+- Use normal word order: "It also needs the version", never "It needs too
+  the version". Don't invert or compress sentences to sound terse.
+- Prefer short, complete sentences with a clear subject and verb over long
+  chains joined by semicolons, colons and commas. Split a sentence that
+  needs rereading.
+- Say things directly: "only the version that took it can restore it", not
+  "a request may use a field an older version does not know only for a
+  version that knows it".
+- When you edit a sentence that already reads badly, rewrite it rather
+  than extending it.
+- Read every sentence you write back once, aloud in your head, before
+  finishing.
+
 ## Keeping things in step
 
 - Generated code and docs are regenerated from their source, never edited by

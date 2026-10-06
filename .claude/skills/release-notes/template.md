@@ -13,6 +13,11 @@ whether to upgrade. Name the one or two changes that matter most.>
   field or command to use instead, or the step to take when upgrading.>
   (#<N>)
 
+## Deprecations
+
+- **<What is deprecated.>** <What to move to, and the release it may be
+  removed in, at the earliest.> (#<N>)
+
 ## New features
 
 - **<What you can now do.>** <One or two sentences: how, and a link to the

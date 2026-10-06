@@ -86,6 +86,27 @@ Regenerates the gRPC code from `proto/` and the Cloud Hypervisor client from
 the OpenAPI spec in `specs/`. Generated files are committed; do not edit them.
 CI fails if they are out of date.
 
+## Hypervisor versions
+
+`dicerd` embeds each hypervisor version it carries, and keeps them by the
+[deprecation policy](docs/content/docs/concepts/hypervisors.md#support-and-deprecation).
+
+To add a version:
+
+1. Add it last to `CH_VERSIONS` or `FC_VERSIONS` in the `Makefile`, and to
+   the driver's `version.go` as its `DefaultVersion`, first in
+   `supportedVersions`.
+2. For Cloud Hypervisor, run `make update-hypervisor-spec generate`. The
+   client is generated from the newest version's spec but also talks to
+   the older versions, so send a field that is new in a version only to
+   that version and later ones.
+3. Run the end-to-end tests, which boot guests on the default version.
+4. In the hypervisors page, add it to the table of versions as the default,
+   and mark the one it replaces deprecated in the coming release.
+
+To remove a version once the policy allows, take it out of the same places,
+and mark the pull request breaking (`!`), as removing one is.
+
 ## Layout
 
 ```

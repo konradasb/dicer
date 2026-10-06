@@ -60,10 +60,15 @@ A memory snapshot can be restored only where it was taken: the guest wakes
 with the address and mounts it had, so an instance whose
 [network or static IP](../running-workloads) or mounts have changed since
 refuses it; [fork](#forking) it instead. The guest's clock, which stood still
-in the snapshot, is set to the time as it wakes. The snapshot is restored with the vCPUs and memory the guest had,
-and needs room for them on the host. It needs too the
-[hypervisor version](../../concepts/hypervisors) that took it, which is kept
-across upgrades only as long as the daemon carries that version.
+in the snapshot, is set to the time as it wakes.
+
+The guest is restored with the vCPUs and memory it had, so the host needs
+room for them. Only the [hypervisor version](../../concepts/hypervisors)
+that took the snapshot can restore it. Once that version is deprecated, a
+later release of Dicer removes it, and the snapshot can no longer be
+restored; the
+[deprecation policy](../../concepts/hypervisors#support-and-deprecation)
+says when.
 
 Renaming an instance keeps its snapshots restorable.
 

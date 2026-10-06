@@ -14,31 +14,62 @@ import (
 	"strings"
 )
 
-// Defines values for ConsoleConfigMode.
+// Defines values for ConsoleMode.
 const (
-	ConsoleConfigModeFile   ConsoleConfigMode = "File"
-	ConsoleConfigModeNull   ConsoleConfigMode = "Null"
-	ConsoleConfigModeOff    ConsoleConfigMode = "Off"
-	ConsoleConfigModePty    ConsoleConfigMode = "Pty"
-	ConsoleConfigModeSocket ConsoleConfigMode = "Socket"
-	ConsoleConfigModeTty    ConsoleConfigMode = "Tty"
+	ConsoleModeFile   ConsoleMode = "File"
+	ConsoleModeNull   ConsoleMode = "Null"
+	ConsoleModeOff    ConsoleMode = "Off"
+	ConsoleModePty    ConsoleMode = "Pty"
+	ConsoleModeSocket ConsoleMode = "Socket"
+	ConsoleModeTty    ConsoleMode = "Tty"
 )
 
-// Defines values for DebugConsoleConfigMode.
+// Defines values for CoreSchedulingMode.
 const (
-	DebugConsoleConfigModeFile DebugConsoleConfigMode = "File"
-	DebugConsoleConfigModeNull DebugConsoleConfigMode = "Null"
-	DebugConsoleConfigModeOff  DebugConsoleConfigMode = "Off"
-	DebugConsoleConfigModePty  DebugConsoleConfigMode = "Pty"
-	DebugConsoleConfigModeTty  DebugConsoleConfigMode = "Tty"
+	CoreSchedulingModeOff  CoreSchedulingMode = "Off"
+	CoreSchedulingModeVcpu CoreSchedulingMode = "Vcpu"
+	CoreSchedulingModeVm   CoreSchedulingMode = "Vm"
 )
 
-// Defines values for VmInfoState.
+// Defines values for ImageType.
 const (
-	Created  VmInfoState = "Created"
-	Paused   VmInfoState = "Paused"
-	Running  VmInfoState = "Running"
-	Shutdown VmInfoState = "Shutdown"
+	FixedVhd ImageType = "FixedVhd"
+	Qcow2    ImageType = "Qcow2"
+	Raw      ImageType = "Raw"
+	Unknown  ImageType = "Unknown"
+	Vhdx     ImageType = "Vhdx"
+)
+
+// Defines values for LockGranularity.
+const (
+	ByteRange LockGranularity = "ByteRange"
+	Full      LockGranularity = "Full"
+)
+
+// Defines values for MemoryRestoreMode.
+const (
+	Copy     MemoryRestoreMode = "Copy"
+	OnDemand MemoryRestoreMode = "OnDemand"
+)
+
+// Defines values for MigrationMode.
+const (
+	Postcopy MigrationMode = "Postcopy"
+	Precopy  MigrationMode = "Precopy"
+)
+
+// Defines values for TimeoutStrategy.
+const (
+	Cancel TimeoutStrategy = "Cancel"
+	Ignore TimeoutStrategy = "Ignore"
+)
+
+// Defines values for VmState.
+const (
+	Created  VmState = "Created"
+	Paused   VmState = "Paused"
+	Running  VmState = "Running"
+	Shutdown VmState = "Shutdown"
 )
 
 // BalloonConfig defines model for BalloonConfig.
@@ -47,20 +78,30 @@ type BalloonConfig struct {
 	DeflateOnOom *bool `json:"deflate_on_oom,omitempty"`
 
 	// FreePageReporting Enable guest to report free pages.
-	FreePageReporting *bool `json:"free_page_reporting,omitempty"`
-	Size              int64 `json:"size"`
+	FreePageReporting *bool   `json:"free_page_reporting,omitempty"`
+	Id                *string `json:"id,omitempty"`
+	Iommu             *bool   `json:"iommu,omitempty"`
+	PciDeviceId       *uint8  `json:"pci_device_id,omitempty"`
+	PciSegment        *int16  `json:"pci_segment,omitempty"`
+	Size              int64   `json:"size"`
 }
 
 // ConsoleConfig defines model for ConsoleConfig.
 type ConsoleConfig struct {
-	File   *string           `json:"file,omitempty"`
-	Iommu  *bool             `json:"iommu,omitempty"`
-	Mode   ConsoleConfigMode `json:"mode"`
-	Socket *string           `json:"socket,omitempty"`
+	File        *string     `json:"file,omitempty"`
+	Id          *string     `json:"id,omitempty"`
+	Iommu       *bool       `json:"iommu,omitempty"`
+	Mode        ConsoleMode `json:"mode"`
+	PciDeviceId *uint8      `json:"pci_device_id,omitempty"`
+	PciSegment  *int16      `json:"pci_segment,omitempty"`
+	Socket      *string     `json:"socket,omitempty"`
 }
 
-// ConsoleConfigMode defines model for ConsoleConfig.Mode.
-type ConsoleConfigMode string
+// ConsoleMode defines model for ConsoleMode.
+type ConsoleMode string
+
+// CoreSchedulingMode defines model for CoreSchedulingMode.
+type CoreSchedulingMode string
 
 // CpuAffinity defines model for CpuAffinity.
 type CpuAffinity struct {
@@ -83,32 +124,38 @@ type CpuTopology struct {
 
 // CpusConfig defines model for CpusConfig.
 type CpusConfig struct {
-	Affinity    *[]CpuAffinity `json:"affinity,omitempty"`
-	BootVcpus   int            `json:"boot_vcpus"`
-	Features    *CpuFeatures   `json:"features,omitempty"`
-	KvmHyperv   *bool          `json:"kvm_hyperv,omitempty"`
-	MaxPhysBits *int           `json:"max_phys_bits,omitempty"`
-	MaxVcpus    int            `json:"max_vcpus"`
-	Topology    *CpuTopology   `json:"topology,omitempty"`
+	Affinity       *[]CpuAffinity      `json:"affinity,omitempty"`
+	BootVcpus      int                 `json:"boot_vcpus"`
+	CoreScheduling *CoreSchedulingMode `json:"core_scheduling,omitempty"`
+	Features       *CpuFeatures        `json:"features,omitempty"`
+	KvmHyperv      *bool               `json:"kvm_hyperv,omitempty"`
+	MaxPhysBits    *int                `json:"max_phys_bits,omitempty"`
+	MaxVcpus       int                 `json:"max_vcpus"`
+	Nested         *bool               `json:"nested,omitempty"`
+	Topology       *CpuTopology        `json:"topology,omitempty"`
 }
 
 // DebugConsoleConfig defines model for DebugConsoleConfig.
 type DebugConsoleConfig struct {
-	File   *string                `json:"file,omitempty"`
-	Iobase *int                   `json:"iobase,omitempty"`
-	Mode   DebugConsoleConfigMode `json:"mode"`
+	File   *string     `json:"file,omitempty"`
+	Iobase *int        `json:"iobase,omitempty"`
+	Mode   ConsoleMode `json:"mode"`
 }
-
-// DebugConsoleConfigMode defines model for DebugConsoleConfig.Mode.
-type DebugConsoleConfigMode string
 
 // DeviceConfig defines model for DeviceConfig.
 type DeviceConfig struct {
-	Id                 *string `json:"id,omitempty"`
-	Iommu              *bool   `json:"iommu,omitempty"`
-	Path               string  `json:"path"`
-	PciSegment         *int16  `json:"pci_segment,omitempty"`
-	XNvGpudirectClique *int8   `json:"x_nv_gpudirect_clique,omitempty"`
+	Id    *string `json:"id,omitempty"`
+	Iommu *bool   `json:"iommu,omitempty"`
+
+	// Path Sysfs path of the VFIO device. Exactly one of `path` or an
+	// externally-opened cdev FD must be supplied; an FD is passed
+	// out of band via SCM_RIGHTS on the UNIX domain socket, never
+	// in this body.
+	Path               *string  `json:"path,omitempty"`
+	PciDeviceId        *uint8   `json:"pci_device_id,omitempty"`
+	PciSegment         *int16   `json:"pci_segment,omitempty"`
+	XExcludeMmapBars   *[]int64 `json:"x_exclude_mmap_bars,omitempty"`
+	XNvGpudirectClique *int8    `json:"x_nv_gpudirect_clique,omitempty"`
 }
 
 // DeviceNode defines model for DeviceNode.
@@ -121,39 +168,60 @@ type DeviceNode struct {
 
 // DiskConfig defines model for DiskConfig.
 type DiskConfig struct {
-	Direct         *bool                `json:"direct,omitempty"`
-	Id             *string              `json:"id,omitempty"`
-	Iommu          *bool                `json:"iommu,omitempty"`
-	NumQueues      *int                 `json:"num_queues,omitempty"`
-	Path           *string              `json:"path,omitempty"`
-	PciSegment     *int16               `json:"pci_segment,omitempty"`
-	QueueAffinity  *[]VirtQueueAffinity `json:"queue_affinity,omitempty"`
-	QueueSize      *int                 `json:"queue_size,omitempty"`
-	RateLimitGroup *string              `json:"rate_limit_group,omitempty"`
+	BackingFiles    *bool                `json:"backing_files,omitempty"`
+	Direct          *bool                `json:"direct,omitempty"`
+	Id              *string              `json:"id,omitempty"`
+	ImageType       *ImageType           `json:"image_type,omitempty"`
+	Iommu           *bool                `json:"iommu,omitempty"`
+	LockGranularity *LockGranularity     `json:"lock_granularity,omitempty"`
+	NumQueues       *int                 `json:"num_queues,omitempty"`
+	Path            *string              `json:"path,omitempty"`
+	PciDeviceId     *uint8               `json:"pci_device_id,omitempty"`
+	PciSegment      *int16               `json:"pci_segment,omitempty"`
+	QueueAffinity   *[]VirtQueueAffinity `json:"queue_affinity,omitempty"`
+	QueueSize       *int                 `json:"queue_size,omitempty"`
+	RateLimitGroup  *string              `json:"rate_limit_group,omitempty"`
 
 	// RateLimiterConfig Defines an IO rate limiter with independent bytes/s and ops/s limits. Limits are defined by configuring each of the _bandwidth_ and _ops_ token buckets.
 	RateLimiterConfig *RateLimiterConfig `json:"rate_limiter_config,omitempty"`
 	Readonly          *bool              `json:"readonly,omitempty"`
 	Serial            *string            `json:"serial,omitempty"`
+	Sparse            *bool              `json:"sparse,omitempty"`
 	VhostSocket       *string            `json:"vhost_socket,omitempty"`
 	VhostUser         *bool              `json:"vhost_user,omitempty"`
 }
 
 // FsConfig defines model for FsConfig.
 type FsConfig struct {
-	Id         *string `json:"id,omitempty"`
-	NumQueues  int     `json:"num_queues"`
-	PciSegment *int16  `json:"pci_segment,omitempty"`
-	QueueSize  int     `json:"queue_size"`
-	Socket     string  `json:"socket"`
-	Tag        string  `json:"tag"`
+	Id          *string `json:"id,omitempty"`
+	NumQueues   int     `json:"num_queues"`
+	PciDeviceId *uint8  `json:"pci_device_id,omitempty"`
+	PciSegment  *int16  `json:"pci_segment,omitempty"`
+	QueueSize   int     `json:"queue_size"`
+	Socket      string  `json:"socket"`
+	Tag         string  `json:"tag"`
 }
+
+// GenericVhostUserConfig defines model for GenericVhostUserConfig.
+type GenericVhostUserConfig struct {
+	DeviceType  uint32   `json:"device_type"`
+	PciDeviceId *uint8   `json:"pci_device_id,omitempty"`
+	PciSegment  *int16   `json:"pci_segment,omitempty"`
+	QueueSizes  []uint16 `json:"queue_sizes"`
+	Socket      string   `json:"socket"`
+}
+
+// ImageType defines model for ImageType.
+type ImageType string
 
 // LandlockConfig defines model for LandlockConfig.
 type LandlockConfig struct {
 	Access string `json:"access"`
 	Path   string `json:"path"`
 }
+
+// LockGranularity defines model for LockGranularity.
+type LockGranularity string
 
 // MemoryConfig defines model for MemoryConfig.
 type MemoryConfig struct {
@@ -164,11 +232,15 @@ type MemoryConfig struct {
 	Hugepages      *bool               `json:"hugepages,omitempty"`
 	Mergeable      *bool               `json:"mergeable,omitempty"`
 	Prefault       *bool               `json:"prefault,omitempty"`
+	Reserve        *bool               `json:"reserve,omitempty"`
 	Shared         *bool               `json:"shared,omitempty"`
 	Size           int64               `json:"size"`
 	Thp            *bool               `json:"thp,omitempty"`
 	Zones          *[]MemoryZoneConfig `json:"zones,omitempty"`
 }
+
+// MemoryRestoreMode defines model for MemoryRestoreMode.
+type MemoryRestoreMode string
 
 // MemoryZoneConfig defines model for MemoryZoneConfig.
 type MemoryZoneConfig struct {
@@ -181,9 +253,13 @@ type MemoryZoneConfig struct {
 	Id             string  `json:"id"`
 	Mergeable      *bool   `json:"mergeable,omitempty"`
 	Prefault       *bool   `json:"prefault,omitempty"`
+	Reserve        *bool   `json:"reserve,omitempty"`
 	Shared         *bool   `json:"shared,omitempty"`
 	Size           int64   `json:"size"`
 }
+
+// MigrationMode Memory transfer mode. Precopy transfers all guest memory before the destination resumes. Postcopy resumes the destination first and faults guest pages in on demand.
+type MigrationMode string
 
 // NetConfig defines model for NetConfig.
 type NetConfig struct {
@@ -196,11 +272,15 @@ type NetConfig struct {
 	Mac *string `json:"mac,omitempty"`
 
 	// Mask Must be a valid IPv4 netmask if ip is an IPv4 address or a valid IPv6 netmask if ip is an IPv6 address.
-	Mask       *string `json:"mask,omitempty"`
-	Mtu        *int    `json:"mtu,omitempty"`
-	NumQueues  *int    `json:"num_queues,omitempty"`
-	PciSegment *int16  `json:"pci_segment,omitempty"`
-	QueueSize  *int    `json:"queue_size,omitempty"`
+	Mask        *string `json:"mask,omitempty"`
+	Mtu         *int    `json:"mtu,omitempty"`
+	NumQueues   *int    `json:"num_queues,omitempty"`
+	OffloadCsum *bool   `json:"offload_csum,omitempty"`
+	OffloadTso  *bool   `json:"offload_tso,omitempty"`
+	OffloadUfo  *bool   `json:"offload_ufo,omitempty"`
+	PciDeviceId *uint8  `json:"pci_device_id,omitempty"`
+	PciSegment  *int16  `json:"pci_segment,omitempty"`
+	QueueSize   *int    `json:"queue_size,omitempty"`
 
 	// RateLimiterConfig Defines an IO rate limiter with independent bytes/s and ops/s limits. Limits are defined by configuring each of the _bandwidth_ and _ops_ token buckets.
 	RateLimiterConfig *RateLimiterConfig `json:"rate_limiter_config,omitempty"`
@@ -213,6 +293,7 @@ type NetConfig struct {
 // NumaConfig defines model for NumaConfig.
 type NumaConfig struct {
 	Cpus        *[]int32        `json:"cpus,omitempty"`
+	DeviceId    *string         `json:"device_id,omitempty"`
 	Distances   *[]NumaDistance `json:"distances,omitempty"`
 	GuestNumaId int32           `json:"guest_numa_id"`
 	MemoryZones *[]string       `json:"memory_zones,omitempty"`
@@ -250,14 +331,26 @@ type PciSegmentConfig struct {
 
 // PlatformConfig defines model for PlatformConfig.
 type PlatformConfig struct {
-	IommuAddressWidth *uint8    `json:"iommu_address_width,omitempty"`
-	IommuSegments     *[]int16  `json:"iommu_segments,omitempty"`
-	NumPciSegments    *int16    `json:"num_pci_segments,omitempty"`
-	OemStrings        *[]string `json:"oem_strings,omitempty"`
-	SerialNumber      *string   `json:"serial_number,omitempty"`
-	SevSnp            *bool     `json:"sev_snp,omitempty"`
-	Tdx               *bool     `json:"tdx,omitempty"`
-	Uuid              *string   `json:"uuid,omitempty"`
+	ChassisAssetTag       *string   `json:"chassis_asset_tag,omitempty"`
+	IommuAddressWidthBits *uint8    `json:"iommu_address_width_bits,omitempty"`
+	IommuSegments         *[]int16  `json:"iommu_segments,omitempty"`
+	Iommufd               *bool     `json:"iommufd,omitempty"`
+	NumPciSegments        *int16    `json:"num_pci_segments,omitempty"`
+	OemStrings            *[]string `json:"oem_strings,omitempty"`
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	SerialNumber       *string `json:"serial_number,omitempty"`
+	SevSnp             *bool   `json:"sev_snp,omitempty"`
+	SystemFamily       *string `json:"system_family,omitempty"`
+	SystemManufacturer *string `json:"system_manufacturer,omitempty"`
+	SystemProductName  *string `json:"system_product_name,omitempty"`
+	SystemSerialNumber *string `json:"system_serial_number,omitempty"`
+	SystemSkuNumber    *string `json:"system_sku_number,omitempty"`
+	SystemUuid         *string `json:"system_uuid,omitempty"`
+	SystemVersion      *string `json:"system_version,omitempty"`
+	Tdx                *bool   `json:"tdx,omitempty"`
+	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
+	Uuid       *string `json:"uuid,omitempty"`
+	VfioP2pDma *bool   `json:"vfio_p2p_dma,omitempty"`
 }
 
 // PmemConfig defines model for PmemConfig.
@@ -266,6 +359,7 @@ type PmemConfig struct {
 	File          string  `json:"file"`
 	Id            *string `json:"id,omitempty"`
 	Iommu         *bool   `json:"iommu,omitempty"`
+	PciDeviceId   *uint8  `json:"pci_device_id,omitempty"`
 	PciSegment    *int16  `json:"pci_segment,omitempty"`
 	Size          *int64  `json:"size,omitempty"`
 }
@@ -289,26 +383,71 @@ type RateLimiterConfig struct {
 
 // ReceiveMigrationData defines model for ReceiveMigrationData.
 type ReceiveMigrationData struct {
-	ReceiverUrl string `json:"receiver_url"`
+	// MemoryMode Memory transfer mode. Precopy transfers all guest memory before the destination resumes. Postcopy resumes the destination first and faults guest pages in on demand.
+	MemoryMode  *MigrationMode `json:"memory_mode,omitempty"`
+	ReceiverUrl string         `json:"receiver_url"`
+
+	// TlsDir Directory containing the TLS server certificate (server-cert.pem), the TLS server key (server-key.pem), and the client TLS root CA certificate (ca-cert.pem). TLS is only supported with tcp:<host>:<port> receiver URLs.
+	TlsDir *string `json:"tls_dir,omitempty"`
 }
 
 // RestoreConfig defines model for RestoreConfig.
 type RestoreConfig struct {
-	Prefault  *bool  `json:"prefault,omitempty"`
-	SourceUrl string `json:"source_url"`
+	MemoryRestoreMode *MemoryRestoreMode `json:"memory_restore_mode,omitempty"`
+	Prefault          *bool              `json:"prefault,omitempty"`
+	Resume            *bool              `json:"resume,omitempty"`
+	SourceUrl         string             `json:"source_url"`
 }
 
 // RngConfig defines model for RngConfig.
 type RngConfig struct {
-	Iommu *bool  `json:"iommu,omitempty"`
-	Src   string `json:"src"`
+	Id          *string `json:"id,omitempty"`
+	Iommu       *bool   `json:"iommu,omitempty"`
+	PciDeviceId *uint8  `json:"pci_device_id,omitempty"`
+	PciSegment  *int16  `json:"pci_segment,omitempty"`
+	Src         string  `json:"src"`
+}
+
+// RtcConfig defines model for RtcConfig.
+type RtcConfig struct {
+	Id          *string `json:"id,omitempty"`
+	Iommu       *bool   `json:"iommu,omitempty"`
+	PciDeviceId *uint8  `json:"pci_device_id,omitempty"`
+	PciSegment  *int16  `json:"pci_segment,omitempty"`
 }
 
 // SendMigrationData defines model for SendMigrationData.
 type SendMigrationData struct {
+	// Connections The number of parallel TCP connections to use for migration. Must be between 1 and 128. Multiple connections are not supported with local UNIX-socket migration.
+	Connections    *int64 `json:"connections,omitempty"`
 	DestinationUrl string `json:"destination_url"`
-	Local          *bool  `json:"local,omitempty"`
+
+	// DowntimeMs The maximum downtime the migration aims for, in milliseconds. Defaults to 300ms.
+	DowntimeMs *int64 `json:"downtime_ms,omitempty"`
+	Local      *bool  `json:"local,omitempty"`
+
+	// MemoryMode Memory transfer mode. Precopy transfers all guest memory before the destination resumes. Postcopy resumes the destination first and faults guest pages in on demand.
+	MemoryMode *MigrationMode `json:"memory_mode,omitempty"`
+
+	// TimeoutS The timeout for the migration (maximum total duration), in seconds. Defaults to 3600s (one hour).
+	TimeoutS *int64 `json:"timeout_s,omitempty"`
+
+	// TimeoutStrategy The strategy to apply when the migration timeout is reached. Cancel will abort the migration and keep the VM running on the source. Ignore will proceed with the migration regardless of the downtime requirement.
+	TimeoutStrategy *TimeoutStrategy `json:"timeout_strategy,omitempty"`
+
+	// TlsDir Directory containing the TLS root CA certificate (ca-cert.pem), the TLS client certificate (client-cert.pem), and TLS client key (client-key.pem). TLS is only supported with tcp:<host>:<port> destination URLs.
+	TlsDir *string `json:"tls_dir,omitempty"`
 }
+
+// SerialConfig defines model for SerialConfig.
+type SerialConfig struct {
+	File   *string     `json:"file,omitempty"`
+	Mode   ConsoleMode `json:"mode"`
+	Socket *string     `json:"socket,omitempty"`
+}
+
+// TimeoutStrategy The strategy to apply when the migration timeout is reached. Cancel will abort the migration and keep the VM running on the source. Ignore will proceed with the migration regardless of the downtime requirement.
+type TimeoutStrategy string
 
 // TokenBucket Defines a token bucket with a maximum capacity (_size_), an initial burst size (_one_time_burst_) and an interval for refilling purposes (_refill_time_). The refill-rate is derived from _size_ and _refill_time_, and it is the constant rate at which the tokens replenish. The refill process only starts happening after the initial burst budget is consumed. Consumption from the token bucket is unbounded in speed which allows for bursts bound in size by the amount of tokens available. Once the token bucket is empty, consumption speed is bound by the refill-rate.
 type TokenBucket struct {
@@ -327,13 +466,22 @@ type TpmConfig struct {
 	Socket string `json:"socket"`
 }
 
+// UserDeviceConfig defines model for UserDeviceConfig.
+type UserDeviceConfig struct {
+	Id          *string `json:"id,omitempty"`
+	PciDeviceId *uint8  `json:"pci_device_id,omitempty"`
+	PciSegment  *int16  `json:"pci_segment,omitempty"`
+	Socket      string  `json:"socket"`
+}
+
 // VdpaConfig defines model for VdpaConfig.
 type VdpaConfig struct {
-	Id         *string `json:"id,omitempty"`
-	Iommu      *bool   `json:"iommu,omitempty"`
-	NumQueues  int     `json:"num_queues"`
-	Path       string  `json:"path"`
-	PciSegment *int16  `json:"pci_segment,omitempty"`
+	Id          *string `json:"id,omitempty"`
+	Iommu       *bool   `json:"iommu,omitempty"`
+	NumQueues   int     `json:"num_queues"`
+	Path        string  `json:"path"`
+	PciDeviceId *uint8  `json:"pci_device_id,omitempty"`
+	PciSegment  *int16  `json:"pci_segment,omitempty"`
 }
 
 // VirtQueueAffinity defines model for VirtQueueAffinity.
@@ -344,24 +492,27 @@ type VirtQueueAffinity struct {
 
 // VmAddUserDevice defines model for VmAddUserDevice.
 type VmAddUserDevice struct {
-	Socket string `json:"socket"`
+	PciDeviceId *uint8 `json:"pci_device_id,omitempty"`
+	PciSegment  *int16 `json:"pci_segment,omitempty"`
+	Socket      string `json:"socket"`
 }
 
 // VmConfig Virtual machine configuration
 type VmConfig struct {
-	Balloon        *BalloonConfig      `json:"balloon,omitempty"`
-	Console        *ConsoleConfig      `json:"console,omitempty"`
-	Cpus           *CpusConfig         `json:"cpus,omitempty"`
-	DebugConsole   *DebugConsoleConfig `json:"debug_console,omitempty"`
-	Devices        *[]DeviceConfig     `json:"devices,omitempty"`
-	Disks          *[]DiskConfig       `json:"disks,omitempty"`
-	Fs             *[]FsConfig         `json:"fs,omitempty"`
-	Iommu          *bool               `json:"iommu,omitempty"`
-	LandlockEnable *bool               `json:"landlock_enable,omitempty"`
-	LandlockRules  *[]LandlockConfig   `json:"landlock_rules,omitempty"`
-	Memory         *MemoryConfig       `json:"memory,omitempty"`
-	Net            *[]NetConfig        `json:"net,omitempty"`
-	Numa           *[]NumaConfig       `json:"numa,omitempty"`
+	Balloon          *BalloonConfig            `json:"balloon,omitempty"`
+	Console          *ConsoleConfig            `json:"console,omitempty"`
+	Cpus             *CpusConfig               `json:"cpus,omitempty"`
+	DebugConsole     *DebugConsoleConfig       `json:"debug_console,omitempty"`
+	Devices          *[]DeviceConfig           `json:"devices,omitempty"`
+	Disks            *[]DiskConfig             `json:"disks,omitempty"`
+	Fs               *[]FsConfig               `json:"fs,omitempty"`
+	GenericVhostUser *[]GenericVhostUserConfig `json:"generic-vhost-user,omitempty"`
+	Iommu            *bool                     `json:"iommu,omitempty"`
+	LandlockEnable   *bool                     `json:"landlock_enable,omitempty"`
+	LandlockRules    *[]LandlockConfig         `json:"landlock_rules,omitempty"`
+	Memory           *MemoryConfig             `json:"memory,omitempty"`
+	Net              *[]NetConfig              `json:"net,omitempty"`
+	Numa             *[]NumaConfig             `json:"numa,omitempty"`
 
 	// Payload Payloads to boot in guest
 	Payload         PayloadConfig           `json:"payload"`
@@ -371,8 +522,10 @@ type VmConfig struct {
 	Pvpanic         *bool                   `json:"pvpanic,omitempty"`
 	RateLimitGroups *[]RateLimitGroupConfig `json:"rate_limit_groups,omitempty"`
 	Rng             *RngConfig              `json:"rng,omitempty"`
-	Serial          *ConsoleConfig          `json:"serial,omitempty"`
+	Rtc             *RtcConfig              `json:"rtc,omitempty"`
+	Serial          *SerialConfig           `json:"serial,omitempty"`
 	Tpm             *TpmConfig              `json:"tpm,omitempty"`
+	UserDevices     *[]UserDeviceConfig     `json:"user_devices,omitempty"`
 	Vdpa            *[]VdpaConfig           `json:"vdpa,omitempty"`
 	Vsock           *VsockConfig            `json:"vsock,omitempty"`
 	Watchdog        *bool                   `json:"watchdog,omitempty"`
@@ -392,11 +545,8 @@ type VmInfo struct {
 	Config           VmConfig               `json:"config"`
 	DeviceTree       *map[string]DeviceNode `json:"device_tree,omitempty"`
 	MemoryActualSize *int64                 `json:"memory_actual_size,omitempty"`
-	State            VmInfoState            `json:"state"`
+	State            VmState                `json:"state"`
 }
-
-// VmInfoState defines model for VmInfo.State.
-type VmInfoState string
 
 // VmRemoveDevice defines model for VmRemoveDevice.
 type VmRemoveDevice struct {
@@ -413,6 +563,15 @@ type VmResize struct {
 	DesiredVcpus *int   `json:"desired_vcpus,omitempty"`
 }
 
+// VmResizeDisk defines model for VmResizeDisk.
+type VmResizeDisk struct {
+	// DesiredSize desired disk size in bytes
+	DesiredSize *int64 `json:"desired_size,omitempty"`
+
+	// Id disk identifier
+	Id *string `json:"id,omitempty"`
+}
+
 // VmResizeZone defines model for VmResizeZone.
 type VmResizeZone struct {
 	// DesiredRam desired memory zone size in bytes
@@ -425,6 +584,9 @@ type VmSnapshotConfig struct {
 	DestinationUrl *string `json:"destination_url,omitempty"`
 }
 
+// VmState defines model for VmState.
+type VmState string
+
 // VmmPingResponse Virtual Machine Monitor information
 type VmmPingResponse struct {
 	BuildVersion *string   `json:"build_version,omitempty"`
@@ -436,10 +598,11 @@ type VmmPingResponse struct {
 // VsockConfig defines model for VsockConfig.
 type VsockConfig struct {
 	// Cid Guest Vsock CID
-	Cid        int64   `json:"cid"`
-	Id         *string `json:"id,omitempty"`
-	Iommu      *bool   `json:"iommu,omitempty"`
-	PciSegment *int16  `json:"pci_segment,omitempty"`
+	Cid         int64   `json:"cid"`
+	Id          *string `json:"id,omitempty"`
+	Iommu       *bool   `json:"iommu,omitempty"`
+	PciDeviceId *uint8  `json:"pci_device_id,omitempty"`
+	PciSegment  *int16  `json:"pci_segment,omitempty"`
 
 	// Socket Path to UNIX domain socket, used to proxy vsock connections.
 	Socket string `json:"socket"`
@@ -453,6 +616,9 @@ type PutVmAddDiskJSONRequestBody = DiskConfig
 
 // PutVmAddFsJSONRequestBody defines body for PutVmAddFs for application/json ContentType.
 type PutVmAddFsJSONRequestBody = FsConfig
+
+// PutVmAddGenericVhostUserJSONRequestBody defines body for PutVmAddGenericVhostUser for application/json ContentType.
+type PutVmAddGenericVhostUserJSONRequestBody = GenericVhostUserConfig
 
 // PutVmAddNetJSONRequestBody defines body for PutVmAddNet for application/json ContentType.
 type PutVmAddNetJSONRequestBody = NetConfig
@@ -483,6 +649,9 @@ type PutVmRemoveDeviceJSONRequestBody = VmRemoveDevice
 
 // PutVmResizeJSONRequestBody defines body for PutVmResize for application/json ContentType.
 type PutVmResizeJSONRequestBody = VmResize
+
+// PutVmResizeDiskJSONRequestBody defines body for PutVmResizeDisk for application/json ContentType.
+type PutVmResizeDiskJSONRequestBody = VmResizeDisk
 
 // PutVmResizeZoneJSONRequestBody defines body for PutVmResizeZone for application/json ContentType.
 type PutVmResizeZoneJSONRequestBody = VmResizeZone
@@ -584,6 +753,11 @@ type ClientInterface interface {
 
 	PutVmAddFs(ctx context.Context, body PutVmAddFsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PutVmAddGenericVhostUserWithBody request with any body
+	PutVmAddGenericVhostUserWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutVmAddGenericVhostUser(ctx context.Context, body PutVmAddGenericVhostUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PutVmAddNetWithBody request with any body
 	PutVmAddNetWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -631,6 +805,9 @@ type ClientInterface interface {
 	// GetVmInfo request
 	GetVmInfo(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PutVmNmi request
+	PutVmNmi(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PauseVM request
 	PauseVM(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -654,6 +831,11 @@ type ClientInterface interface {
 	PutVmResizeWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PutVmResize(ctx context.Context, body PutVmResizeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutVmResizeDiskWithBody request with any body
+	PutVmResizeDiskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutVmResizeDisk(ctx context.Context, body PutVmResizeDiskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutVmResizeZoneWithBody request with any body
 	PutVmResizeZoneWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -680,9 +862,6 @@ type ClientInterface interface {
 	PutVmSnapshotWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	PutVmSnapshot(ctx context.Context, body PutVmSnapshotJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// PutVmmNmi request
-	PutVmmNmi(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetVmmPing request
 	GetVmmPing(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -753,6 +932,30 @@ func (c *Client) PutVmAddFsWithBody(ctx context.Context, contentType string, bod
 
 func (c *Client) PutVmAddFs(ctx context.Context, body PutVmAddFsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutVmAddFsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutVmAddGenericVhostUserWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutVmAddGenericVhostUserRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutVmAddGenericVhostUser(ctx context.Context, body PutVmAddGenericVhostUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutVmAddGenericVhostUserRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -979,6 +1182,18 @@ func (c *Client) GetVmInfo(ctx context.Context, reqEditors ...RequestEditorFn) (
 	return c.Client.Do(req)
 }
 
+func (c *Client) PutVmNmi(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutVmNmiRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) PauseVM(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPauseVMRequest(c.Server)
 	if err != nil {
@@ -1077,6 +1292,30 @@ func (c *Client) PutVmResizeWithBody(ctx context.Context, contentType string, bo
 
 func (c *Client) PutVmResize(ctx context.Context, body PutVmResizeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutVmResizeRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutVmResizeDiskWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutVmResizeDiskRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutVmResizeDisk(ctx context.Context, body PutVmResizeDiskJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutVmResizeDiskRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1197,18 +1436,6 @@ func (c *Client) PutVmSnapshotWithBody(ctx context.Context, contentType string, 
 
 func (c *Client) PutVmSnapshot(ctx context.Context, body PutVmSnapshotJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPutVmSnapshotRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) PutVmmNmi(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutVmmNmiRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -1344,6 +1571,46 @@ func NewPutVmAddFsRequestWithBody(server string, contentType string, body io.Rea
 	}
 
 	operationPath := fmt.Sprintf("/vm.add-fs")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPutVmAddGenericVhostUserRequest calls the generic PutVmAddGenericVhostUser builder with application/json body
+func NewPutVmAddGenericVhostUserRequest(server string, body PutVmAddGenericVhostUserJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutVmAddGenericVhostUserRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPutVmAddGenericVhostUserRequestWithBody generates requests for PutVmAddGenericVhostUser with any type of body
+func NewPutVmAddGenericVhostUserRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/vm.add-generic-vhost-user")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1751,6 +2018,33 @@ func NewGetVmInfoRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewPutVmNmiRequest generates requests for PutVmNmi
+func NewPutVmNmiRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/vm.nmi")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPauseVMRequest generates requests for PauseVM
 func NewPauseVMRequest(server string) (*http.Request, error) {
 	var err error
@@ -1933,6 +2227,46 @@ func NewPutVmResizeRequestWithBody(server string, contentType string, body io.Re
 	}
 
 	operationPath := fmt.Sprintf("/vm.resize")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPutVmResizeDiskRequest calls the generic PutVmResizeDisk builder with application/json body
+func NewPutVmResizeDiskRequest(server string, body PutVmResizeDiskJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutVmResizeDiskRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPutVmResizeDiskRequestWithBody generates requests for PutVmResizeDisk with any type of body
+func NewPutVmResizeDiskRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/vm.resize-disk")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2166,33 +2500,6 @@ func NewPutVmSnapshotRequestWithBody(server string, contentType string, body io.
 	return req, nil
 }
 
-// NewPutVmmNmiRequest generates requests for PutVmmNmi
-func NewPutVmmNmiRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/vmm.nmi")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("PUT", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewGetVmmPingRequest generates requests for GetVmmPing
 func NewGetVmmPingRequest(server string) (*http.Request, error) {
 	var err error
@@ -2305,6 +2612,11 @@ type ClientWithResponsesInterface interface {
 
 	PutVmAddFsWithResponse(ctx context.Context, body PutVmAddFsJSONRequestBody, reqEditors ...RequestEditorFn) (*PutVmAddFsResponse, error)
 
+	// PutVmAddGenericVhostUserWithBodyWithResponse request with any body
+	PutVmAddGenericVhostUserWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutVmAddGenericVhostUserResponse, error)
+
+	PutVmAddGenericVhostUserWithResponse(ctx context.Context, body PutVmAddGenericVhostUserJSONRequestBody, reqEditors ...RequestEditorFn) (*PutVmAddGenericVhostUserResponse, error)
+
 	// PutVmAddNetWithBodyWithResponse request with any body
 	PutVmAddNetWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutVmAddNetResponse, error)
 
@@ -2352,6 +2664,9 @@ type ClientWithResponsesInterface interface {
 	// GetVmInfoWithResponse request
 	GetVmInfoWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetVmInfoResponse, error)
 
+	// PutVmNmiWithResponse request
+	PutVmNmiWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PutVmNmiResponse, error)
+
 	// PauseVMWithResponse request
 	PauseVMWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PauseVMResponse, error)
 
@@ -2375,6 +2690,11 @@ type ClientWithResponsesInterface interface {
 	PutVmResizeWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutVmResizeResponse, error)
 
 	PutVmResizeWithResponse(ctx context.Context, body PutVmResizeJSONRequestBody, reqEditors ...RequestEditorFn) (*PutVmResizeResponse, error)
+
+	// PutVmResizeDiskWithBodyWithResponse request with any body
+	PutVmResizeDiskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutVmResizeDiskResponse, error)
+
+	PutVmResizeDiskWithResponse(ctx context.Context, body PutVmResizeDiskJSONRequestBody, reqEditors ...RequestEditorFn) (*PutVmResizeDiskResponse, error)
 
 	// PutVmResizeZoneWithBodyWithResponse request with any body
 	PutVmResizeZoneWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutVmResizeZoneResponse, error)
@@ -2401,9 +2721,6 @@ type ClientWithResponsesInterface interface {
 	PutVmSnapshotWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutVmSnapshotResponse, error)
 
 	PutVmSnapshotWithResponse(ctx context.Context, body PutVmSnapshotJSONRequestBody, reqEditors ...RequestEditorFn) (*PutVmSnapshotResponse, error)
-
-	// PutVmmNmiWithResponse request
-	PutVmmNmiWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PutVmmNmiResponse, error)
 
 	// GetVmmPingWithResponse request
 	GetVmmPingWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetVmmPingResponse, error)
@@ -2472,6 +2789,28 @@ func (r PutVmAddFsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PutVmAddFsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutVmAddGenericVhostUserResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PciDeviceInfo
+}
+
+// Status returns HTTPResponse.Status
+func (r PutVmAddGenericVhostUserResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutVmAddGenericVhostUserResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2716,6 +3055,27 @@ func (r GetVmInfoResponse) StatusCode() int {
 	return 0
 }
 
+type PutVmNmiResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PutVmNmiResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutVmNmiResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PauseVMResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2836,6 +3196,27 @@ func (r PutVmResizeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r PutVmResizeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutVmResizeDiskResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PutVmResizeDiskResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutVmResizeDiskResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2968,27 +3349,6 @@ func (r PutVmSnapshotResponse) StatusCode() int {
 	return 0
 }
 
-type PutVmmNmiResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-}
-
-// Status returns HTTPResponse.Status
-func (r PutVmmNmiResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PutVmmNmiResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type GetVmmPingResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3081,6 +3441,23 @@ func (c *ClientWithResponses) PutVmAddFsWithResponse(ctx context.Context, body P
 		return nil, err
 	}
 	return ParsePutVmAddFsResponse(rsp)
+}
+
+// PutVmAddGenericVhostUserWithBodyWithResponse request with arbitrary body returning *PutVmAddGenericVhostUserResponse
+func (c *ClientWithResponses) PutVmAddGenericVhostUserWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutVmAddGenericVhostUserResponse, error) {
+	rsp, err := c.PutVmAddGenericVhostUserWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutVmAddGenericVhostUserResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutVmAddGenericVhostUserWithResponse(ctx context.Context, body PutVmAddGenericVhostUserJSONRequestBody, reqEditors ...RequestEditorFn) (*PutVmAddGenericVhostUserResponse, error) {
+	rsp, err := c.PutVmAddGenericVhostUser(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutVmAddGenericVhostUserResponse(rsp)
 }
 
 // PutVmAddNetWithBodyWithResponse request with arbitrary body returning *PutVmAddNetResponse
@@ -3238,6 +3615,15 @@ func (c *ClientWithResponses) GetVmInfoWithResponse(ctx context.Context, reqEdit
 	return ParseGetVmInfoResponse(rsp)
 }
 
+// PutVmNmiWithResponse request returning *PutVmNmiResponse
+func (c *ClientWithResponses) PutVmNmiWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PutVmNmiResponse, error) {
+	rsp, err := c.PutVmNmi(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutVmNmiResponse(rsp)
+}
+
 // PauseVMWithResponse request returning *PauseVMResponse
 func (c *ClientWithResponses) PauseVMWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PauseVMResponse, error) {
 	rsp, err := c.PauseVM(ctx, reqEditors...)
@@ -3314,6 +3700,23 @@ func (c *ClientWithResponses) PutVmResizeWithResponse(ctx context.Context, body 
 		return nil, err
 	}
 	return ParsePutVmResizeResponse(rsp)
+}
+
+// PutVmResizeDiskWithBodyWithResponse request with arbitrary body returning *PutVmResizeDiskResponse
+func (c *ClientWithResponses) PutVmResizeDiskWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutVmResizeDiskResponse, error) {
+	rsp, err := c.PutVmResizeDiskWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutVmResizeDiskResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutVmResizeDiskWithResponse(ctx context.Context, body PutVmResizeDiskJSONRequestBody, reqEditors ...RequestEditorFn) (*PutVmResizeDiskResponse, error) {
+	rsp, err := c.PutVmResizeDisk(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutVmResizeDiskResponse(rsp)
 }
 
 // PutVmResizeZoneWithBodyWithResponse request with arbitrary body returning *PutVmResizeZoneResponse
@@ -3402,15 +3805,6 @@ func (c *ClientWithResponses) PutVmSnapshotWithResponse(ctx context.Context, bod
 	return ParsePutVmSnapshotResponse(rsp)
 }
 
-// PutVmmNmiWithResponse request returning *PutVmmNmiResponse
-func (c *ClientWithResponses) PutVmmNmiWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PutVmmNmiResponse, error) {
-	rsp, err := c.PutVmmNmi(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePutVmmNmiResponse(rsp)
-}
-
 // GetVmmPingWithResponse request returning *GetVmmPingResponse
 func (c *ClientWithResponses) GetVmmPingWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetVmmPingResponse, error) {
 	rsp, err := c.GetVmmPing(ctx, reqEditors...)
@@ -3490,6 +3884,32 @@ func ParsePutVmAddFsResponse(rsp *http.Response) (*PutVmAddFsResponse, error) {
 	}
 
 	response := &PutVmAddFsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PciDeviceInfo
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutVmAddGenericVhostUserResponse parses an HTTP response from a PutVmAddGenericVhostUserWithResponse call
+func ParsePutVmAddGenericVhostUserResponse(rsp *http.Response) (*PutVmAddGenericVhostUserResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutVmAddGenericVhostUserResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -3753,6 +4173,22 @@ func ParseGetVmInfoResponse(rsp *http.Response) (*GetVmInfoResponse, error) {
 	return response, nil
 }
 
+// ParsePutVmNmiResponse parses an HTTP response from a PutVmNmiWithResponse call
+func ParsePutVmNmiResponse(rsp *http.Response) (*PutVmNmiResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutVmNmiResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParsePauseVMResponse parses an HTTP response from a PauseVMWithResponse call
 func ParsePauseVMResponse(rsp *http.Response) (*PauseVMResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3849,6 +4285,22 @@ func ParsePutVmResizeResponse(rsp *http.Response) (*PutVmResizeResponse, error) 
 	return response, nil
 }
 
+// ParsePutVmResizeDiskResponse parses an HTTP response from a PutVmResizeDiskWithResponse call
+func ParsePutVmResizeDiskResponse(rsp *http.Response) (*PutVmResizeDiskResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutVmResizeDiskResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParsePutVmResizeZoneResponse parses an HTTP response from a PutVmResizeZoneWithResponse call
 func ParsePutVmResizeZoneResponse(rsp *http.Response) (*PutVmResizeZoneResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -3938,22 +4390,6 @@ func ParsePutVmSnapshotResponse(rsp *http.Response) (*PutVmSnapshotResponse, err
 	}
 
 	response := &PutVmSnapshotResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	return response, nil
-}
-
-// ParsePutVmmNmiResponse parses an HTTP response from a PutVmmNmiWithResponse call
-func ParsePutVmmNmiResponse(rsp *http.Response) (*PutVmmNmiResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PutVmmNmiResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

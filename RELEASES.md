@@ -19,6 +19,9 @@ What a version makes promises about:
   data directory, and the running guests, of an older one
 - The Go package `github.com/konradasb/dicer`
 - The names and labels of the Prometheus metrics
+- The hypervisor versions a daemon carries: one is removed only as the
+  [deprecation policy](docs/content/docs/concepts/hypervisors.md#support-and-deprecation)
+  allows
 
 Anything under `internal/` is not covered.
 

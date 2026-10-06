@@ -56,7 +56,12 @@ Every change goes in one place, or none:
   or anything that changes what RELEASES.md promises: the API, its error
   codes, the command line's commands, flags and `--format json|yaml` output,
   the configuration file, the daemon's state, the Go package, the metrics.
-  Each says what to do about it.
+  Each says what to do about it. So does removing a hypervisor version.
+- **Deprecations**: a hypervisor version that stopped being the default, as
+  `git diff PREV..TAG -- 'internal/hypervisor/*/version.go'` shows, or
+  anything else a change marks deprecated. Each names the release it may be
+  removed in, at the earliest, by the policy in
+  `docs/content/docs/concepts/hypervisors.md`.
 - **New features** (`feat`): what a user can now do, not how it was built.
 - **Fixes** (`fix`): the problem a user saw, not the code that changed.
 - **Left out**: `chore`, `ci`, `test`, `refactor`, `docs` and dependency
