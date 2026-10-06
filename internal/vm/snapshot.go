@@ -289,9 +289,10 @@ func (m *Manager) DeleteSnapshot(ctx context.Context, snapshot types.Snapshot) (
 
 // RestoreSnapshot puts the instance snapshot was taken from back as it was
 // then, discarding whatever it has written to its disk since, and returns
-// the instance. The instance must be stopped. A memory snapshot resumes its
-// guest where it was; a disk snapshot leaves it stopped, to boot from the
-// disk at its next start.
+// the instance. The instance must be stopped: one on standby is refused,
+// since its frozen guest would be lost. A memory snapshot resumes its guest
+// where it was; a disk snapshot leaves it stopped, to boot from the disk at
+// its next start.
 func (m *Manager) RestoreSnapshot(ctx context.Context, snapshot types.Snapshot) (_ types.InstanceSpec, err error) {
 	started := time.Now()
 	defer func() { m.observeOperation(operationRestoreSnapshot, started, err) }()
@@ -316,6 +317,13 @@ func (m *Manager) RestoreSnapshot(ctx context.Context, snapshot types.Snapshot) 
 	if status.State.IsActive() {
 		return types.InstanceSpec{}, errdefs.InvalidState("instance %q is %s; stop it before restoring a snapshot",
 			instance.Name, status.State.Lowercase())
+	}
+	// Its frozen guest resumes at the next start, on the overlay disk as it
+	// left it. A restore would change that disk under it, or run another
+	// guest in its place.
+	if status.State == types.InstanceStateStandby {
+		return types.InstanceSpec{}, errdefs.InvalidState("instance %q is on standby; "+
+			"stop it, which discards its frozen guest, before restoring a snapshot", instance.Name)
 	}
 	m.cancelRestart(instance.ID)
 

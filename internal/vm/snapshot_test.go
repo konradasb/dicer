@@ -454,6 +454,49 @@ func TestRestoreSnapshotRejections(t *testing.T) {
 		}
 	})
 
+	// An instance on standby resumes its frozen guest on its overlay disk
+	// at the next start, so a restore under it would hand that guest a disk
+	// or memory it never had. It must be stopped first, which discards the
+	// frozen guest.
+	for _, kind := range []types.SnapshotKind{types.SnapshotKindMemory, types.SnapshotKindDisk} {
+		t.Run("instance on standby, "+string(kind)+" snapshot", func(t *testing.T) {
+			h := newHarness(t)
+			// A disk snapshot is of a stopped instance, a memory one of a
+			// running instance.
+			if kind == types.SnapshotKindMemory {
+				h.start(t)
+			}
+			snapshot, err := h.manager.CreateSnapshot(t.Context(), h.instance, "snap")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if snapshot.Kind != kind {
+				t.Fatalf("took a %s snapshot, want %s", snapshot.Kind, kind)
+			}
+			if kind == types.SnapshotKindDisk {
+				h.start(t)
+			}
+			if err := h.manager.Standby(t.Context(), h.instance); err != nil {
+				t.Fatal(err)
+			}
+			want := []byte("written before standby")
+			if err := os.WriteFile(h.overlay, want, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = h.manager.RestoreSnapshot(t.Context(), snapshot)
+			if !errors.Is(err, errdefs.ErrInvalidState) {
+				t.Errorf("RestoreSnapshot of an instance on standby = %v, want ErrInvalidState", err)
+			}
+			if status := h.status(t); status.State != types.InstanceStateStandby {
+				t.Errorf("state = %s, want the instance left %s", status.State, types.InstanceStateStandby)
+			}
+			if got, err := os.ReadFile(h.overlay); err != nil || !bytes.Equal(got, want) {
+				t.Errorf("overlay disk changed (%d bytes, %v), want it left as it was", len(got), err)
+			}
+		})
+	}
+
 	// A snapshot can only be restored by the hypervisor version that took
 	// it, so a daemon that does not ship that version must say so rather
 	// than restore it with another.

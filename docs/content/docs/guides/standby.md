@@ -98,8 +98,9 @@ beside its overlay disk, until the instance is started or stopped. See
 
 ## While it is on standby
 
-An instance on standby cannot be changed or renamed until it is stopped,
-apart from its restart policy and `--standby-after`.
+An instance on standby cannot be changed or renamed, and no snapshot can be
+restored onto it, until it is stopped. Its restart policy and
+`--standby-after` can still be changed.
 
 It stays on standby across a reboot of the host, and its restart policy
 does not start it when the host boots. A release of Dicer can drop the

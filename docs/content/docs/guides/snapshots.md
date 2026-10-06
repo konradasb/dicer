@@ -58,8 +58,10 @@ $ dicer snapshot restore before-upgrade
 Instance web restored from snapshot before-upgrade in 612ms (172.20.0.5)
 ```
 
-The instance must not be running or paused. Restoring discards whatever it
-has written to its overlay disk since the snapshot. If the restore fails,
+The instance must not be running, paused or on
+[standby](../standby). Stop an instance on standby first, which discards
+its frozen guest. Restoring discards whatever the instance has written to
+its overlay disk since the snapshot. If the restore fails,
 the instance keeps the overlay disk it had.
 
 Restoring a disk snapshot only rolls the overlay disk back, and leaves the
