@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"sync"
 	"time"
 
@@ -173,6 +174,7 @@ type Manager struct {
 	setGuestClock       func(ctx context.Context, vsockPath string, t time.Time) error
 	setGuestIdentity    func(ctx context.Context, vsockPath string, req *diceragentv1.SetIdentityRequest) error
 	restartWait         func(at time.Time) time.Duration
+	dialGuest           func(ctx context.Context, address string) (net.Conn, error)
 
 	// shutdownTimeout is how long a VMM asked to exit has before it is
 	// killed.
@@ -196,6 +198,12 @@ type Manager struct {
 	// change only under that instance's lock.
 	vmmsMu sync.Mutex
 	vmms   map[string]*supervised
+
+	// wakers listen on the ports of instances on standby to wake them, by
+	// instance ID. Entries change only under that instance's lock. See
+	// wake.go.
+	wakersMu sync.Mutex
+	wakers   map[string]*waker
 
 	// restarts holds each Restarting instance's pending restart, by
 	// instance ID; restarting counts restarts under way.
@@ -256,8 +264,10 @@ func NewManager(cfg Config) *Manager {
 		setGuestClock:    setGuestClock,
 		setGuestIdentity: setGuestIdentity,
 		restartWait:      time.Until,
+		dialGuest:        dialGuest,
 
 		vmms:     make(map[string]*supervised),
+		wakers:   make(map[string]*waker),
 		restarts: make(map[string]*pendingRestart),
 		closing:  make(chan struct{}),
 	}

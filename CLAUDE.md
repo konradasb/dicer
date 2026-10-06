@@ -42,6 +42,27 @@ Follow [Effective Go](https://go.dev/doc/effective_go),
   `allocationTables` and `allocationTableExt`, not `table`, `tableOf`,
   `tables` and `tableExt`: a bare word such as table already means something
   else somewhere (an iptables table, a routing table, an output format).
+- The functions of one concept form one family under its name: `startWaker`,
+  `stopWaker`, `syncWaker`, `serveWakeListener`, `serveWakeConnection`, not
+  `listenToWake`, `stopWaking`, `acceptWakes` and `wake`, which coin a new
+  word each.
+- A name's scope is where it can be called from, not how long its body is:
+  a package-level function, or a method on a large type such as a manager,
+  is wide, and needs a name that says what it is for there. `relay` or
+  `acceptConnections` on the VM manager could mean anything;
+  `relayToGuest` and `serveWakeListener` cannot.
+- Use Go's idioms for common shapes: `Serve` for a loop accepting
+  connections from a listener, `newX` for a constructor, `Close` to release.
+- Name parameters for their role when a function has one purpose:
+  `relayToGuest(client, guest)`, not `relay(a, b)`. `a, b` is for a helper
+  that is truly indifferent to which is which.
+- No "And" in a name. A function that does two things is split, or named
+  for the one job the two serve: `serveWakeConnection`, not `wakeAndRelay`.
+- Before taking a word, check what the comments, docs and code around it
+  already call the thing, and whether the word already means something
+  else. A connection copied to a guest is not "forwarded" where port
+  forwarding means the DNAT rules: it is relayed, in every identifier,
+  comment and doc page.
 - Single-method interfaces are named for the method plus `-er` (`Reader`,
   `Notifier`). Define an interface where it is consumed, not where it is
   implemented.

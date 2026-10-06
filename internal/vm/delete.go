@@ -23,6 +23,7 @@ func (m *Manager) Delete(ctx context.Context, instance types.InstanceSpec, force
 	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
+	defer m.syncWaker(ctx, instance.ID)
 
 	status, err := m.Status(instance)
 	if err != nil {

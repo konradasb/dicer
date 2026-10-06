@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -434,10 +436,22 @@ func (f *fakeHostNetwork) ConnectTAP(_ context.Context, _ *types.Network, instan
 }
 
 func (f *fakeHostNetwork) PublishPorts(
-	_ context.Context, _ *types.Network, allocation *types.NetworkAllocation, ports []types.PortMapping,
+	ctx context.Context, _ *types.Network, allocation *types.NetworkAllocation, ports []types.PortMapping,
 ) error {
 	if f.publishErr != nil {
 		return f.publishErr
+	}
+	// As the host does, refuse a port on a host address something listens
+	// on, by binding it.
+	for _, p := range ports {
+		if p.HostIP == "" {
+			continue
+		}
+		l, err := (&net.ListenConfig{}).Listen(ctx, "tcp", net.JoinHostPort(p.HostIP, strconv.Itoa(int(p.HostPort))))
+		if err != nil {
+			return fmt.Errorf("port %d is in use: %w", p.HostPort, err)
+		}
+		_ = l.Close()
 	}
 	if f.published == nil {
 		f.published = make(map[string]publishedPorts)

@@ -41,6 +41,7 @@ func (m *Manager) standby(ctx context.Context, instance types.InstanceSpec, idle
 	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
+	defer m.syncWaker(ctx, instance.ID)
 
 	status, err := m.Status(instance)
 	if err != nil {
@@ -160,8 +161,9 @@ func (m *Manager) standby(ctx context.Context, instance types.InstanceSpec, idle
 }
 
 // resumeStandby resumes an instance on standby where it was, and discards
-// what was frozen. The caller must hold the instance lock.
-func (m *Manager) resumeStandby(ctx context.Context, instance types.InstanceSpec) error {
+// what was frozen. wokenByPort is the published port a connection that woke
+// it came to, or 0 for a start. The caller must hold the instance lock.
+func (m *Manager) resumeStandby(ctx context.Context, instance types.InstanceSpec, wokenByPort uint16) error {
 	started := time.Now()
 
 	data, err := os.ReadFile(filepath.Join(m.standbyDir(instance), standbyFile))
@@ -172,6 +174,11 @@ func (m *Manager) resumeStandby(ctx context.Context, instance types.InstanceSpec
 	if err := json.Unmarshal(data, &standby); err != nil {
 		return fmt.Errorf("parse standby: %w", err)
 	}
+
+	// Its ports are published again as it resumes. Connections that come
+	// in the moment between are refused; those after reach its address,
+	// and the guest once it is back.
+	m.stopWaker(instance.ID)
 
 	if err := m.resume(ctx, instance, frozenGuest{snapshot: standby, dir: m.standbyDir(instance)}); err != nil {
 		m.record(instance, events.ActionDied, "Failed to resume instance from standby: "+err.Error(), nil)
@@ -184,9 +191,14 @@ func (m *Manager) resumeStandby(ctx context.Context, instance types.InstanceSpec
 	}
 
 	allocation, _ := m.Allocation(instance)
-	m.record(instance, events.ActionStarted, fmt.Sprintf("Resumed instance from standby in %s, where it was %s ago: IP %s",
-		humanize.Duration(time.Since(started)), humanize.Duration(started.Sub(standby.CreatedAt)), allocation.IP),
-		map[string]string{"ip": allocation.IP})
+	attrs := map[string]string{"ip": allocation.IP}
+	why := ""
+	if wokenByPort != 0 {
+		attrs["woken_by_port"] = strconv.Itoa(int(wokenByPort))
+		why = fmt.Sprintf(", woken by a connection to port %d,", wokenByPort)
+	}
+	m.record(instance, events.ActionStarted, fmt.Sprintf("Resumed instance from standby%s in %s, where it was %s ago: IP %s",
+		why, humanize.Duration(time.Since(started)), humanize.Duration(started.Sub(standby.CreatedAt)), allocation.IP), attrs)
 	m.logger.InfoContext(ctx, "resumed instance from standby", "instance", instance.Name)
 	return nil
 }

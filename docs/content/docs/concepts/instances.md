@@ -104,13 +104,41 @@ an unbroken run of idle minutes as long as its `standby_after`; one busy
 minute starts the count again. A paused instance is never put on standby: it
 was paused on purpose.
 
-Nothing wakes an instance on standby but a start: a connection to it, or to a
-port it publishes, does not. An instance that waits on work it fetches
-itself, polling a queue or a CI service, uses so little while it waits that
-it may well look idle, and should not be given `--standby-after`.
+An instance that waits on work it fetches itself, polling a queue or a CI
+service, uses so little while it waits that it may well look idle, and
+should not be given `--standby-after`.
 
-`dicer update --standby-after` changes it, or turns it off with `0`, while
-the instance runs, and the change applies at once.
+`dicer update --standby-after` changes the timeout while the instance runs,
+and `0` turns it off. The change applies at once.
+
+### Waking on a connection
+
+An instance with `--standby-after` also wakes up by itself. While it is on
+standby, the daemon listens on the host ports it publishes with `-p`. When a
+TCP connection arrives on one of them, the daemon resumes the instance, which
+takes a second or so, and then relays the connection to the guest. The
+client sees a slow first connection rather than a refused one. Once the
+instance is running, new connections reach the guest directly, as usual.
+A connection that arrives at the exact moment the daemon hands the ports
+back to the instance can be refused.
+
+Some traffic does not wake an instance:
+
+- UDP, on any port.
+- Connections to the guest's own IP address, from the host or from other
+  instances.
+- Connections to the host's loopback address, for a port published on all
+  addresses.
+
+An instance put on standby with `dicer standby` that has no
+`--standby-after` is never woken by a connection.
+
+If the instance cannot be resumed, for example because the host has no room
+left for its vCPUs and memory, the daemon closes the connection and leaves
+the instance on standby.
+The next connection tries again. If another program on the host has taken
+one of the instance's ports in the meantime, connections to that port cannot
+wake it, and the daemon logs a warning.
 
 ## How an instance ends
 

@@ -33,6 +33,7 @@ func (m *Manager) Start(ctx context.Context, instance types.InstanceSpec) (err e
 	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
+	defer m.syncWaker(ctx, instance.ID)
 
 	status, err := m.Status(instance)
 	if err != nil {
@@ -44,7 +45,7 @@ func (m *Manager) Start(ctx context.Context, instance types.InstanceSpec) (err e
 	m.cancelRestart(instance.ID)
 
 	if m.onStandby(instance) {
-		return m.resumeStandby(ctx, instance)
+		return m.resumeStandby(ctx, instance, 0)
 	}
 
 	if err := m.admit(instance, instance.Resources()); err != nil {

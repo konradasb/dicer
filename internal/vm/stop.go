@@ -24,6 +24,7 @@ func (m *Manager) Stop(ctx context.Context, instance types.InstanceSpec) (err er
 	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
+	defer m.syncWaker(ctx, instance.ID)
 
 	m.cancelRestart(instance.ID)
 	m.setStoppedByUser(ctx, instance, true)

@@ -392,5 +392,6 @@ func (m *Manager) Close() {
 
 	// A restart may add a watcher, so wait for restarts first.
 	m.restarting.Wait()
+	m.closeWakers()
 	m.watchers.Wait()
 }

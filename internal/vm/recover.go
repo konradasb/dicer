@@ -77,6 +77,7 @@ func (m *Manager) recoverInstance(ctx context.Context, instance types.InstanceSp
 	lock := m.lock(instance.ID)
 	lock.Lock()
 	defer lock.Unlock()
+	defer m.syncWaker(ctx, instance.ID)
 
 	status, err := m.Status(instance)
 	if err != nil {

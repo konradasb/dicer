@@ -101,3 +101,50 @@ func TestIdleInstanceGoesOnStandby(t *testing.T) {
 		t.Errorf("the busy instance is %q, want Running", state)
 	}
 }
+
+// TestConnectionWakesInstanceOnStandby checks that an instance that goes on
+// standby by itself is woken by a connection to a port it publishes, which
+// reaches its guest, as do the connections after it.
+func TestConnectionWakesInstanceOnStandby(t *testing.T) {
+	name := instanceName(t)
+	const port = "18080"
+
+	// Alpine's busybox has no httpd: nc answers each request with a page,
+	// once it has read the request, so as not to reset the connection.
+	env.createInstance(t, name, "--standby-after", "15m", "-p", port+":80", "--",
+		"nc", "-lk", "-p", "80", "-e", "sh", "-c",
+		`while read -r l && [ -n "$(echo "$l" | tr -d "\r")" ]; do :; done; printf "HTTP/1.0 200 OK\r\n\r\nhello\n"`)
+	env.startInstance(t, name)
+
+	// The host's own address: a published port is not reached from its
+	// loopback.
+	url := "http://$(hostname -I | cut -d' ' -f1):" + port + "/"
+	get := func() (string, error) {
+		ctx, cancel := commandContext(t)
+		defer cancel()
+		return env.host.runShell(ctx, "curl -sf --max-time 30 "+url)
+	}
+	for deadline := time.Now().Add(time.Minute); ; time.Sleep(time.Second) {
+		if _, err := get(); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the guest's web server did not answer on its published port")
+		}
+	}
+
+	env.dicer(t, "standby", name)
+	if state := env.instance(t, name).State; state != "Standby" {
+		t.Fatalf("instance is %q, want Standby", state)
+	}
+
+	for i, what := range []string{"the connection that wakes it", "a connection after it"} {
+		out, err := get()
+		if err != nil || strings.TrimSpace(out) != "hello" {
+			t.Errorf("%s got %q (%v), want the guest's page", what, out, err)
+		}
+		if state := env.instance(t, name).State; i == 0 && state != "Running" {
+			t.Errorf("instance is %q after a connection woke it, want Running", state)
+		}
+	}
+}

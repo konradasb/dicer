@@ -28,6 +28,7 @@ func (m *Manager) Update(ctx context.Context, updated types.InstanceSpec) error 
 	lock := m.lock(updated.ID)
 	lock.Lock()
 	defer lock.Unlock()
+	defer m.syncWaker(ctx, updated.ID)
 
 	current, err := m.definitions.Instance(updated.ID)
 	if err != nil {
