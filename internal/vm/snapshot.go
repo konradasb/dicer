@@ -33,11 +33,8 @@ import (
 )
 
 // CreateSnapshot freezes an instance to disk as a snapshot called name, or,
-// if name is empty, after the instance and the time. Of a running or paused
-// instance it takes a memory snapshot, pausing a running one while it does;
-// of a stopped or failed one, a disk snapshot. A memory snapshot of an
-// instance that can write to a volume is refused: the volume is not in the
-// snapshot, and would not match the restored guest's memory of it.
+// if name is empty, after the instance and the time. See writeSnapshot for
+// what it holds.
 func (m *Manager) CreateSnapshot(
 	ctx context.Context, instance types.InstanceSpec, name string,
 ) (_ types.Snapshot, err error) {
@@ -55,43 +52,6 @@ func (m *Manager) CreateSnapshot(
 		return types.Snapshot{}, errdefs.Exists("snapshot %q already exists", name)
 	}
 
-	lock := m.lock(instance.ID)
-	lock.Lock()
-	defer lock.Unlock()
-
-	status, err := m.Status(instance)
-	if err != nil {
-		return types.Snapshot{}, err
-	}
-
-	snapshot := types.Snapshot{ID: cuid2.Generate(), Name: name, Instance: instance, CreatedAt: started}
-	switch status.State {
-	case types.InstanceStateRunning, types.InstanceStatePaused:
-		if slices.ContainsFunc(instance.Mounts, func(mount types.Mount) bool {
-			return mount.Type == types.MountTypeVolume && !mount.ReadOnly
-		}) {
-			return types.Snapshot{}, errdefs.InvalidState("instance %q can write to a volume, which a snapshot does not hold; "+
-				"stop it to take a disk snapshot, or mount its volumes read-only", instance.Name)
-		}
-		allocation, err := m.Allocation(instance)
-		if err != nil {
-			return types.Snapshot{}, err
-		}
-		snapshot.Kind = types.SnapshotKindMemory
-		snapshot.IP, snapshot.MAC = allocation.IP, allocation.MAC
-		snapshot.HypervisorType, snapshot.HypervisorVersion = instance.EffectiveHypervisorType(), status.HypervisorVersion
-		snapshot.VCPUs, snapshot.MemoryBytes = status.VCPUs, status.MemoryBytes
-		snapshot.ImageDigest = status.ImageDigest
-	case types.InstanceStateStopped, types.InstanceStateFailed:
-		if _, err := os.Stat(m.overlayDiskPath(instance)); errors.Is(err, os.ErrNotExist) {
-			return types.Snapshot{}, errdefs.InvalidState("instance %q has never started, so it has no disk to snapshot", instance.Name)
-		}
-		snapshot.Kind = types.SnapshotKindDisk
-	default:
-		return types.Snapshot{}, errdefs.InvalidState("instance %q is %s; snapshot it once it is running, paused or stopped",
-			instance.Name, status.State.Lowercase())
-	}
-
 	staged, err := m.definitions.StageSnapshot()
 	if err != nil {
 		return types.Snapshot{}, err
@@ -100,15 +60,11 @@ func (m *Manager) CreateSnapshot(
 	// only what a failure left.
 	defer func() { _ = os.RemoveAll(staged) }()
 
-	var paused time.Duration
-	if snapshot.Kind == types.SnapshotKindMemory {
-		paused, err = m.writeMemorySnapshot(ctx, instance, status, staged)
-	} else {
-		err = diskfile.Copy(m.overlayDiskPath(instance), filepath.Join(staged, overlayDiskFile))
-	}
+	snapshot, paused, err := m.writeSnapshot(ctx, instance, staged)
 	if err != nil {
 		return types.Snapshot{}, err
 	}
+	snapshot.ID, snapshot.Name, snapshot.CreatedAt = cuid2.Generate(), name, started
 
 	if err := m.definitions.CreateSnapshot(snapshot, staged); err != nil {
 		return types.Snapshot{}, err
@@ -121,6 +77,65 @@ func (m *Manager) CreateSnapshot(
 		"size_bytes", snapshot.SizeBytes, "paused_seconds", paused.Seconds())
 
 	return snapshot, nil
+}
+
+// writeSnapshot freezes an instance into dir. It returns the snapshot that
+// dir then holds, without an ID, name or time, and how long the guest was
+// paused. Of a running or paused instance it writes a memory snapshot, and
+// pauses a running one while it does. Of a stopped or failed one it writes a
+// disk snapshot. A memory snapshot of an instance that can write to a volume
+// is refused, because the volume is not in the snapshot and would not match
+// what the restored guest remembers of it.
+func (m *Manager) writeSnapshot(
+	ctx context.Context, instance types.InstanceSpec, dir string,
+) (types.Snapshot, time.Duration, error) {
+	lock := m.lock(instance.ID)
+	lock.Lock()
+	defer lock.Unlock()
+
+	status, err := m.Status(instance)
+	if err != nil {
+		return types.Snapshot{}, 0, err
+	}
+
+	snapshot := types.Snapshot{Instance: instance}
+	switch status.State {
+	case types.InstanceStateRunning, types.InstanceStatePaused:
+		if slices.ContainsFunc(instance.Mounts, func(mount types.Mount) bool {
+			return mount.Type == types.MountTypeVolume && !mount.ReadOnly
+		}) {
+			return types.Snapshot{}, 0, errdefs.InvalidState("instance %q can write to a volume, which a snapshot does not hold; "+
+				"stop it first, or mount its volumes read-only", instance.Name)
+		}
+		allocation, err := m.Allocation(instance)
+		if err != nil {
+			return types.Snapshot{}, 0, err
+		}
+		snapshot.Kind = types.SnapshotKindMemory
+		snapshot.IP, snapshot.MAC = allocation.IP, allocation.MAC
+		snapshot.HypervisorType, snapshot.HypervisorVersion = instance.EffectiveHypervisorType(), status.HypervisorVersion
+		snapshot.VCPUs, snapshot.MemoryBytes = status.VCPUs, status.MemoryBytes
+		snapshot.ImageDigest = status.ImageDigest
+
+		paused, err := m.writeMemorySnapshot(ctx, instance, status, dir)
+		if err != nil {
+			return types.Snapshot{}, 0, err
+		}
+		return snapshot, paused, nil
+	case types.InstanceStateStopped, types.InstanceStateFailed:
+		if _, err := os.Stat(m.overlayDiskPath(instance)); errors.Is(err, os.ErrNotExist) {
+			return types.Snapshot{}, 0, errdefs.InvalidState("instance %q has never started, so it has no disk to copy", instance.Name)
+		}
+		snapshot.Kind = types.SnapshotKindDisk
+
+		if err := diskfile.Copy(m.overlayDiskPath(instance), filepath.Join(dir, overlayDiskFile)); err != nil {
+			return types.Snapshot{}, 0, fmt.Errorf("copy overlay disk: %w", err)
+		}
+		return snapshot, 0, nil
+	default:
+		return types.Snapshot{}, 0, errdefs.InvalidState("instance %q is %s; snapshot or fork it once it is running, paused or stopped",
+			instance.Name, status.State.Lowercase())
+	}
 }
 
 // writeMemorySnapshot writes a running or paused guest's memory, device
@@ -518,8 +533,8 @@ func (m *Manager) restore(
 	if forked {
 		if err := m.setGuestIdentity(ctx, m.vsockPath(instance.ID), guestIdentity(instance, setup)); err != nil {
 			if grpcstatus.Code(err) == codes.Unimplemented {
-				return nil, nil, errdefs.InvalidState("the guest in snapshot %q has an agent too old to take another identity; "+
-					"restart instance %q and take a new snapshot to fork it", snapshot.Name, snapshot.Instance.Name)
+				return nil, nil, errdefs.InvalidState("the guest of instance %q has an agent too old to take another identity; "+
+					"restart that instance, then fork it or a new snapshot of it", snapshot.Instance.Name)
 			}
 			return nil, nil, fmt.Errorf("give the guest its own identity: %w", err)
 		}

@@ -66,6 +66,12 @@ service DaemonService {
   // address, host ports and writable volumes. StartInstance resumes it where
   // it was; StopInstance discards what was frozen.
   rpc StandbyInstance(StandbyInstanceRequest) returns (Instance);
+  // ForkInstance creates an instance as a copy of another. It is the same as
+  // CreateSnapshot followed by ForkSnapshot, except that no snapshot is kept.
+  // A running or paused instance is paused while its memory is written, and
+  // its fork runs. A stopped instance's fork is stopped. An instance that can
+  // write to a volume can be forked only while it is stopped.
+  rpc ForkInstance(ForkInstanceRequest) returns (Instance);
   // ResizeInstance changes a running instance's vCPUs and memory without
   // restarting it, within its max_vcpus and max_memory_bytes, and its
   // definition with them, so it keeps them when it next starts. Memory can
@@ -671,6 +677,20 @@ message StandbyInstanceRequest {
   string name = 1;
 }
 
+message ForkInstanceRequest {
+  // The instance to fork.
+  string name = 1;
+  // The new instance's name.
+  string fork_name = 2;
+  // The network the new instance joins, and its address on it. The
+  // instance's network, and an address it assigns, when empty.
+  string network_name = 3;
+  string static_ip = 4;
+  // The host ports the new instance publishes. The instance's are not
+  // copied: two instances cannot publish the same host port.
+  repeated PortMapping ports = 5;
+}
+
 message RenameInstanceRequest {
   string name = 1;
   // The name to give it, which no other instance may have.
@@ -959,7 +979,7 @@ message ForkSnapshotRequest {
   // The snapshot's name or ID.
   string name = 1;
   // The new instance's name.
-  string instance = 2;
+  string fork_name = 2;
   // The network the new instance joins, and its address on it. The
   // snapshot's network, and an address it assigns, when empty.
   string network_name = 3;

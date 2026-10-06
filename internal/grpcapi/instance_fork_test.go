@@ -14,8 +14,8 @@ import (
 )
 
 // TestForkDefinitionLeavesWhatWasTheSourcesAlone checks that a fork copies
-// its snapshot's instance but for what two instances cannot share: an ID, a
-// name, a static address and host ports.
+// its source but for what two instances cannot share: an ID, a name, a
+// static address and host ports.
 func TestForkDefinitionLeavesWhatWasTheSourcesAlone(t *testing.T) {
 	source := types.InstanceSpec{
 		ID: "source-id", Name: "web", ImageRef: "docker.io/library/nginx:1.27", KernelName: "k",
@@ -24,24 +24,23 @@ func TestForkDefinitionLeavesWhatWasTheSourcesAlone(t *testing.T) {
 		Env:           map[string]string{"A": "1"},
 		StoppedByUser: true,
 	}
-	snapshot := types.Snapshot{Name: "snap", Instance: source}
 
 	tests := []struct {
 		name        string
-		req         *dicerdv1.ForkSnapshotRequest
+		req         *dicerdv1.ForkInstanceRequest
 		wantNetwork string
 		wantIP      string
 		wantPorts   []types.PortMapping
 	}{
 		{
 			name:        "nothing given",
-			req:         &dicerdv1.ForkSnapshotRequest{Name: "snap", Instance: "copy"},
+			req:         &dicerdv1.ForkInstanceRequest{Name: "web", ForkName: "copy"},
 			wantNetwork: "default",
 		},
 		{
 			name: "network, address and ports given",
-			req: &dicerdv1.ForkSnapshotRequest{
-				Name: "snap", Instance: "copy", NetworkName: "lan", StaticIp: "10.1.0.9",
+			req: &dicerdv1.ForkInstanceRequest{
+				Name: "web", ForkName: "copy", NetworkName: "lan", StaticIp: "10.1.0.9",
 				Ports: []*dicerdv1.PortMapping{{HostPort: 8081, GuestPort: 80}},
 			},
 			wantNetwork: "lan",
@@ -51,7 +50,7 @@ func TestForkDefinitionLeavesWhatWasTheSourcesAlone(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fork, err := forkDefinition(snapshot, tt.req)
+			fork, err := forkDefinition(source, tt.req)
 			if err != nil {
 				t.Fatalf("forkDefinition: %v", err)
 			}
@@ -74,7 +73,7 @@ func TestForkDefinitionLeavesWhatWasTheSourcesAlone(t *testing.T) {
 		})
 	}
 
-	if _, err := forkDefinition(snapshot, &dicerdv1.ForkSnapshotRequest{Name: "snap", Instance: "../bad"}); !errors.Is(err, errdefs.ErrInvalidArgument) {
+	if _, err := forkDefinition(source, &dicerdv1.ForkInstanceRequest{Name: "web", ForkName: "../bad"}); !errors.Is(err, errdefs.ErrInvalidArgument) {
 		t.Errorf("forkDefinition with an invalid name = %v, want ErrInvalidArgument", err)
 	}
 }

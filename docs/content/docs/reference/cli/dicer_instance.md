@@ -14,6 +14,7 @@ Manage instances.
 | [`dicer instance create`]({{< relref "/docs/reference/cli/dicer_instance_create" >}}) | Define an instance without starting it. |
 | [`dicer instance delete`]({{< relref "/docs/reference/cli/dicer_instance_delete" >}}) | Delete one or more instances, or all of them. |
 | [`dicer instance exec`]({{< relref "/docs/reference/cli/dicer_instance_exec" >}}) | Run a command inside a running instance. |
+| [`dicer instance fork`]({{< relref "/docs/reference/cli/dicer_instance_fork" >}}) | Create an instance as a copy of another. |
 | [`dicer instance list`]({{< relref "/docs/reference/cli/dicer_instance_list" >}}) | List instances. |
 | [`dicer instance logs`]({{< relref "/docs/reference/cli/dicer_instance_logs" >}}) | Show an instance's console output. |
 | [`dicer instance pause`]({{< relref "/docs/reference/cli/dicer_instance_pause" >}}) | Pause one or more running instances. |

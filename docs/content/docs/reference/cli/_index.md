@@ -23,6 +23,7 @@ The common commands are shortcuts for the management commands most used: `dicer 
 | [`dicer cp`]({{< relref "/docs/reference/cli/dicer_cp" >}}) | Copy files between this machine and a running instance. |
 | [`dicer create`]({{< relref "/docs/reference/cli/dicer_create" >}}) | Define an instance without starting it. |
 | [`dicer exec`]({{< relref "/docs/reference/cli/dicer_exec" >}}) | Run a command inside a running instance. |
+| [`dicer fork`]({{< relref "/docs/reference/cli/dicer_fork" >}}) | Create an instance as a copy of another. |
 | [`dicer images`]({{< relref "/docs/reference/cli/dicer_images" >}}) | List pulled images. |
 | [`dicer inspect`]({{< relref "/docs/reference/cli/dicer_inspect" >}}) | Show everything about one or more instances. |
 | [`dicer logs`]({{< relref "/docs/reference/cli/dicer_logs" >}}) | Show an instance's console output. |

@@ -5,6 +5,8 @@ package vm
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"google.golang.org/grpc/codes"
@@ -27,9 +29,9 @@ func TestForkOfMemorySnapshotRunsAsItself(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fork := forkOf(snapshot, "copy")
-	if err := h.manager.Fork(t.Context(), snapshot, fork); err != nil {
-		t.Fatalf("Fork: %v", err)
+	fork := forkOf(snapshot.Instance, "copy")
+	if err := h.manager.ForkSnapshot(t.Context(), snapshot, fork); err != nil {
+		t.Fatalf("ForkSnapshot: %v", err)
 	}
 
 	status, err := h.manager.Status(fork)
@@ -81,9 +83,9 @@ func TestForkOfDiskSnapshotIsStopped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fork := forkOf(snapshot, "copy")
-	if err := h.manager.Fork(t.Context(), snapshot, fork); err != nil {
-		t.Fatalf("Fork: %v", err)
+	fork := forkOf(snapshot.Instance, "copy")
+	if err := h.manager.ForkSnapshot(t.Context(), snapshot, fork); err != nil {
+		t.Fatalf("ForkSnapshot: %v", err)
 	}
 
 	if status, _ := h.manager.Status(fork); status.State != types.InstanceStateStopped {
@@ -115,9 +117,9 @@ func TestFailedForkLeavesNoInstance(t *testing.T) {
 			}
 			h.agent.identityErr = tt.identityErr
 
-			err = h.manager.Fork(t.Context(), snapshot, forkOf(snapshot, "copy"))
+			err = h.manager.ForkSnapshot(t.Context(), snapshot, forkOf(snapshot.Instance, "copy"))
 			if err == nil || (tt.want != nil && !errors.Is(err, tt.want)) {
-				t.Errorf("Fork = %v, want a failure (%v)", err, tt.want)
+				t.Errorf("ForkSnapshot = %v, want a failure (%v)", err, tt.want)
 			}
 			if _, err := h.definitions.Instance("copy"); !errors.Is(err, errdefs.ErrNotFound) {
 				t.Errorf("the failed fork is still defined: %v", err)
@@ -149,10 +151,82 @@ func TestRestoreSetsTheGuestsClock(t *testing.T) {
 	}
 }
 
-// forkOf defines an instance named name as a fork of snapshot's instance,
-// as the API does.
-func forkOf(snapshot types.Snapshot, name string) types.InstanceSpec {
-	fork := snapshot.Instance
+// TestForkOfRunningInstanceRunsBesideIt checks that forking a running
+// instance pauses it only while its memory is written, resumes the copy as
+// itself, and keeps no snapshot of it.
+func TestForkOfRunningInstanceRunsBesideIt(t *testing.T) {
+	h := newHarness(t)
+	h.running(t)
+
+	fork := forkOf(h.instance, "copy")
+	if err := h.manager.ForkInstance(t.Context(), h.instance, fork); err != nil {
+		t.Fatalf("ForkInstance: %v", err)
+	}
+
+	if status, _ := h.manager.Status(fork); status.State != types.InstanceStateRunning {
+		t.Errorf("fork is %s, want %s", status.State, types.InstanceStateRunning)
+	}
+	if status := h.status(t); status.State != types.InstanceStateRunning {
+		t.Errorf("source is %s, want %s", status.State, types.InstanceStateRunning)
+	}
+	// The source is resumed after its memory is written, and the fork as
+	// it is restored.
+	if h.hv.paused != 1 || h.hv.resumed != 2 {
+		t.Errorf("guests paused %d times and resumed %d, want 1 and 2", h.hv.paused, h.hv.resumed)
+	}
+	assertSameFile(t, h.manager.overlayDiskPath(fork), h.overlay)
+	if len(h.agent.identities) != 1 || h.agent.identities[0].GetHostname() != "copy" {
+		t.Errorf("identities given = %v, want the fork's alone", h.agent.identities)
+	}
+
+	if snapshots := h.manager.Snapshots(); len(snapshots) != 0 {
+		t.Errorf("forking kept snapshots %v", snapshots)
+	}
+	if staged, _ := os.ReadDir(filepath.Join(h.definitions.dir, "snapshots")); len(staged) != 0 {
+		t.Errorf("forking left %d staged directories", len(staged))
+	}
+}
+
+func TestForkOfStoppedInstanceIsStopped(t *testing.T) {
+	h := newHarness(t)
+
+	fork := forkOf(h.instance, "copy")
+	if err := h.manager.ForkInstance(t.Context(), h.instance, fork); err != nil {
+		t.Fatalf("ForkInstance: %v", err)
+	}
+
+	if status, _ := h.manager.Status(fork); status.State != types.InstanceStateStopped {
+		t.Errorf("fork is %s, want %s", status.State, types.InstanceStateStopped)
+	}
+	if h.starter.vmmCount() != 0 {
+		t.Error("forking a stopped instance started a VMM")
+	}
+	assertSameFile(t, h.manager.overlayDiskPath(fork), h.overlay)
+}
+
+// TestRefusedForkOfInstanceDefinesNothing checks that an instance that
+// cannot be forked as it is leaves no fork behind.
+func TestRefusedForkOfInstanceDefinesNothing(t *testing.T) {
+	h := newHarness(t)
+	h.instance.Mounts = []types.Mount{{Type: types.MountTypeVolume, Source: "data", Target: "/data"}}
+	h.running(t)
+
+	err := h.manager.ForkInstance(t.Context(), h.instance, forkOf(h.instance, "copy"))
+	if !errors.Is(err, errdefs.ErrInvalidState) {
+		t.Errorf("ForkInstance of an instance that can write to a volume = %v, want ErrInvalidState", err)
+	}
+	if _, err := h.definitions.Instance("copy"); !errors.Is(err, errdefs.ErrNotFound) {
+		t.Errorf("the refused fork is defined: %v", err)
+	}
+	if h.hv.paused != 0 {
+		t.Error("the refused fork paused its source")
+	}
+}
+
+// forkOf defines an instance named name as a fork of source, as the API
+// does.
+func forkOf(source types.InstanceSpec, name string) types.InstanceSpec {
+	fork := source
 	fork.ID, fork.Name = "id-"+name, name
 	fork.StaticIP, fork.Ports = "", nil
 	return fork

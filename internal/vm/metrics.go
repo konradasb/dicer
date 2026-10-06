@@ -28,6 +28,7 @@ const (
 	operationRestoreSnapshot = "restore_snapshot"
 	operationDeleteSnapshot  = "delete_snapshot"
 	operationForkSnapshot    = "fork_snapshot"
+	operationForkInstance    = "fork_instance"
 )
 
 // discardMetrics is the Metrics used when none is configured.

@@ -192,15 +192,11 @@ func newSnapshotForkCommand() *cobra.Command {
 		Args:              needs([]string{"a snapshot name", "a name for the new instance"}),
 		ValidArgsFunction: complete(1, listSnapshots),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			req := &dicerdv1.ForkSnapshotRequest{Name: args[0], Instance: args[1]}
-			req.NetworkName, _ = cmd.Flags().GetString("network")
-			req.StaticIp, _ = cmd.Flags().GetString("ip")
-			specs, _ := cmd.Flags().GetStringArray("publish")
-			ports, err := parseEach(specs, parsePortMapping)
-			if err != nil {
+			req := &dicerdv1.ForkSnapshotRequest{Name: args[0], ForkName: args[1]}
+			var err error
+			if req.NetworkName, req.StaticIp, req.Ports, err = forkFlags(cmd); err != nil {
 				return err
 			}
-			req.Ports = ports
 
 			client, cleanup, err := newClient(cmd)
 			if err != nil {
@@ -210,22 +206,10 @@ func newSnapshotForkCommand() *cobra.Command {
 
 			return runTask(cmd, "Forking "+args[0], func() (*dicerdv1.Instance, error) {
 				return client.ForkSnapshot(cmd.Context(), req)
-			}, func(instance *dicerdv1.Instance, took string) string {
-				if instance.GetState() != dicerdv1.InstanceState_INSTANCE_STATE_RUNNING {
-					return fmt.Sprintf("Instance %s forked from snapshot %s in %s; start it to boot it", instance.GetName(), args[0], took)
-				}
-				return fmt.Sprintf("Instance %s forked from snapshot %s in %s (%s)",
-					instance.GetName(), args[0], took, orDash(instance.GetIp()))
-			})
+			}, forkedMessage("snapshot "+args[0]))
 		},
 	}
-
-	flags := cmd.Flags()
-	flags.String("network", "", "Network to attach to (default: the snapshot's instance's)")
-	flags.String("ip", "", "Static IP address (default: assigned from the subnet)")
-	flags.StringArrayP("publish", "p", nil,
-		"Publish a guest port on the host, as [hostIP:]hostPort:guestPort[/tcp|udp] (repeatable)")
-	_ = cmd.RegisterFlagCompletionFunc("network", complete(0, listNetworks))
+	addForkFlags(cmd)
 
 	return cmd
 }

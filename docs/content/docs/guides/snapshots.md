@@ -131,6 +131,23 @@ while the other is stopped.
 A memory snapshot taken before Dicer could fork cannot be: its guest's agent
 cannot take another identity. Take a new snapshot.
 
+### Forking an instance
+
+To copy an instance as it is now, fork it directly, without taking a snapshot
+first:
+
+```console
+$ dicer fork web web-2
+Instance web-2 forked from instance web in 1.1s (10.88.0.8)
+```
+
+This is the same as taking a snapshot of `web` and forking it, except that no
+snapshot is kept. It takes the same flags as `dicer snapshot fork`. A running
+instance is paused while its memory is written and its disk copied, just as
+for a snapshot, and its fork runs. A stopped instance's fork is stopped, and
+boots from a copy of its disk. An instance that can write to a volume can be
+forked only while it is stopped.
+
 ## Listing and deleting
 
 ```console

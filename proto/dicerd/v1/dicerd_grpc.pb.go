@@ -31,6 +31,7 @@ const (
 	DaemonService_PauseInstance_FullMethodName          = "/dicerd.v1.DaemonService/PauseInstance"
 	DaemonService_ResumeInstance_FullMethodName         = "/dicerd.v1.DaemonService/ResumeInstance"
 	DaemonService_StandbyInstance_FullMethodName        = "/dicerd.v1.DaemonService/StandbyInstance"
+	DaemonService_ForkInstance_FullMethodName           = "/dicerd.v1.DaemonService/ForkInstance"
 	DaemonService_ResizeInstance_FullMethodName         = "/dicerd.v1.DaemonService/ResizeInstance"
 	DaemonService_DeleteInstance_FullMethodName         = "/dicerd.v1.DaemonService/DeleteInstance"
 	DaemonService_ListInstances_FullMethodName          = "/dicerd.v1.DaemonService/ListInstances"
@@ -129,6 +130,12 @@ type DaemonServiceClient interface {
 	// address, host ports and writable volumes. StartInstance resumes it where
 	// it was; StopInstance discards what was frozen.
 	StandbyInstance(ctx context.Context, in *StandbyInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
+	// ForkInstance creates an instance as a copy of another. It is the same as
+	// CreateSnapshot followed by ForkSnapshot, except that no snapshot is kept.
+	// A running or paused instance is paused while its memory is written, and
+	// its fork runs. A stopped instance's fork is stopped. An instance that can
+	// write to a volume can be forked only while it is stopped.
+	ForkInstance(ctx context.Context, in *ForkInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
 	// ResizeInstance changes a running instance's vCPUs and memory without
 	// restarting it, within its max_vcpus and max_memory_bytes, and its
 	// definition with them, so it keeps them when it next starts. Memory can
@@ -336,6 +343,16 @@ func (c *daemonServiceClient) StandbyInstance(ctx context.Context, in *StandbyIn
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Instance)
 	err := c.cc.Invoke(ctx, DaemonService_StandbyInstance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daemonServiceClient) ForkInstance(ctx context.Context, in *ForkInstanceRequest, opts ...grpc.CallOption) (*Instance, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Instance)
+	err := c.cc.Invoke(ctx, DaemonService_ForkInstance_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -822,6 +839,12 @@ type DaemonServiceServer interface {
 	// address, host ports and writable volumes. StartInstance resumes it where
 	// it was; StopInstance discards what was frozen.
 	StandbyInstance(context.Context, *StandbyInstanceRequest) (*Instance, error)
+	// ForkInstance creates an instance as a copy of another. It is the same as
+	// CreateSnapshot followed by ForkSnapshot, except that no snapshot is kept.
+	// A running or paused instance is paused while its memory is written, and
+	// its fork runs. A stopped instance's fork is stopped. An instance that can
+	// write to a volume can be forked only while it is stopped.
+	ForkInstance(context.Context, *ForkInstanceRequest) (*Instance, error)
 	// ResizeInstance changes a running instance's vCPUs and memory without
 	// restarting it, within its max_vcpus and max_memory_bytes, and its
 	// definition with them, so it keeps them when it next starts. Memory can
@@ -977,6 +1000,9 @@ func (UnimplementedDaemonServiceServer) ResumeInstance(context.Context, *ResumeI
 }
 func (UnimplementedDaemonServiceServer) StandbyInstance(context.Context, *StandbyInstanceRequest) (*Instance, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StandbyInstance not implemented")
+}
+func (UnimplementedDaemonServiceServer) ForkInstance(context.Context, *ForkInstanceRequest) (*Instance, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ForkInstance not implemented")
 }
 func (UnimplementedDaemonServiceServer) ResizeInstance(context.Context, *ResizeInstanceRequest) (*Instance, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResizeInstance not implemented")
@@ -1249,6 +1275,24 @@ func _DaemonService_StandbyInstance_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServiceServer).StandbyInstance(ctx, req.(*StandbyInstanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _DaemonService_ForkInstance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForkInstanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServiceServer).ForkInstance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: DaemonService_ForkInstance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServiceServer).ForkInstance(ctx, req.(*ForkInstanceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1900,6 +1944,10 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StandbyInstance",
 			Handler:    _DaemonService_StandbyInstance_Handler,
+		},
+		{
+			MethodName: "ForkInstance",
+			Handler:    _DaemonService_ForkInstance_Handler,
 		},
 		{
 			MethodName: "ResizeInstance",

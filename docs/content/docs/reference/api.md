@@ -55,6 +55,7 @@ was, and whose message says it for a person:
 | `PauseInstance` | [`PauseInstanceRequest`](#pauseinstancerequest) | [`Instance`](#instance) | PauseInstance halts a running instance's vCPUs, keeping it resident. |
 | `ResumeInstance` | [`ResumeInstanceRequest`](#resumeinstancerequest) | [`Instance`](#instance) | ResumeInstance continues a paused instance. |
 | `StandbyInstance` | [`StandbyInstanceRequest`](#standbyinstancerequest) | [`Instance`](#instance) | StandbyInstance freezes a running or paused instance to disk and ends its hypervisor, freeing the CPU and memory it holds, and keeping its address, host ports and writable volumes. StartInstance resumes it where it was; StopInstance discards what was frozen. |
+| `ForkInstance` | [`ForkInstanceRequest`](#forkinstancerequest) | [`Instance`](#instance) | ForkInstance creates an instance as a copy of another. It is the same as CreateSnapshot followed by ForkSnapshot, except that no snapshot is kept. A running or paused instance is paused while its memory is written, and its fork runs. A stopped instance's fork is stopped. An instance that can write to a volume can be forked only while it is stopped. |
 | `ResizeInstance` | [`ResizeInstanceRequest`](#resizeinstancerequest) | [`Instance`](#instance) | ResizeInstance changes a running instance's vCPUs and memory without restarting it, within its max_vcpus and max_memory_bytes, and its definition with them, so it keeps them when it next starts. Memory can be resized from what the instance booted with up to its maximum, in steps of 2 MiB, and waits for the guest where the hypervisor can tell: Firecracker can, Cloud Hypervisor cannot; Firecracker also needs a host CPU with at least 40 bits of physical address. vCPUs can be resized on Cloud Hypervisor only. The guest's kernel must support virtio-mem and CPU hotplug. Growing needs room on the host (RESOURCE_EXHAUSTED). If the guest fails the resize, the instance holds the larger of the two sizes until it next starts. |
 | `DeleteInstance` | [`DeleteInstanceRequest`](#deleteinstancerequest) | `google.protobuf.Empty` | DeleteInstance removes an instance and its overlay disk. It refuses a running instance unless force is set. |
 | `ListInstances` | [`ListInstancesRequest`](#listinstancesrequest) | [`ListInstancesResponse`](#listinstancesresponse) | ListInstances returns every defined instance. |
@@ -319,12 +320,22 @@ ExecInstanceStart is the first message on an ExecInstance stream.
 | `key` | `string` |  |
 | `value` | `string` |  |
 
+### ForkInstanceRequest
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `string` | The instance to fork. |
+| `fork_name` | `string` | The new instance's name. |
+| `network_name` | `string` | The network the new instance joins, and its address on it. The instance's network, and an address it assigns, when empty. |
+| `static_ip` | `string` |  |
+| `ports` | repeated [`PortMapping`](#portmapping) | The host ports the new instance publishes. The instance's are not copied: two instances cannot publish the same host port. |
+
 ### ForkSnapshotRequest
 
 | Field | Type | Description |
 |---|---|---|
 | `name` | `string` | The snapshot's name or ID. |
-| `instance` | `string` | The new instance's name. |
+| `fork_name` | `string` | The new instance's name. |
 | `network_name` | `string` | The network the new instance joins, and its address on it. The snapshot's network, and an address it assigns, when empty. |
 | `static_ip` | `string` |  |
 | `ports` | repeated [`PortMapping`](#portmapping) | The host ports the new instance publishes. The snapshot's instance's are not copied: two instances cannot publish the same host port. |
