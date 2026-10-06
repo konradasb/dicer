@@ -25,7 +25,7 @@ func instanceToProto(instance types.Instance) *dicerdv1.Instance {
 		Name:                   spec.Name,
 		Hostname:               spec.Hostname,
 		ImageRef:               spec.ImageRef,
-		HypervisorType:         hypervisorTypes.toProto(spec.HypervisorType),
+		HypervisorType:         hypervisorTypes.toProto(spec.EffectiveHypervisorType()),
 		HypervisorVersion:      spec.HypervisorVersion,
 		KernelName:             spec.KernelName,
 		KernelArgs:             spec.KernelArgs,

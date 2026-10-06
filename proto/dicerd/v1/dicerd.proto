@@ -383,6 +383,8 @@ message Instance {
   string name = 2;
   string hostname = 3;
   string image_ref = 4;
+  // The hypervisor the instance runs on: Cloud Hypervisor if it was created
+  // without one.
   HypervisorType hypervisor_type = 5;
   // A version that hypervisor ships; the newest by default.
   string hypervisor_version = 6;

@@ -906,12 +906,14 @@ func (PullStage) EnumDescriptor() ([]byte, []int) {
 // Fields from state onwards are output only and are empty when the instance
 // is not running.
 type Instance struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Hostname       string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	ImageRef       string                 `protobuf:"bytes,4,opt,name=image_ref,json=imageRef,proto3" json:"image_ref,omitempty"`
-	HypervisorType HypervisorType         `protobuf:"varint,5,opt,name=hypervisor_type,json=hypervisorType,proto3,enum=dicerd.v1.HypervisorType" json:"hypervisor_type,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name     string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Hostname string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	ImageRef string                 `protobuf:"bytes,4,opt,name=image_ref,json=imageRef,proto3" json:"image_ref,omitempty"`
+	// The hypervisor the instance runs on: Cloud Hypervisor if it was created
+	// without one.
+	HypervisorType HypervisorType `protobuf:"varint,5,opt,name=hypervisor_type,json=hypervisorType,proto3,enum=dicerd.v1.HypervisorType" json:"hypervisor_type,omitempty"`
 	// A version that hypervisor ships; the newest by default.
 	HypervisorVersion string `protobuf:"bytes,6,opt,name=hypervisor_version,json=hypervisorVersion,proto3" json:"hypervisor_version,omitempty"`
 	KernelName        string `protobuf:"bytes,7,opt,name=kernel_name,json=kernelName,proto3" json:"kernel_name,omitempty"`

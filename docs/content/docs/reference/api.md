@@ -544,7 +544,7 @@ is not running.
 | `name` | `string` |  |
 | `hostname` | `string` |  |
 | `image_ref` | `string` |  |
-| `hypervisor_type` | [`HypervisorType`](#hypervisortype) |  |
+| `hypervisor_type` | [`HypervisorType`](#hypervisortype) | The hypervisor the instance runs on: Cloud Hypervisor if it was created without one. |
 | `hypervisor_version` | `string` | A version that hypervisor ships; the newest by default. |
 | `kernel_name` | `string` |  |
 | `kernel_args` | `string` |  |

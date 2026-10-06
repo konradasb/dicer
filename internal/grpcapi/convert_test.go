@@ -147,3 +147,11 @@ func TestInstanceInitModeDefaultsToAuto(t *testing.T) {
 		t.Errorf("init mode of an instance with none = %v, want auto", got)
 	}
 }
+
+// An instance created without a hypervisor says which one it runs on.
+func TestInstanceHypervisorTypeDefaultsToCloudHypervisor(t *testing.T) {
+	got := instanceToProto(types.Instance{Status: types.InstanceStatus{State: types.InstanceStateStopped}}).GetHypervisorType()
+	if got != dicerdv1.HypervisorType_HYPERVISOR_TYPE_CLOUD_HYPERVISOR {
+		t.Errorf("hypervisor type of an instance with none = %v, want Cloud Hypervisor", got)
+	}
+}
