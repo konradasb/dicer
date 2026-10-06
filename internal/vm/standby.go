@@ -87,26 +87,21 @@ func (m *Manager) standby(ctx context.Context, instance types.InstanceSpec, idle
 	}
 	defer func() { _ = os.RemoveAll(staged) }()
 
-	if status.State == types.InstanceStateRunning {
-		if err := hv.PauseVM(ctx); err != nil {
-			return fmt.Errorf("pause instance: %w", err)
-		}
+	running := status.State == types.InstanceStateRunning
+	snapshotCtx, cancel := context.WithTimeout(ctx, memoryTransferTimeout(status.MemoryBytes))
+	defer cancel()
+	if _, err := snapshotVM(snapshotCtx, hv, running, staged); err != nil {
+		return err
 	}
 	frozen := false
 	defer func() {
-		if !frozen && status.State == types.InstanceStateRunning {
+		if !frozen && running {
 			if err := hv.ResumeVM(context.WithoutCancel(ctx)); err != nil {
 				m.logger.ErrorContext(ctx, "could not resume instance after a failed standby",
 					"instance", instance.Name, "error", err)
 			}
 		}
 	}()
-
-	snapshotCtx, cancel := context.WithTimeout(ctx, memoryTransferTimeout(status.MemoryBytes))
-	defer cancel()
-	if err := hv.SnapshotVM(snapshotCtx, staged); err != nil {
-		return fmt.Errorf("snapshot vm: %w", err)
-	}
 
 	standby := types.Snapshot{
 		Name:              "standby",

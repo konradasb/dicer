@@ -4,6 +4,7 @@
 package cloudhypervisor
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -116,6 +117,40 @@ func TestResizeVMMemoryRefusesBelowBootMemory(t *testing.T) {
 			err := hv.ResizeVMMemory(t.Context(), tt.bytes)
 			if (err == nil) != tt.wantResize || resized.Load() != tt.wantResize {
 				t.Errorf("ResizeVMMemory = %v, resized = %t; want resized = %t", err, resized.Load(), tt.wantResize)
+			}
+		})
+	}
+}
+
+// restoringMemoryBody is what Cloud Hypervisor answers a snapshot with while
+// it is still restoring the guest's memory on demand.
+const restoringMemoryBody = `["Error from API","The VM could not be snapshotted","VM on-demand memory restore is still in progress"]`
+
+// TestSnapshotVMReportsMemoryStillRestoring checks that a snapshot refused
+// while the guest's memory is still being restored fails with
+// hypervisor.ErrRestoringMemory, and any other refusal does not.
+func TestSnapshotVMReportsMemoryStillRestoring(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{name: "restoring memory", body: restoringMemoryBody, want: true},
+		{name: "other error", body: `["Error from API","The VM could not be snapshotted"]`, want: false},
+		{name: "not a list", body: "VM on-demand memory restore is still in progress", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hv := fakeVMM(t, func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, tt.body, http.StatusInternalServerError)
+			})
+
+			err := hv.SnapshotVM(t.Context(), t.TempDir())
+			if err == nil {
+				t.Fatal("SnapshotVM succeeded")
+			}
+			if got := errors.Is(err, hypervisor.ErrRestoringMemory); got != tt.want {
+				t.Errorf("SnapshotVM = %v; errors.Is ErrRestoringMemory = %t, want %t", err, got, tt.want)
 			}
 		})
 	}

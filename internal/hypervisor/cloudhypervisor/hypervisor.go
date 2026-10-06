@@ -6,11 +6,13 @@ package cloudhypervisor
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/konradasb/dicer/internal/hypervisor"
@@ -132,12 +134,39 @@ func (h *Hypervisor) ResumeVM(ctx context.Context) error {
 	return nil
 }
 
-// SnapshotVM implements hypervisor.Hypervisor.
+// SnapshotVM implements hypervisor.Hypervisor. For a few seconds after a
+// restore on demand, Cloud Hypervisor is still restoring the guest's memory
+// and refuses to snapshot it. SnapshotVM then fails with
+// hypervisor.ErrRestoringMemory.
 func (h *Hypervisor) SnapshotVM(ctx context.Context, destPath string) error {
-	if _, err := h.client.PutVmSnapshotWithResponse(ctx, VmSnapshotConfig{DestinationUrl: ptr("file://" + destPath)}); err != nil {
+	_, err := h.client.PutVmSnapshotWithResponse(ctx, VmSnapshotConfig{DestinationUrl: ptr("file://" + destPath)})
+	if isRestoringMemory(err) {
+		return fmt.Errorf("snapshot vm: %w", hypervisor.ErrRestoringMemory)
+	}
+	if err != nil {
 		return fmt.Errorf("snapshot vm: %w", err)
 	}
 	return nil
+}
+
+// restoringMemoryMessage is how Cloud Hypervisor explains refusing a request
+// while it is still restoring the guest's memory on demand.
+const restoringMemoryMessage = "VM on-demand memory restore is still in progress"
+
+// isRestoringMemory reports whether err is Cloud Hypervisor refusing a
+// request because it is still restoring the guest's memory on demand. Its
+// API says so only in words: a 500 whose body lists the error's messages,
+// outermost first.
+func isRestoringMemory(err error) bool {
+	var statusErr *statusError
+	if !errors.As(err, &statusErr) || statusErr.code != http.StatusInternalServerError {
+		return false
+	}
+	var messages []string
+	if err := json.Unmarshal(statusErr.body, &messages); err != nil {
+		return false
+	}
+	return slices.Contains(messages, restoringMemoryMessage)
 }
 
 // ResizeVMCPU implements hypervisor.Hypervisor.

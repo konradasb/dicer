@@ -209,3 +209,23 @@ func TestFailedStandbyKeepsTheGuestRunning(t *testing.T) {
 		t.Error("a failed standby left a frozen guest behind")
 	}
 }
+
+// TestStandbyWaitsForMemoryWithTheGuestRunning checks that an instance woken
+// moments ago, whose memory is still being restored, goes on standby once it
+// has been, and runs while it waits.
+func TestStandbyWaitsForMemoryWithTheGuestRunning(t *testing.T) {
+	h := newHarness(t)
+	h.start(t)
+	h.hv.restoringSnapshots = 1
+
+	if err := h.manager.Standby(t.Context(), h.instance); err != nil {
+		t.Fatalf("Standby: %v", err)
+	}
+
+	if h.hv.paused != 2 || h.hv.resumed != 1 {
+		t.Errorf("paused %d times and resumed %d, want 2 and 1", h.hv.paused, h.hv.resumed)
+	}
+	if !h.manager.onStandby(h.instance) {
+		t.Error("instance is not on standby")
+	}
+}

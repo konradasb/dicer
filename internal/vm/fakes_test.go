@@ -515,6 +515,9 @@ type fakeHypervisor struct {
 	paused, resumed int
 	snapshotDirs    []string
 	snapshotErr     error
+	// restoringSnapshots is how many snapshots fail with
+	// hypervisor.ErrRestoringMemory before one is taken.
+	restoringSnapshots int
 	// onSnapshot, if set, is called with the context a snapshot is taken in.
 	onSnapshot func(ctx context.Context)
 
@@ -551,6 +554,10 @@ func (f *fakeHypervisor) SnapshotVM(ctx context.Context, destPath string) error 
 	}
 	if f.snapshotErr != nil {
 		return f.snapshotErr
+	}
+	if f.restoringSnapshots > 0 {
+		f.restoringSnapshots--
+		return hypervisor.ErrRestoringMemory
 	}
 	f.snapshotDirs = append(f.snapshotDirs, destPath)
 

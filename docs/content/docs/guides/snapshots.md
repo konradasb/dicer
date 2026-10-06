@@ -72,6 +72,32 @@ says when.
 
 Renaming an instance keeps its snapshots restorable.
 
+### How fast a restore is
+
+When you restore a memory snapshot, the guest resumes straight away. Dicer
+doesn't wait to restore the guest's memory first. Instead, each page of
+memory is restored from the snapshot the first time the guest uses it. This
+means a guest with a lot of memory restores as quickly as a small one. The
+guest runs a little slower until its memory is restored:
+
+- **Cloud Hypervisor** also restores the rest of the memory in the
+  background, which takes a few seconds. If you snapshot the guest or put it
+  on standby during that time, Dicer waits for the memory to be restored.
+  The guest keeps running while Dicer waits.
+- **Firecracker** restores only the pages the guest uses. The other pages
+  stay in the snapshot file. Forks of the same snapshot share those pages in
+  the host's page cache.
+
+Restoring memory on demand needs Cloud Hypervisor v53 or later, and a host
+kernel with userfaultfd support. The kernels of all major distributions have
+it. Without either, Cloud Hypervisor restores all of the memory before the
+guest resumes.
+
+You can delete a snapshot while a guest is still restoring memory from it.
+The snapshot's disk space is freed when the guest no longer needs it. Under
+Cloud Hypervisor, that is when all the memory has been restored. Under
+Firecracker, it is when the guest stops.
+
 ## Forking
 
 A fork is a new instance made as a copy of the one a snapshot was taken of:

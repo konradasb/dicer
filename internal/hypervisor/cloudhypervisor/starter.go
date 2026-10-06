@@ -19,6 +19,10 @@ import (
 type Starter struct {
 	binaryPath string
 	version    string
+
+	// restoresMemoryOnDemand reports whether RestoreVM restores the guest's
+	// memory on demand.
+	restoresMemoryOnDemand bool
 }
 
 var _ hypervisor.Starter = (*Starter)(nil)
@@ -35,7 +39,19 @@ func NewStarter(binaryPath string) (*Starter, error) {
 		return nil, fmt.Errorf("cloud-hypervisor: %w", err)
 	}
 
-	return &Starter{binaryPath: binaryPath, version: string(v)}, nil
+	return &Starter{
+		binaryPath:             binaryPath,
+		version:                string(v),
+		restoresMemoryOnDemand: v.restoresMemoryOnDemand() && hasUserfaultfd(),
+	}, nil
+}
+
+// hasUserfaultfd reports whether the host's kernel has userfaultfd. Cloud
+// Hypervisor needs it to restore memory on demand, and fails the restore if
+// it is missing. The sysctl exists only in a kernel built with userfaultfd.
+func hasUserfaultfd() bool {
+	_, err := os.Stat("/proc/sys/vm/unprivileged_userfaultfd")
+	return err == nil
 }
 
 // Version returns the Cloud Hypervisor binary version string.
@@ -81,6 +97,11 @@ const restoreDir = "restore"
 
 // RestoreVM launches Cloud Hypervisor and restores a guest from a snapshot,
 // leaving it paused. The console is unused: the snapshot carries it.
+//
+// If the version and the host allow it, it restores the guest's memory on
+// demand. The guest resumes at once, and Cloud Hypervisor restores each page
+// from the snapshot when the guest first uses it, and the rest in the
+// background. Otherwise it restores all of the memory before returning.
 func (s *Starter) RestoreVM(
 	ctx context.Context, socketPath string, snapshotPath string, spec hypervisor.RestoreSpec,
 ) (*process.Process, hypervisor.Hypervisor, error) {
@@ -98,11 +119,11 @@ func (s *Starter) RestoreVM(
 	}
 	defer cu.Clean()
 
-	_, err = hv.client.PutVmRestoreWithResponse(ctx, RestoreConfig{
-		SourceUrl: "file://" + snapshotPath,
-		Prefault:  ptr(false),
-	})
-	if err != nil {
+	config := RestoreConfig{SourceUrl: "file://" + snapshotPath, Prefault: ptr(false)}
+	if s.restoresMemoryOnDemand {
+		config.MemoryRestoreMode = ptr(OnDemand)
+	}
+	if _, err := hv.client.PutVmRestoreWithResponse(ctx, config); err != nil {
 		return nil, nil, fmt.Errorf("restore snapshot: %w", err)
 	}
 

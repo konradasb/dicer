@@ -76,12 +76,16 @@ where it is, and its address, its published host ports and the volumes it
 can write to stay its own: no other instance can take them while it is on
 standby. A host reboot keeps it on standby.
 
-`dicer start` resumes it where it was, its processes running on as if nothing
-had happened but for the time, which is set as it wakes. Resuming takes the
-time to read its memory back, and needs room on the host for its vCPUs and
-memory, as a start does. Connections it had open to the outside have likely
-been dropped by the other end meanwhile. `dicer stop` discards what it froze,
-and the instance boots afresh at its next start; `dicer restart` does both.
+`dicer start` resumes the instance where it left off. Its processes carry
+on as if nothing had happened, except that its clock is set to the current
+time. Resuming doesn't wait for the guest's memory to be restored: each
+page is [restored when the guest first uses it](../../guides/snapshots#how-fast-a-restore-is).
+Like a start, resuming needs room on the host for the instance's vCPUs and
+memory. Connections the instance had open to other machines have probably
+been closed by the other end in the meantime.
+
+`dicer stop` discards the frozen guest, and the instance boots afresh the
+next time it starts. `dicer restart` does both.
 
 What it froze takes as much disk as its memory: its memory is written to disk
 in full. An instance on standby cannot be changed or renamed until it is

@@ -84,6 +84,10 @@ func (s *Starter) StartVM(
 
 // RestoreVM launches Firecracker and restores a guest from a snapshot
 // written by SnapshotVM. The guest is left paused; call ResumeVM.
+//
+// Its memory is restored on demand. Firecracker maps the snapshot's memory
+// file into the guest privately, so the kernel restores each page when the
+// guest first uses it.
 func (s *Starter) RestoreVM(
 	ctx context.Context, socketPath string, snapshotPath string, spec hypervisor.RestoreSpec,
 ) (*process.Process, hypervisor.Hypervisor, error) {

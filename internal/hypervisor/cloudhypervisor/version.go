@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -25,6 +26,17 @@ const DefaultVersion = V53
 
 // supportedVersions are the releases Dicer ships binaries for, newest first.
 var supportedVersions = []Version{V53, V49, V48}
+
+// restoresMemoryOnDemand reports whether the version can restore a guest's
+// memory on demand. v52 restores each page when the guest first uses it, but
+// only v53 also restores the rest in the background. Without that, the
+// restore may never finish, and Cloud Hypervisor refuses every snapshot of
+// the guest until it does. So v53 is the first version used this way.
+func (v Version) restoresMemoryOnDemand() bool {
+	major, _, _ := strings.Cut(strings.TrimPrefix(string(v), "v"), ".")
+	n, err := strconv.Atoi(major)
+	return err == nil && n >= 53
+}
 
 // parseVersion runs a cloud-hypervisor binary to ask its version.
 func parseVersion(binaryPath string) (Version, error) {

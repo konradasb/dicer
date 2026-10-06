@@ -590,3 +590,23 @@ func assertSameFile(t *testing.T, got, want string) {
 		t.Errorf("%s is %d bytes, want the %d of %s", got, len(gotData), len(wantData), want)
 	}
 }
+
+// TestSnapshotWaitsForMemoryWithTheGuestRunning checks that a guest whose
+// memory is still being restored is snapshotted once it has been, and runs
+// while it waits rather than staying paused.
+func TestSnapshotWaitsForMemoryWithTheGuestRunning(t *testing.T) {
+	h := newHarness(t)
+	h.running(t)
+	h.hv.restoringSnapshots = 2
+
+	if _, err := h.manager.CreateSnapshot(t.Context(), h.instance, "after-restore"); err != nil {
+		t.Fatalf("CreateSnapshot: %v", err)
+	}
+
+	if h.hv.paused != 3 || h.hv.resumed != 3 {
+		t.Errorf("paused %d times and resumed %d, want 3 and 3", h.hv.paused, h.hv.resumed)
+	}
+	if len(h.hv.snapshotDirs) != 1 {
+		t.Errorf("snapshots taken = %d, want 1", len(h.hv.snapshotDirs))
+	}
+}

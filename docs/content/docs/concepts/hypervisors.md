@@ -83,6 +83,7 @@ Disk snapshots need no hypervisor and are unaffected.
 |---|---|---|
 | Kernel command line | `console=ttyS0 reboot=k panic=1` | the same, and `pci=off` |
 | Ending a guest | powers off | resets, as it has no power button |
+| Restoring memory | on demand, then the rest in the background (v53 and later) | on demand |
 
 How a guest ends is `dicer-init`'s business, so the difference does not show:
 an instance ends the same way under either.

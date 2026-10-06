@@ -19,12 +19,6 @@ Roughly in the order they are expected to land. Several are already half-built
 underneath: the hypervisor layer supports them, and the API does not yet
 expose them.
 
-### Snapshots and cloning
-
-| Feature | Description |
-|---------|-------------|
-| Lazy restore | Restore a snapshot with guest memory paged in on demand (userfaultfd), so resuming takes milliseconds rather than the time to read all of memory |
-
 ### Devices and hypervisors
 
 | Feature | Description |

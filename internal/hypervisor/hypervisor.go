@@ -7,9 +7,15 @@ package hypervisor
 
 import (
 	"context"
+	"errors"
 
 	"github.com/konradasb/dicer/internal/process"
 )
+
+// ErrRestoringMemory is what SnapshotVM returns while the VMM is still
+// restoring the memory of a VM restored on demand. That takes seconds, after
+// which the snapshot can be tried again.
+var ErrRestoringMemory = errors.New("the guest's memory is still being restored")
 
 // Hypervisor controls a single running virtual machine. Each request is
 // bounded by ctx's deadline or, if it has none, by a timeout of the
@@ -35,7 +41,9 @@ type Hypervisor interface {
 
 	// SnapshotVM writes the VM's state, its memory included, into the
 	// directory destPath. The VM must be paused. Writing a large guest's
-	// memory can take minutes: ctx should have a deadline to suit.
+	// memory can take minutes: ctx should have a deadline to suit. It fails
+	// with ErrRestoringMemory if the VM was restored moments ago and its
+	// memory is still being restored.
 	SnapshotVM(ctx context.Context, destPath string) error
 
 	// ResizeVMMemory sets the guest's memory, from the memory it booted with
@@ -112,6 +120,10 @@ type Starter interface {
 	// SnapshotVM wrote into the directory snapshotPath, leaving it paused,
 	// with what spec gives it in place of what the snapshot holds. As with
 	// SnapshotVM, ctx should have a deadline that suits the guest's memory.
+	//
+	// It may return before all of the guest's memory is restored. The VMM
+	// keeps the snapshot's memory file open and restores from it while the
+	// guest runs, so the file may be deleted, but must not be changed.
 	RestoreVM(
 		ctx context.Context, socketPath string, snapshotPath string, spec RestoreSpec,
 	) (vmm *process.Process, hypervisor Hypervisor, err error)

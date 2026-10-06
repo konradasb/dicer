@@ -137,11 +137,14 @@ func (m *Manager) writeMemorySnapshot(
 		return 0, err
 	}
 
-	if status.State == types.InstanceStateRunning {
-		if err := hv.PauseVM(ctx); err != nil {
-			return 0, fmt.Errorf("pause instance: %w", err)
-		}
-		pausedAt := time.Now()
+	running := status.State == types.InstanceStateRunning
+	snapshotCtx, cancel := context.WithTimeout(ctx, memoryTransferTimeout(status.MemoryBytes))
+	defer cancel()
+	pausedAt, err := snapshotVM(snapshotCtx, hv, running, dir)
+	if err != nil {
+		return 0, err
+	}
+	if running {
 		defer func() {
 			paused = time.Since(pausedAt)
 			if err := hv.ResumeVM(context.WithoutCancel(ctx)); err != nil {
@@ -149,12 +152,6 @@ func (m *Manager) writeMemorySnapshot(
 					"instance", instance.Name, "error", err)
 			}
 		}()
-	}
-
-	snapshotCtx, cancel := context.WithTimeout(ctx, memoryTransferTimeout(status.MemoryBytes))
-	defer cancel()
-	if err := hv.SnapshotVM(snapshotCtx, dir); err != nil {
-		return 0, fmt.Errorf("snapshot vm: %w", err)
 	}
 
 	// Copied while the guest is still paused, so that the disk matches its
@@ -165,6 +162,47 @@ func (m *Manager) writeMemorySnapshot(
 	}
 
 	return 0, nil
+}
+
+// restoringMemoryPollInterval is how often snapshotVM tries again while the
+// hypervisor is still restoring the guest's memory.
+const restoringMemoryPollInterval = 250 * time.Millisecond
+
+// snapshotVM writes a guest's state into dir, pausing it first if it is
+// running, and returns the time it paused the guest. On success the guest is
+// left paused. On failure, a guest it paused is resumed.
+//
+// A guest restored moments ago cannot be snapshotted until the hypervisor
+// has restored all of its memory. snapshotVM tries again until it can, or
+// ctx is done, and lets a running guest run while it waits.
+func snapshotVM(ctx context.Context, hv hypervisor.Hypervisor, running bool, dir string) (time.Time, error) {
+	for {
+		if running {
+			if err := hv.PauseVM(ctx); err != nil {
+				return time.Time{}, fmt.Errorf("pause instance: %w", err)
+			}
+		}
+		pausedAt := time.Now()
+
+		err := hv.SnapshotVM(ctx, dir)
+		if err == nil {
+			return pausedAt, nil
+		}
+		if running {
+			if resumeErr := hv.ResumeVM(context.WithoutCancel(ctx)); resumeErr != nil {
+				return time.Time{}, errors.Join(err, fmt.Errorf("resume instance: %w", resumeErr))
+			}
+		}
+		if !errors.Is(err, hypervisor.ErrRestoringMemory) {
+			return time.Time{}, err
+		}
+
+		select {
+		case <-ctx.Done():
+			return time.Time{}, fmt.Errorf("%w: %w", err, ctx.Err())
+		case <-time.After(restoringMemoryPollInterval):
+		}
+	}
 }
 
 // recordSnapshotCreated records the event of a snapshot taken in took,
