@@ -40,7 +40,8 @@ func iptablesCommand(ctx context.Context, args ...string) *exec.Cmd {
 //
 // Evaluation order in FORWARD:
 //  1. DICER-USER              — admin-defined overrides (empty by default)
-//  2. DICER-ISOLATION-STAGE-1 — inter-network isolation (two-stage, like Docker)
+//  2. DICER-ISOLATION-STAGE-1 — inter-network isolation (two-stage, like Docker),
+//     and internal networks' outbound drops
 //  3. DICER-FORWARD           — per-bridge ACCEPT rules (ICC + NAT forwarding)
 //
 // DICER-INPUT is jumped to from INPUT, as it filters traffic to the host
@@ -93,13 +94,18 @@ func forwardInComment(bridge string) string       { return "dicer-fwd-in-" + bri
 func iccComment(bridge string) string             { return "dicer-icc-" + bridge }
 func isolationStage1Comment(bridge string) string { return "dicer-isolation-s1-" + bridge }
 func isolationStage2Comment(bridge string) string { return "dicer-isolation-s2-" + bridge }
+func internalComment(bridge string) string        { return "dicer-internal-" + bridge }
 func inputAcceptComment(bridge string) string     { return "dicer-input-accept-" + bridge }
 func inputDropComment(bridge string) string       { return "dicer-input-drop-" + bridge }
 func inputAPIDropComment(bridge string) string    { return "dicer-input-api-drop-" + bridge }
+func inputDNSComment(bridge string) string        { return "dicer-input-dns-" + bridge }
+func inputRepliesComment(bridge string) string    { return "dicer-input-replies-" + bridge }
+func inputInternalComment(bridge string) string   { return "dicer-input-internal-" + bridge }
 
 // setupIPTables ensures the NAT, forwarding and isolation rules of a bridge
-// and its subnet. Input rules are gateway access's: see ensureGatewayAccess.
-func (h *Host) setupIPTables(ctx context.Context, bridge, subnetCIDR string) error {
+// and its subnet, those of an internal network among them. Input rules are
+// gateway access's: see ensureGatewayAccess.
+func (h *Host) setupIPTables(ctx context.Context, bridge, subnetCIDR string, internal bool) error {
 	h.rulesMu.Lock()
 	defer h.rulesMu.Unlock()
 
@@ -127,7 +133,7 @@ func (h *Host) setupIPTables(ctx context.Context, bridge, subnetCIDR string) err
 	if err := ensureForwardRules(ctx, bridge, uplink); err != nil {
 		return fmt.Errorf("set up forward rules: %w", err)
 	}
-	if err := ensureIsolationRules(ctx, bridge); err != nil {
+	if err := ensureIsolationRules(ctx, bridge, internal); err != nil {
 		return fmt.Errorf("set up isolation rules: %w", err)
 	}
 
@@ -243,7 +249,21 @@ func removeForwardRules(ctx context.Context, bridge string) error {
 // ensureIsolationRules adds per-bridge rules to the two-stage isolation chains.
 // Stage 1: traffic leaving this bridge (not staying on it) → jump to stage 2.
 // Stage 2: traffic destined for this bridge → DROP.
-func ensureIsolationRules(ctx context.Context, bridge string) error {
+// An internal bridge also drops, in stage 1, every connection its guests
+// start beyond it. Replies to connections from outside, through published
+// ports, still leave.
+func ensureIsolationRules(ctx context.Context, bridge string, internal bool) error {
+	if internal {
+		if err := ensureRule(ctx, "filter", chainDicerIsolationStage1, internalComment(bridge),
+			"-i", bridge, "!", "-o", bridge,
+			"-m", "conntrack", "!", "--ctstate", "ESTABLISHED,RELATED",
+			"-j", "DROP"); err != nil {
+			return fmt.Errorf("add internal rule for %s: %w", bridge, err)
+		}
+	} else if err := deleteRulesWithComment(ctx, "filter", chainDicerIsolationStage1, internalComment(bridge)); err != nil {
+		return fmt.Errorf("remove internal rule for %s: %w", bridge, err)
+	}
+
 	if err := ensureRule(ctx, "filter", chainDicerIsolationStage1, isolationStage1Comment(bridge),
 		"-i", bridge, "!", "-o", bridge,
 		"-j", chainDicerIsolationStage2); err != nil {
@@ -264,6 +284,7 @@ func removeIsolationRules(ctx context.Context, bridge string) error {
 	var errs []error
 	for _, pair := range []struct{ chain, comment string }{
 		{chainDicerIsolationStage1, isolationStage1Comment(bridge)},
+		{chainDicerIsolationStage1, internalComment(bridge)},
 		{chainDicerIsolationStage2, isolationStage2Comment(bridge)},
 	} {
 		if err := deleteRulesWithComment(ctx, "filter", pair.chain, pair.comment); err != nil {
@@ -276,9 +297,11 @@ func removeIsolationRules(ctx context.Context, bridge string) error {
 // ensureInputRules accepts traffic to a bridge's gateway IP only from that
 // bridge, so instances cannot reach another network's gateway. If apiPort is
 // not 0, it first drops the bridge's TCP traffic to that port on any of the
-// host's addresses, so guests cannot reach the daemon's API. The rules are
-// replaced together to keep their order.
-func ensureInputRules(ctx context.Context, bridge, gatewayIP string, apiPort int) error {
+// host's addresses, so guests cannot reach the daemon's API. An internal
+// bridge's guests reach the host only to ask the gateway's DNS server, and
+// to answer connections the host made to them. The rules are replaced
+// together to keep their order.
+func ensureInputRules(ctx context.Context, bridge, gatewayIP string, apiPort int, internal bool) error {
 	var rules [][]string
 	if apiPort != 0 {
 		rules = append(rules, commented(inputAPIDropComment(bridge),
@@ -286,11 +309,27 @@ func ensureInputRules(ctx context.Context, bridge, gatewayIP string, apiPort int
 	} else if err := deleteRulesWithComment(ctx, "filter", chainDicerInput, inputAPIDropComment(bridge)); err != nil {
 		return fmt.Errorf("remove input API drop rule for %s: %w", bridge, err)
 	}
-	rules = append(rules,
-		commented(inputAcceptComment(bridge), []string{"-i", bridge, "-d", gatewayIP, "-j", "ACCEPT"}),
-		commented(inputDropComment(bridge), []string{"-d", gatewayIP, "-j", "DROP"}),
-	)
-	if !slices.ContainsFunc(rules, func(rule []string) bool {
+	// A network deleted and created again under the same name, as the other
+	// kind, may still have the other kind's rule. If so, it is replaced.
+	accept := commented(inputAcceptComment(bridge), []string{"-i", bridge, "-d", gatewayIP, "-j", "ACCEPT"})
+	internalDrop := commented(inputInternalComment(bridge), []string{"-i", bridge, "-j", "DROP"})
+	stale := internalDrop
+	if internal {
+		stale = accept
+		rules = append(rules,
+			commented(inputDNSComment(bridge),
+				[]string{"-i", bridge, "-d", gatewayIP, "-p", "udp", "--dport", "53", "-j", "ACCEPT"}),
+			commented(inputDNSComment(bridge),
+				[]string{"-i", bridge, "-d", gatewayIP, "-p", "tcp", "--dport", "53", "-j", "ACCEPT"}),
+			commented(inputRepliesComment(bridge),
+				[]string{"-i", bridge, "-m", "conntrack", "--ctstate", "ESTABLISHED,RELATED", "-j", "ACCEPT"}),
+			internalDrop,
+		)
+	} else {
+		rules = append(rules, accept)
+	}
+	rules = append(rules, commented(inputDropComment(bridge), []string{"-d", gatewayIP, "-j", "DROP"}))
+	if !ruleExists(ctx, "filter", chainDicerInput, stale) && !slices.ContainsFunc(rules, func(rule []string) bool {
 		return !ruleExists(ctx, "filter", chainDicerInput, rule)
 	}) {
 		return nil
@@ -310,6 +349,9 @@ func removeInputRules(ctx context.Context, bridge string) error {
 	var errs []error
 	for _, comment := range []string{
 		inputAPIDropComment(bridge),
+		inputDNSComment(bridge),
+		inputRepliesComment(bridge),
+		inputInternalComment(bridge),
 		inputAcceptComment(bridge),
 		inputDropComment(bridge),
 	} {

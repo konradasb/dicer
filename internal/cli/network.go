@@ -21,7 +21,7 @@ type printableNetwork struct {
 }
 
 func (p *printableNetwork) Columns() []string {
-	return []string{"ID", "Name", "Subnet", "Gateway", "Bridge", "Nameservers", "MTU", "Isolated", "Usage", "Created"}
+	return []string{"ID", "Name", "Subnet", "Gateway", "Bridge", "Nameservers", "MTU", "Isolated", "Internal", "Usage", "Created"}
 }
 
 func (p *printableNetwork) Rows() []map[string]any {
@@ -36,6 +36,7 @@ func (p *printableNetwork) Rows() []map[string]any {
 			"Nameservers": strings.Join(n.GetNameservers(), ","),
 			"MTU":         n.GetMtu(),
 			"Isolated":    n.GetIsolated(),
+			"Internal":    n.GetInternal(),
 			"Usage":       formatIPUsage(n.GetTotalIps(), n.GetFreeIps()),
 			"Created":     age(timeOf(n.GetCreateTime())),
 		})
@@ -82,6 +83,7 @@ func newNetworkCreateCommand() *cobra.Command {
 			nameservers, _ := cmd.Flags().GetStringSlice("nameservers")
 			mtu, _ := cmd.Flags().GetInt32("mtu")
 			isolated, _ := cmd.Flags().GetBool("isolated")
+			internal, _ := cmd.Flags().GetBool("internal")
 
 			client, cleanup, err := newClient(cmd)
 			if err != nil {
@@ -96,6 +98,7 @@ func newNetworkCreateCommand() *cobra.Command {
 				Nameservers: nameservers,
 				Mtu:         mtu,
 				Isolated:    isolated,
+				Internal:    internal,
 			})
 			if err != nil {
 				return err
@@ -113,6 +116,8 @@ func newNetworkCreateCommand() *cobra.Command {
 		"Upstream DNS servers, asked about names other than the network's instances', comma-separated (default: the daemon's)")
 	cmd.Flags().Int32("mtu", 0, "MTU (default: the daemon's)")
 	cmd.Flags().Bool("isolated", false, "Stop instances on the network reaching each other")
+	cmd.Flags().Bool("internal", false,
+		"Stop instances on the network reaching anything beyond it: the outside, other networks, the host and upstream DNS")
 	requireFlag(cmd, "subnet", "172.20.0.0/16")
 
 	return cmd

@@ -206,6 +206,9 @@ wakes an instance, and what the daemon logs when it cannot.
 
 ### A guest cannot reach the outside world
 
+- A guest on an [internal network](../../concepts/networking#internal-networks)
+  cannot reach it, by design. `dicer network ls` shows which networks are
+  internal.
 - Starting an instance fails with `IPv4 forwarding is not enabled` when
   the host does not forward packets. The package and `install.sh` turn
   forwarding on, but another setting may have turned it off again. To turn
@@ -258,7 +261,9 @@ service must listen on that address or on all of the host's addresses. A
 service listening only on `127.0.0.1` cannot be reached from a guest. The
 host's firewall must also let the port in. With firewalld, add the port to
 the `dicer` zone, as [Networking](../../concepts/networking#firewalld)
-shows.
+shows. A guest on an
+[internal network](../../concepts/networking#internal-networks) cannot reach
+the host at all, and the daemon's API cannot be reached from any guest.
 
 ### Two instances cannot reach each other
 

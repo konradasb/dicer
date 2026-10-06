@@ -4779,11 +4779,16 @@ type Network struct {
 	Nameservers []string               `protobuf:"bytes,7,rep,name=nameservers,proto3" json:"nameservers,omitempty"`
 	// Stops instances on the network reaching each other; each can still
 	// reach the gateway and, through NAT, the outside.
-	Isolated      bool                   `protobuf:"varint,8,opt,name=isolated,proto3" json:"isolated,omitempty"`
-	TotalIps      int64                  `protobuf:"varint,9,opt,name=total_ips,json=totalIps,proto3" json:"total_ips,omitempty"`
-	FreeIps       int64                  `protobuf:"varint,10,opt,name=free_ips,json=freeIps,proto3" json:"free_ips,omitempty"`
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	Isolated   bool                   `protobuf:"varint,8,opt,name=isolated,proto3" json:"isolated,omitempty"`
+	TotalIps   int64                  `protobuf:"varint,9,opt,name=total_ips,json=totalIps,proto3" json:"total_ips,omitempty"`
+	FreeIps    int64                  `protobuf:"varint,10,opt,name=free_ips,json=freeIps,proto3" json:"free_ips,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// Stops instances on the network reaching anything beyond it: the outside,
+	// other networks, the host's services and upstream nameservers. They can
+	// still be reached through published ports. The gateway still answers
+	// their DNS queries about the network's own instances.
+	Internal      bool `protobuf:"varint,13,opt,name=internal,proto3" json:"internal,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4902,6 +4907,13 @@ func (x *Network) GetUpdateTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Network) GetInternal() bool {
+	if x != nil {
+		return x.Internal
+	}
+	return false
+}
+
 // NetworkAllocation is an address assigned to an instance.
 type NetworkAllocation struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -4980,13 +4992,15 @@ func (x *NetworkAllocation) GetTapDevice() string {
 }
 
 type CreateNetworkRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Subnet        string                 `protobuf:"bytes,2,opt,name=subnet,proto3" json:"subnet,omitempty"`
-	Gateway       string                 `protobuf:"bytes,3,opt,name=gateway,proto3" json:"gateway,omitempty"`
-	Mtu           int32                  `protobuf:"varint,4,opt,name=mtu,proto3" json:"mtu,omitempty"`
-	Nameservers   []string               `protobuf:"bytes,5,rep,name=nameservers,proto3" json:"nameservers,omitempty"`
-	Isolated      bool                   `protobuf:"varint,6,opt,name=isolated,proto3" json:"isolated,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Subnet      string                 `protobuf:"bytes,2,opt,name=subnet,proto3" json:"subnet,omitempty"`
+	Gateway     string                 `protobuf:"bytes,3,opt,name=gateway,proto3" json:"gateway,omitempty"`
+	Mtu         int32                  `protobuf:"varint,4,opt,name=mtu,proto3" json:"mtu,omitempty"`
+	Nameservers []string               `protobuf:"bytes,5,rep,name=nameservers,proto3" json:"nameservers,omitempty"`
+	Isolated    bool                   `protobuf:"varint,6,opt,name=isolated,proto3" json:"isolated,omitempty"`
+	// See Network.internal. An internal network takes no nameservers.
+	Internal      bool `protobuf:"varint,7,opt,name=internal,proto3" json:"internal,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5059,6 +5073,13 @@ func (x *CreateNetworkRequest) GetNameservers() []string {
 func (x *CreateNetworkRequest) GetIsolated() bool {
 	if x != nil {
 		return x.Isolated
+	}
+	return false
+}
+
+func (x *CreateNetworkRequest) GetInternal() bool {
+	if x != nil {
+		return x.Internal
 	}
 	return false
 }
@@ -7574,7 +7595,7 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\tfork_name\x18\x02 \x01(\tR\bforkName\x12!\n" +
 	"\fnetwork_name\x18\x03 \x01(\tR\vnetworkName\x12\x1b\n" +
 	"\tstatic_ip\x18\x04 \x01(\tR\bstaticIp\x12,\n" +
-	"\x05ports\x18\x05 \x03(\v2\x16.dicerd.v1.PortMappingR\x05ports\"\xf9\x02\n" +
+	"\x05ports\x18\x05 \x03(\v2\x16.dicerd.v1.PortMappingR\x05ports\"\x95\x03\n" +
 	"\aNetwork\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -7590,7 +7611,8 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vupdate_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"\x9a\x01\n" +
+	"updateTime\x12\x1a\n" +
+	"\binternal\x18\r \x01(\bR\binternal\"\x9a\x01\n" +
 	"\x11NetworkAllocation\x12\x1f\n" +
 	"\vinstance_id\x18\x01 \x01(\tR\n" +
 	"instanceId\x12#\n" +
@@ -7598,14 +7620,15 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\x02ip\x18\x03 \x01(\tR\x02ip\x12\x10\n" +
 	"\x03mac\x18\x04 \x01(\tR\x03mac\x12\x1d\n" +
 	"\n" +
-	"tap_device\x18\x05 \x01(\tR\ttapDevice\"\xac\x01\n" +
+	"tap_device\x18\x05 \x01(\tR\ttapDevice\"\xc8\x01\n" +
 	"\x14CreateNetworkRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06subnet\x18\x02 \x01(\tR\x06subnet\x12\x18\n" +
 	"\agateway\x18\x03 \x01(\tR\agateway\x12\x10\n" +
 	"\x03mtu\x18\x04 \x01(\x05R\x03mtu\x12 \n" +
 	"\vnameservers\x18\x05 \x03(\tR\vnameservers\x12\x1a\n" +
-	"\bisolated\x18\x06 \x01(\bR\bisolated\"\x15\n" +
+	"\bisolated\x18\x06 \x01(\bR\bisolated\x12\x1a\n" +
+	"\binternal\x18\a \x01(\bR\binternal\"\x15\n" +
 	"\x13ListNetworksRequest\"F\n" +
 	"\x14ListNetworksResponse\x12.\n" +
 	"\bnetworks\x18\x01 \x03(\v2\x12.dicerd.v1.NetworkR\bnetworks\"'\n" +

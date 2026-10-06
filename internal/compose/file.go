@@ -220,6 +220,11 @@ type rawNetwork struct {
 	// Isolated stops the network's instances reaching each other.
 	Isolated bool `yaml:"isolated"`
 
+	// Internal stops the network's instances reaching anything beyond it:
+	// the outside, other networks, the host and upstream nameservers. It
+	// takes no `nameservers`.
+	Internal bool `yaml:"internal"`
+
 	// IPAM is another way of giving `subnet` and `gateway`, as Docker Compose
 	// does, with one entry.
 	//

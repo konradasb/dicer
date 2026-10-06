@@ -19,6 +19,7 @@ Also run as `dicer network new`.
 | Flag | Description |
 |---|---|
 | `--gateway string` | Gateway address (default: the first address in the subnet). |
+| `--internal` | Stop instances on the network reaching anything beyond it: the outside, other networks, the host and upstream DNS. |
 | `--isolated` | Stop instances on the network reaching each other. |
 | `--mtu int32` | MTU (default: the daemon's). |
 | `--nameservers strings` | Upstream DNS servers, asked about names other than the network's instances', comma-separated (default: the daemon's). |

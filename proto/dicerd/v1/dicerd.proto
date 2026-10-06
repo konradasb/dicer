@@ -1005,6 +1005,11 @@ message Network {
   int64 free_ips = 10;
   google.protobuf.Timestamp create_time = 11;
   google.protobuf.Timestamp update_time = 12;
+  // Stops instances on the network reaching anything beyond it: the outside,
+  // other networks, the host's services and upstream nameservers. They can
+  // still be reached through published ports. The gateway still answers
+  // their DNS queries about the network's own instances.
+  bool internal = 13;
 }
 
 // NetworkAllocation is an address assigned to an instance.
@@ -1023,6 +1028,8 @@ message CreateNetworkRequest {
   int32 mtu = 4;
   repeated string nameservers = 5;
   bool isolated = 6;
+  // See Network.internal. An internal network takes no nameservers.
+  bool internal = 7;
 }
 
 message ListNetworksRequest {}

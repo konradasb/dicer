@@ -391,6 +391,7 @@ networks:
     subnet: 10.0.0.0/24
     mtu: ${MTU:-1400}
     isolated: ${ISOLATED:-false}
+    internal: ${INTERNAL:-true}
   shared:
     external: ${EXTERNAL:-true}
 volumes:
@@ -413,8 +414,8 @@ volumes:
 	if !job.GetHealthCheck().GetDisabled() {
 		t.Error("disable from a variable was not taken")
 	}
-	if req := p.Networks["lan"].Request; req.GetMtu() != 1400 || req.GetIsolated() {
-		t.Errorf("lan = %v, want mtu 1400, not isolated", req)
+	if req := p.Networks["lan"].Request; req.GetMtu() != 1400 || req.GetIsolated() || !req.GetInternal() {
+		t.Errorf("lan = %v, want mtu 1400, not isolated, internal", req)
 	}
 	if !p.Networks["shared"].External {
 		t.Error("external from a variable was not taken")
@@ -530,6 +531,8 @@ func TestLoadRefuses(t *testing.T) {
 		{"undeclared network", "services: {web: {image: x, networks: [a]}}", "network a is not declared"},
 		{"gateway without subnet", "services: {web: {image: x}}\nnetworks: {a: {gateway: 10.0.0.1}}", "a gateway needs a subnet"},
 		{"external network with settings", "services: {web: {image: x}}\nnetworks: {a: {external: true, subnet: 10.0.0.0/24}}",
+			"external network is used as it is"},
+		{"external internal network", "services: {web: {image: x}}\nnetworks: {a: {external: true, internal: true}}",
 			"external network is used as it is"},
 		{"undeclared volume", "services: {web: {image: x, volumes: [data:/data]}}", "volume data is not declared"},
 		{"anonymous volume", "services: {web: {image: x, volumes: [/data]}}", "anonymous volumes are not supported"},

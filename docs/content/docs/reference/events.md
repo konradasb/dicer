@@ -125,7 +125,7 @@ Every network event has `subnet` and `gateway` attributes.
 
 | Event | `action` | Attributes | What it means |
 |---|---|---|---|
-| Created | `EVENT_ACTION_CREATED` | `subnet`, `gateway` | The network was created with `dicer network create`. The message also says whether it is isolated. |
+| Created | `EVENT_ACTION_CREATED` | `subnet`, `gateway` | The network was created with `dicer network create`. The message also says whether it is isolated or internal. |
 | Deleted | `EVENT_ACTION_DELETED` | `subnet`, `gateway` | The network was deleted, and the addresses it had allocated were released. |
 
 ## Volumes

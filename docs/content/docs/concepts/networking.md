@@ -84,9 +84,10 @@ PING db.default (172.20.0.5): 56 data bytes
 ```
 
 The daemon asks the network's upstream nameservers about every other name,
-so the guests see the outside world as the host does. Reverse lookups of the
-network's own addresses resolve to their instances' names, and are never
-sent upstream.
+so the guests see the outside world as the host does. On an
+[internal network](#internal-networks) it asks nobody, and every other name
+does not resolve. Reverse lookups of the network's own addresses resolve to
+their instances' names, and are never sent upstream.
 
 Only running and paused instances resolve. The name of an instance that is
 stopped or on [standby](../instances#standby) does not. On a network created
@@ -108,9 +109,9 @@ See [firewalld](#firewalld).
 
 A guest reaches the host as `host.dicer.internal`, which resolves to the
 network's gateway: the host's address on the network.
-`gateway.dicer.internal` is the same. Both resolve on every network,
-isolated ones too, so a guest can use a database or an API running on the
-host without knowing its address:
+`gateway.dicer.internal` is the same. Both resolve on every network but an
+[internal](#internal-networks) one, isolated networks too, so a guest can
+use a database or an API running on the host without knowing its address:
 
 ```console
 $ dicer exec app wget -qO- http://host.dicer.internal:8000/
@@ -125,9 +126,10 @@ shows.
 Without firewalld, Dicer does not limit what guests can reach on the host.
 Every service on the host that listens on an address other than
 `127.0.0.1`, such as SSH, can be reached from every guest, at that address.
-Bind a service that guests must not reach to `127.0.0.1`, or block guests
-from it in the host's firewall. The one exception is the daemon's own API.
-Guests can never reach it, whatever address it listens on.
+Bind a service that guests must not reach to `127.0.0.1`, block guests
+from it in the host's firewall, or put the guests on an
+[internal network](#internal-networks). Guests can never reach the daemon's
+own API, whatever address it listens on.
 {{< /callout >}}
 
 Names under `dicer.internal` are never sent upstream. Any name there other
@@ -149,6 +151,33 @@ Guests on different networks cannot reach each other, nor another network's
 gateway. A network created with `--isolated` also stops its own guests
 reaching each other. Each can still reach its gateway and, through NAT, the
 outside world.
+
+### Internal networks
+
+A network created with `--internal` keeps its guests from reaching anything
+beyond it. It suits code you don't trust, such as a sandbox for untrusted
+jobs:
+
+```console
+$ dicer network create sandbox --subnet 172.31.0.0/24 --internal
+```
+
+Its guests cannot reach:
+
+- the outside world;
+- other networks;
+- any service on the host;
+- upstream nameservers.
+
+They can still reach each other, unless the network is also `--isolated`.
+The gateway answers their DNS queries about the network's own instances,
+and nothing else. `host.dicer.internal` does not resolve either.
+
+Connections into the network still work. A port published with `-p` can be
+reached from outside the host, and a connection still wakes an instance on
+[standby](../../guides/standby#waking-on-a-connection). An internal network
+takes no `--nameservers`, and a network cannot be made internal after it is
+created.
 
 Dicer keeps its iptables rules in chains of its own, whose names start with
 `DICER-`. Put rules of your own in `DICER-USER`. It is consulted before

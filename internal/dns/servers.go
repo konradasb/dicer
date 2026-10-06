@@ -113,7 +113,7 @@ func (s *Servers) networkOf(nw types.Network) (network, error) {
 	}
 
 	nameservers := nw.Nameservers
-	if len(nameservers) == 0 {
+	if len(nameservers) == 0 && !nw.Internal {
 		nameservers = s.cfg.DefaultNameservers
 	}
 	upstreams := make([]string, 0, len(nameservers))
@@ -128,13 +128,15 @@ func (s *Servers) networkOf(nw types.Network) (network, error) {
 		gateway:          gateway,
 		upstreams:        upstreams,
 		answersInstances: !nw.Isolated,
+		internal:         nw.Internal,
 	}, nil
 }
 
 // sameNetwork reports whether a server for a serves b as it is.
 func sameNetwork(a, b network) bool {
 	return a.name == b.name && a.subnet == b.subnet && a.gateway == b.gateway &&
-		slices.Equal(a.upstreams, b.upstreams) && a.answersInstances == b.answersInstances
+		slices.Equal(a.upstreams, b.upstreams) && a.answersInstances == b.answersInstances &&
+		a.internal == b.internal
 }
 
 // Stop stops a network's server, if it has one.

@@ -123,6 +123,7 @@ func networkToProto(n types.Network, allocated int) *dicerdv1.Network {
 		Mtu:         int32(n.MTU),
 		Nameservers: n.Nameservers,
 		Isolated:    n.Isolated,
+		Internal:    n.Internal,
 		TotalIps:    total,
 		FreeIps:     free,
 		CreateTime:  timestamppb.New(n.CreatedAt),

@@ -185,6 +185,7 @@ CopyToInstanceStart is the first message on a CopyToInstance stream.
 | `mtu` | `int32` |  |
 | `nameservers` | repeated `string` |  |
 | `isolated` | `bool` |  |
+| `internal` | `bool` | See Network.internal. An internal network takes no nameservers. |
 
 ### CreateSnapshotRequest
 
@@ -760,6 +761,7 @@ Network is a host-local bridge with NAT to the uplink.
 | `free_ips` | `int64` |  |
 | `create_time` | `google.protobuf.Timestamp` |  |
 | `update_time` | `google.protobuf.Timestamp` |  |
+| `internal` | `bool` | Stops instances on the network reaching anything beyond it: the outside, other networks, the host's services and upstream nameservers. They can still be reached through published ports. The gateway still answers their DNS queries about the network's own instances. |
 
 ### NetworkAllocation
 

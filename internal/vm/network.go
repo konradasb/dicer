@@ -132,8 +132,12 @@ func guestIdentity(instance types.InstanceSpec, setup *networkSetup) *diceragent
 }
 
 // upstreamNameservers are the nameservers a network's names are looked up
-// in: its own, or the default.
+// in: its own, or the default. An internal network, whose guests cannot
+// reach any, has none.
 func upstreamNameservers(nw types.Network) []string {
+	if nw.Internal {
+		return nil
+	}
 	if len(nw.Nameservers) > 0 {
 		return nw.Nameservers
 	}

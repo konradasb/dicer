@@ -34,7 +34,7 @@ func (h *Host) SetupBridge(ctx context.Context, nw *types.Network) error {
 	h.networks[nw.Bridge] = *nw
 	h.mu.Unlock()
 
-	if err := h.setupIPTables(ctx, nw.Bridge, nw.Subnet); err != nil {
+	if err := h.setupIPTables(ctx, nw.Bridge, nw.Subnet, nw.Internal); err != nil {
 		return fmt.Errorf("set up iptables rules: %w", err)
 	}
 

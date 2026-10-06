@@ -271,7 +271,8 @@ func (b *builder) network(key string, raw *rawNetwork) (*Network, error) {
 	}
 
 	if raw.External {
-		if subnet != "" || gateway != "" || raw.MTU != 0 || len(raw.Nameservers) > 0 || raw.Isolated {
+		if subnet != "" || gateway != "" || raw.MTU != 0 || len(raw.Nameservers) > 0 || raw.Isolated ||
+			raw.Internal {
 			return nil, errors.New("an external network is used as it is: give it no settings but name")
 		}
 		return n, nil
@@ -287,6 +288,7 @@ func (b *builder) network(key string, raw *rawNetwork) (*Network, error) {
 		Mtu:         raw.MTU,
 		Nameservers: raw.Nameservers,
 		Isolated:    raw.Isolated,
+		Internal:    raw.Internal,
 	}
 	return n, nil
 }

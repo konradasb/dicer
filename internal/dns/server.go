@@ -11,9 +11,13 @@
 // network's addresses. Every other query is forwarded, as it is, to the
 // network's upstream nameservers.
 //
-// On every network, isolated ones too, it also answers for the host under
-// InternalDomain: host.dicer.internal and gateway.dicer.internal are the
-// network's gateway, the host's address on the network.
+// On every network but an internal one, isolated ones too, it also answers
+// for the host under InternalDomain: host.dicer.internal and
+// gateway.dicer.internal are the network's gateway, the host's address on
+// the network.
+//
+// An internal network's guests can reach neither the host nor the outside,
+// so its server forwards nothing, and does not answer for the host.
 package dns
 
 import (
@@ -125,12 +129,16 @@ type network struct {
 	subnet netip.Prefix
 	// gateway is the host's address on the network.
 	gateway netip.Addr
-	// upstreams are the nameservers forwarded to, as host:port.
+	// upstreams are the nameservers forwarded to, as host:port. An
+	// internal network has none.
 	upstreams []string
 	// answersInstances is whether the network's instances' names are
 	// answered: not on an isolated network, whose instances cannot reach
 	// each other anyway.
 	answersInstances bool
+	// internal is whether the network's guests are kept from the host and
+	// the outside, so that neither's names are answered.
+	internal bool
 }
 
 // server serves one network.
@@ -282,8 +290,9 @@ func (s *server) serveConn(ctx context.Context, conn net.Conn) {
 }
 
 // answer replies to one query: from the network's own names if it asks for
-// one, or else with what forward gets from upstream. Nil means no reply: a
-// message too broken to answer.
+// one, or else with what forward gets from upstream. An internal network's
+// other names do not exist. Nil means no reply: a message too broken to
+// answer.
 func (s *server) answer(
 	ctx context.Context, query []byte, forward func(context.Context, []byte) ([]byte, error),
 ) []byte {
@@ -305,6 +314,11 @@ func (s *server) answer(
 			s.metrics.RecordDNSQuery(s.network.name, QueryLocal)
 			return reply(header, questions, rcode, records)
 		}
+	}
+
+	if s.network.internal {
+		s.metrics.RecordDNSQuery(s.network.name, QueryLocal)
+		return reply(header, questions, dnsmessage.RCodeNameError, nil)
 	}
 
 	started := time.Now()
@@ -332,7 +346,7 @@ func (s *server) ownRecords(q dnsmessage.Question) ([]dnsmessage.Resource, dnsme
 		// The network's own addresses are never asked of upstream, which
 		// would learn nothing of them but what the guests are looking at.
 		var records []dnsmessage.Resource
-		if addr == s.network.gateway {
+		if addr == s.network.gateway && !s.network.internal {
 			records = append(records, ptrRecord(q.Name, hostNames[0]+"."))
 		} else if s.network.answersInstances {
 			for _, n := range s.resolver.LookupAddr(s.network.name, addr) {
@@ -345,9 +359,10 @@ func (s *server) ownRecords(q dnsmessage.Question) ([]dnsmessage.Resource, dnsme
 		return records, dnsmessage.RCodeSuccess, true
 	}
 
-	// The host, which every network's guests may reach, isolated or not.
+	// The host, which the guests of every network but an internal one may
+	// reach, isolated or not.
 	if name == InternalDomain || strings.HasSuffix(name, "."+InternalDomain) {
-		if !slices.Contains(hostNames, name) {
+		if s.network.internal || !slices.Contains(hostNames, name) {
 			return nil, dnsmessage.RCodeNameError, true
 		}
 		return addressRecords(q, []netip.Addr{s.network.gateway}), dnsmessage.RCodeSuccess, true

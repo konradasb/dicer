@@ -385,6 +385,12 @@ depends_on:
 
 `isolated` stops the network's instances reaching each other.
 
+### `networks.*.internal` {#networks-internal}
+
+*boolean*
+
+`internal` stops the network's instances reaching anything beyond it: the outside, other networks, the host and upstream nameservers. It takes no `nameservers`.
+
 ## `networks.*.ipam` {#networks-ipam}
 
 *mapping*

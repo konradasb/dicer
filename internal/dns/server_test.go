@@ -505,6 +505,37 @@ func TestServerOnAnIsolatedNetworkOnlyForwards(t *testing.T) {
 	}
 }
 
+// An internal network's guests can reach neither the host nor the outside,
+// so its server answers for the network's instances and nothing else.
+func TestServerOnAnInternalNetworkAnswersOnlyItsInstances(t *testing.T) {
+	srv, err := listen(t.Context(), "127.0.0.1:0", network{
+		name:             "shop",
+		domain:           "shop",
+		subnet:           netip.MustParsePrefix("10.8.0.0/24"),
+		gateway:          netip.MustParseAddr("10.8.0.1"),
+		answersInstances: true,
+		internal:         true,
+	}, fakeResolver{"db": "10.8.0.5"}, &fakeMetrics{}, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.close)
+
+	for _, name := range []string{"db.", "db.shop."} {
+		if m := ask(t, "udp", srv.addr(), name, dnsmessage.TypeA); !slices.Equal(addrsIn(m), []string{"10.8.0.5"}) {
+			t.Errorf("%s = %s %q, want the instance, 10.8.0.5", name, m.RCode, addrsIn(m))
+		}
+	}
+	for _, name := range []string{"example.com.", "stranger.", "host.dicer.internal.", "gateway.dicer.internal."} {
+		if m := ask(t, "tcp", srv.addr(), name, dnsmessage.TypeA); m.RCode != dnsmessage.RCodeNameError {
+			t.Errorf("%s = %s %q, want NXDOMAIN", name, m.RCode, addrsIn(m))
+		}
+	}
+	if m := ask(t, "udp", srv.addr(), "1.0.8.10.in-addr.arpa.", dnsmessage.TypePTR); m.RCode != dnsmessage.RCodeNameError {
+		t.Errorf("PTR of the gateway = %s with %d answers, want NXDOMAIN", m.RCode, len(m.Answers))
+	}
+}
+
 func TestServerRefusesWhatIsNotAQuery(t *testing.T) {
 	srv := startServer(t, fakeResolver{}, nil, false)
 

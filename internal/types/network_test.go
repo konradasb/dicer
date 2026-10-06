@@ -79,3 +79,23 @@ func TestValidatePorts(t *testing.T) {
 		})
 	}
 }
+
+func TestNetworkValidate(t *testing.T) {
+	valid := map[string]Network{
+		"plain":                        {},
+		"nameservers":                  {Nameservers: []string{"8.8.8.8"}},
+		"internal without nameservers": {Internal: true},
+	}
+	for name, n := range valid {
+		t.Run(name, func(t *testing.T) {
+			if err := n.Validate(); err != nil {
+				t.Errorf("Validate() = %v, want nil", err)
+			}
+		})
+	}
+
+	n := Network{Internal: true, Nameservers: []string{"8.8.8.8"}}
+	if err := n.Validate(); !errors.Is(err, errdefs.ErrInvalidArgument) {
+		t.Errorf("Validate() of an internal network with nameservers = %v, want an invalid argument error", err)
+	}
+}

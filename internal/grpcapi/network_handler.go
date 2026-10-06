@@ -62,9 +62,11 @@ func (h *networkHandler) CreateNetwork(
 	if err != nil {
 		return nil, err
 	}
-	nameservers, err := networkNameservers(req.GetNameservers())
-	if err != nil {
-		return nil, err
+	nameservers := req.GetNameservers()
+	if !req.GetInternal() {
+		if nameservers, err = networkNameservers(nameservers); err != nil {
+			return nil, err
+		}
 	}
 
 	now := time.Now()
@@ -77,8 +79,12 @@ func (h *networkHandler) CreateNetwork(
 		MTU:         mtu,
 		Nameservers: nameservers,
 		Isolated:    req.GetIsolated(),
+		Internal:    req.GetInternal(),
 		CreatedAt:   now,
 		UpdatedAt:   now,
+	}
+	if err := n.Validate(); err != nil {
+		return nil, err
 	}
 
 	if err := h.definitions.CreateNetwork(n); err != nil {
@@ -88,6 +94,9 @@ func (h *networkHandler) CreateNetwork(
 	message := fmt.Sprintf("Created network with subnet %s, gateway %s", n.Subnet, n.Gateway)
 	if n.Isolated {
 		message += "; isolated: its instances cannot reach each other"
+	}
+	if n.Internal {
+		message += "; internal: its instances cannot reach the host or beyond it"
 	}
 	h.record(n, events.ActionCreated, message)
 

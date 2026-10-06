@@ -15,20 +15,21 @@ import (
 
 // A network's guests may reach its gateway, the host's address on the
 // network: they ask its DNS server, and reach the host itself as
-// host.dicer.internal. Dicer's iptables INPUT rules let them, ahead of the
-// host's own; where firewalld runs, its rules come from a table iptables
-// cannot override, so the bridge is also bound to firewalldZone, which
-// decides what on the host they may reach, and lets their traffic be
-// forwarded.
+// host.dicer.internal. An internal network's guests may only ask the DNS
+// server. Dicer's iptables INPUT rules let them, ahead of the host's own;
+// where firewalld runs, its rules come from a table iptables cannot
+// override, so the bridge is also bound to firewalldZone, which decides what
+// on the host they may reach, and lets their traffic be forwarded.
 
 // ensureGatewayAccess lets a network's guests reach its gateway, and no
 // other network's guests reach it. They cannot reach the daemon's API on any
-// of the host's addresses. A firewalld without firewalldZone is
+// of the host's addresses, and an internal network's guests reach nothing on
+// the host but the gateway's DNS server. A firewalld without firewalldZone is
 // logged, not returned: the guests still run, but firewalld turns their
 // traffic away, to the host and beyond it.
 func (h *Host) ensureGatewayAccess(ctx context.Context, nw *types.Network) error {
 	h.rulesMu.Lock()
-	err := ensureInputRules(ctx, nw.Bridge, nw.Gateway, h.config.APIPort)
+	err := ensureInputRules(ctx, nw.Bridge, nw.Gateway, h.config.APIPort, nw.Internal)
 	h.rulesMu.Unlock()
 	if err != nil {
 		return fmt.Errorf("set up input rules: %w", err)

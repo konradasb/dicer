@@ -14,16 +14,20 @@ import (
 // Network is a bridged network instances attach to, with an address pool of
 // its own.
 type Network struct {
-	ID          string    `yaml:"id"`
-	Name        string    `yaml:"name"`
-	Gateway     string    `yaml:"gateway"`
-	Subnet      string    `yaml:"subnet"`
-	Bridge      string    `yaml:"bridge"`
-	Nameservers []string  `yaml:"nameservers,omitempty"`
-	MTU         int       `yaml:"mtu,omitempty"`
-	Isolated    bool      `yaml:"isolated,omitempty"`
-	CreatedAt   time.Time `yaml:"created_at"`
-	UpdatedAt   time.Time `yaml:"updated_at"`
+	ID          string   `yaml:"id"`
+	Name        string   `yaml:"name"`
+	Gateway     string   `yaml:"gateway"`
+	Subnet      string   `yaml:"subnet"`
+	Bridge      string   `yaml:"bridge"`
+	Nameservers []string `yaml:"nameservers,omitempty"`
+	MTU         int      `yaml:"mtu,omitempty"`
+	Isolated    bool     `yaml:"isolated,omitempty"`
+	// Internal stops the network's instances reaching anything beyond it:
+	// the outside, other networks, the host's services and upstream
+	// nameservers.
+	Internal  bool      `yaml:"internal,omitempty"`
+	CreatedAt time.Time `yaml:"created_at"`
+	UpdatedAt time.Time `yaml:"updated_at"`
 
 	// TotalIPs and FreeIPs count the addresses for instances. They are
 	// computed when the network is read and not stored.
@@ -43,6 +47,16 @@ type NetworkAllocation struct {
 	// and not stored.
 	InstanceName string `yaml:"-"`
 	TAPDevice    string `yaml:"-"`
+}
+
+// Validate returns an invalid argument error if the network's settings
+// contradict each other.
+func (n Network) Validate() error {
+	if n.Internal && len(n.Nameservers) > 0 {
+		return errdefs.InvalidArgument("an internal network cannot use nameservers, " +
+			"since its instances cannot reach them: leave the nameservers out")
+	}
+	return nil
 }
 
 // Netmask returns the network's subnet mask in dotted-quad form.

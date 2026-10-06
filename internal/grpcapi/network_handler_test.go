@@ -38,6 +38,9 @@ func TestCreateNetworkRefusesWhatCannotWork(t *testing.T) {
 		{"MTU too small", &dicerdv1.CreateNetworkRequest{Subnet: "10.0.0.0/24", Mtu: 100}},
 		{"MTU negative", &dicerdv1.CreateNetworkRequest{Subnet: "10.0.0.0/24", Mtu: -1}},
 		{"nameserver not an address", &dicerdv1.CreateNetworkRequest{Subnet: "10.0.0.0/24", Nameservers: []string{"dns"}}},
+		{"internal with nameservers", &dicerdv1.CreateNetworkRequest{
+			Subnet: "10.0.0.0/24", Internal: true, Nameservers: []string{"8.8.8.8"},
+		}},
 	}
 
 	for _, tt := range tests {
@@ -48,6 +51,21 @@ func TestCreateNetworkRefusesWhatCannotWork(t *testing.T) {
 			_, err := s.CreateNetwork(t.Context(), tt.req)
 			wantClass(t, err, errdefs.ErrInvalidArgument)
 		})
+	}
+}
+
+// An internal network asks no upstream nameservers, so it is given none.
+func TestInternalNetworkHasNoNameservers(t *testing.T) {
+	s, _ := newTestServer(t)
+
+	n, err := s.CreateNetwork(t.Context(), &dicerdv1.CreateNetworkRequest{
+		Name: "sandbox", Subnet: "10.9.0.0/24", Internal: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateNetwork: %v", err)
+	}
+	if !n.GetInternal() || len(n.GetNameservers()) != 0 {
+		t.Errorf("internal %v, nameservers %v; want internal and none", n.GetInternal(), n.GetNameservers())
 	}
 }
 
