@@ -118,9 +118,17 @@ $ dicer exec app wget -qO- http://host.dicer.internal:8000/
 
 The service on the host must listen on the gateway's address, or on all of
 the host's addresses. One that listens only on `127.0.0.1` cannot be reached.
-The host's firewall must also let the port in from the guests. With
-firewalld, add the port to the `dicer` zone, as [firewalld](#firewalld)
+With firewalld, add the port to the `dicer` zone, as [firewalld](#firewalld)
 shows.
+
+{{< callout type="warning" >}}
+Without firewalld, Dicer does not limit what guests can reach on the host.
+Every service on the host that listens on an address other than
+`127.0.0.1`, such as SSH, can be reached from every guest, at that address.
+Bind a service that guests must not reach to `127.0.0.1`, or block guests
+from it in the host's firewall. The one exception is the daemon's own API.
+Guests can never reach it, whatever address it listens on.
+{{< /callout >}}
 
 Names under `dicer.internal` are never sent upstream. Any name there other
 than these two does not resolve.

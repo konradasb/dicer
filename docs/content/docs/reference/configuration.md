@@ -81,7 +81,7 @@ The daemon's own settings. The sections after them are the API, resources, netwo
 
 *mapping*
 
-`tcp` is the network listener. Without tls it is unauthenticated and unencrypted: anyone who can reach it has root-equivalent access to this host.
+`tcp` is the network listener. Without tls it is unauthenticated and unencrypted: anyone who can reach it has root-equivalent access to this host. Guests cannot reach it, on any of the host's addresses.
 
 ### `api.tcp.listen` {#api-tcp-listen}
 

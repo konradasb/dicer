@@ -101,7 +101,8 @@ $ dicer info | grep 'Network API'
 ```
 
 Restarting the daemon leaves running guests alone. Open the port in the
-host's firewall for the addresses clients connect from.
+host's firewall for the addresses clients connect from. The host's own
+guests can never reach the port, whatever address it listens on.
 
 With `client_ca_file` set, the daemon accepts only clients with a
 certificate from that authority. It turns any other client away during the

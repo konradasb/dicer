@@ -263,6 +263,7 @@ func (d *daemon) initServices() error {
 		UplinkInterface:         d.cfg.Network.UplinkInterface,
 		UploadBurstMultiplier:   d.cfg.Network.UploadBurstMultiplier,
 		DownloadBurstMultiplier: d.cfg.Network.DownloadBurstMultiplier,
+		APIPort:                 d.cfg.API.TCP.Port(),
 		Logger:                  d.logger,
 	})
 

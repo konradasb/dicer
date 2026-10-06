@@ -152,6 +152,8 @@ func TestValidate(t *testing.T) {
 		{name: "missing socket", mutate: func(c *Config) { c.API.Socket.Path = "" }, wantErr: true},
 		{name: "tcp listener", mutate: func(c *Config) { c.API.TCP.Listen = "0.0.0.0:7443" }},
 		{name: "tcp without port", mutate: func(c *Config) { c.API.TCP.Listen = "0.0.0.0" }, wantErr: true},
+		{name: "tcp with named port", mutate: func(c *Config) { c.API.TCP.Listen = "0.0.0.0:https" }, wantErr: true},
+		{name: "tcp on any port", mutate: func(c *Config) { c.API.TCP.Listen = "0.0.0.0:0" }, wantErr: true},
 		{name: "socket group by id", mutate: func(c *Config) { c.API.Socket.Group = "0" }},
 		{name: "unknown socket group", mutate: func(c *Config) { c.API.Socket.Group = "no-such-group" }, wantErr: true},
 		{name: "no keepalive interval", mutate: func(c *Config) { c.API.Keepalive.Interval = 0 }, wantErr: true},
@@ -426,5 +428,30 @@ func TestLoadConfigEvents(t *testing.T) {
 		if _, err := loadConfig(writeConfig(t, body)); err == nil {
 			t.Errorf("loadConfig accepted %q", body)
 		}
+	}
+}
+
+func TestTCPConfigPort(t *testing.T) {
+	tests := []struct {
+		name   string
+		listen string
+		want   int
+	}{
+		{"unset", "", 0},
+		{"all addresses", "0.0.0.0:9000", 9000},
+		{"one address", "10.0.0.1:7443", 7443},
+		{"no host", ":9000", 9000},
+		{"IPv6", "[::]:9000", 9000},
+		{"no port", "0.0.0.0", 0},
+		{"named port", "0.0.0.0:https", 0},
+		{"port 0", "0.0.0.0:0", 0},
+		{"port out of range", "0.0.0.0:70000", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (TCPConfig{Listen: tt.listen}).Port(); got != tt.want {
+				t.Errorf("TCPConfig{Listen: %q}.Port() = %d, want %d", tt.listen, got, tt.want)
+			}
+		})
 	}
 }

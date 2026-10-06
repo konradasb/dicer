@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -94,6 +95,7 @@ func isolationStage1Comment(bridge string) string { return "dicer-isolation-s1-"
 func isolationStage2Comment(bridge string) string { return "dicer-isolation-s2-" + bridge }
 func inputAcceptComment(bridge string) string     { return "dicer-input-accept-" + bridge }
 func inputDropComment(bridge string) string       { return "dicer-input-drop-" + bridge }
+func inputAPIDropComment(bridge string) string    { return "dicer-input-api-drop-" + bridge }
 
 // setupIPTables ensures the NAT, forwarding and isolation rules of a bridge
 // and its subnet. Input rules are gateway access's: see ensureGatewayAccess.
@@ -272,21 +274,33 @@ func removeIsolationRules(ctx context.Context, bridge string) error {
 }
 
 // ensureInputRules accepts traffic to a bridge's gateway IP only from that
-// bridge, so instances cannot reach another network's gateway. The ACCEPT and DROP
-// rules are replaced together to keep their order.
-func ensureInputRules(ctx context.Context, bridge, gatewayIP string) error {
-	accept := commented(inputAcceptComment(bridge), []string{"-i", bridge, "-d", gatewayIP, "-j", "ACCEPT"})
-	drop := commented(inputDropComment(bridge), []string{"-d", gatewayIP, "-j", "DROP"})
-	if ruleExists(ctx, "filter", chainDicerInput, accept) && ruleExists(ctx, "filter", chainDicerInput, drop) {
+// bridge, so instances cannot reach another network's gateway. If apiPort is
+// not 0, it first drops the bridge's TCP traffic to that port on any of the
+// host's addresses, so guests cannot reach the daemon's API. The rules are
+// replaced together to keep their order.
+func ensureInputRules(ctx context.Context, bridge, gatewayIP string, apiPort int) error {
+	var rules [][]string
+	if apiPort != 0 {
+		rules = append(rules, commented(inputAPIDropComment(bridge),
+			[]string{"-i", bridge, "-p", "tcp", "--dport", strconv.Itoa(apiPort), "-j", "DROP"}))
+	} else if err := deleteRulesWithComment(ctx, "filter", chainDicerInput, inputAPIDropComment(bridge)); err != nil {
+		return fmt.Errorf("remove input API drop rule for %s: %w", bridge, err)
+	}
+	rules = append(rules,
+		commented(inputAcceptComment(bridge), []string{"-i", bridge, "-d", gatewayIP, "-j", "ACCEPT"}),
+		commented(inputDropComment(bridge), []string{"-d", gatewayIP, "-j", "DROP"}),
+	)
+	if !slices.ContainsFunc(rules, func(rule []string) bool {
+		return !ruleExists(ctx, "filter", chainDicerInput, rule)
+	}) {
 		return nil
 	}
 
 	_ = removeInputRules(ctx, bridge)
-	if err := appendRule(ctx, "filter", chainDicerInput, accept); err != nil {
-		return fmt.Errorf("add input accept rule for %s: %w", bridge, err)
-	}
-	if err := appendRule(ctx, "filter", chainDicerInput, drop); err != nil {
-		return fmt.Errorf("add input drop rule for %s: %w", bridge, err)
+	for _, rule := range rules {
+		if err := appendRule(ctx, "filter", chainDicerInput, rule); err != nil {
+			return fmt.Errorf("add input rule for %s: %w", bridge, err)
+		}
 	}
 	return nil
 }
@@ -295,6 +309,7 @@ func ensureInputRules(ctx context.Context, bridge, gatewayIP string) error {
 func removeInputRules(ctx context.Context, bridge string) error {
 	var errs []error
 	for _, comment := range []string{
+		inputAPIDropComment(bridge),
 		inputAcceptComment(bridge),
 		inputDropComment(bridge),
 	} {

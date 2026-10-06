@@ -180,7 +180,7 @@ type APIConfig struct {
 
 	// TCP is the network listener. Without tls it is unauthenticated and
 	// unencrypted: anyone who can reach it has root-equivalent access to
-	// this host.
+	// this host. Guests cannot reach it, on any of the host's addresses.
 	TCP TCPConfig `yaml:"tcp"`
 
 	// Keepalive is how the daemon finds clients that have gone without
@@ -271,6 +271,23 @@ type TCPConfig struct {
 // Enabled reports whether the API is served over TCP.
 func (t TCPConfig) Enabled() bool {
 	return t.Listen != ""
+}
+
+// Port returns the TCP port the API is served on, or 0 if it is not served
+// over TCP or Listen names no port number.
+func (t TCPConfig) Port() int {
+	if !t.Enabled() {
+		return 0
+	}
+	_, port, err := net.SplitHostPort(t.Listen)
+	if err != nil {
+		return 0
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil || n < 1 || n > 65535 {
+		return 0
+	}
+	return n
 }
 
 // TLSConfig configures TLS on the network listener. The certificate and key
@@ -552,6 +569,10 @@ func (a *APIConfig) validate() error {
 
 	if _, _, err := net.SplitHostPort(a.TCP.Listen); err != nil {
 		return fmt.Errorf("invalid api.tcp.listen %q: want host:port: %w", a.TCP.Listen, err)
+	}
+	// Guests are kept from the port by its number, so it must have one.
+	if a.TCP.Port() == 0 {
+		return fmt.Errorf("invalid api.tcp.listen %q: want a port number from 1 to 65535", a.TCP.Listen)
 	}
 
 	return a.TCP.TLS.validate()

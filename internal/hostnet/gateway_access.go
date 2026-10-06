@@ -22,12 +22,13 @@ import (
 // forwarded.
 
 // ensureGatewayAccess lets a network's guests reach its gateway, and no
-// other network's guests reach it. A firewalld without firewalldZone is
+// other network's guests reach it. They cannot reach the daemon's API on any
+// of the host's addresses. A firewalld without firewalldZone is
 // logged, not returned: the guests still run, but firewalld turns their
 // traffic away, to the host and beyond it.
 func (h *Host) ensureGatewayAccess(ctx context.Context, nw *types.Network) error {
 	h.rulesMu.Lock()
-	err := ensureInputRules(ctx, nw.Bridge, nw.Gateway)
+	err := ensureInputRules(ctx, nw.Bridge, nw.Gateway, h.config.APIPort)
 	h.rulesMu.Unlock()
 	if err != nil {
 		return fmt.Errorf("set up input rules: %w", err)
