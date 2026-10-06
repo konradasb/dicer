@@ -9,32 +9,38 @@ related:
   - /docs/reference/configuration
 ---
 
-Dicer runs on one Linux host, as a daemon, `dicerd`, managed by systemd, with
-the `dicer` command line beside it. On Debian, Ubuntu, Fedora, RHEL and its
-rebuilds, and openSUSE, install the `dicer` package, which has both and the
-service, by hand or with Ansible; elsewhere, the install script builds them
-from source and sets the daemon up.
+Dicer runs on one Linux host. The daemon, `dicerd`, runs as a systemd
+service, and the `dicer` command line talks to it. There are three ways to
+install them:
+
+- [From packages](#install-from-packages), on Debian, Ubuntu, Fedora, RHEL
+  and its rebuilds, and openSUSE.
+- [With Ansible](#install-with-ansible), which installs the same packages.
+- [From source](#install-from-source), with the install script, on any other
+  distribution.
 
 ## Requirements
 
 **The host**
 
 - Linux on x86_64 or aarch64, with systemd.
-- KVM: `/dev/kvm` must exist. On a cloud virtual machine, that means one
-  with nested virtualisation enabled.
+- KVM: `/dev/kvm` must exist. On a cloud virtual machine, nested
+  virtualisation must be turned on.
 - `erofs-utils`, for `mkfs.erofs`, and `e2fsprogs`, for `mke2fs`.
 - `iptables`.
-- With firewalld (Fedora, RHEL and its rebuilds, openSUSE), its `dicer`
-  zone, which the package and the install script install: see
+- Where firewalld runs, as on Fedora, RHEL and openSUSE, the `dicer`
+  firewalld zone. The package and the install script both install it. See
   [Networking](../../concepts/networking#firewalld).
 
 The package brings `erofs-utils`, `e2fsprogs` and `iptables` with it.
 
-**To build**, for the install script
+**To build from source**
 
-- Go 1.25 or later, `git`, `make` and `curl`.
+- Go 1.25.5 or later, `git`, `make` and `curl`.
 
-To install them with the distribution's package manager:
+Distributions often carry an older Go, so install it from
+[go.dev/dl](https://go.dev/dl/). Install everything else, the host's tools
+included, with the distribution's package manager:
 
 {{< tabs >}}
   {{< tab name="Debian, Ubuntu" >}}
@@ -68,9 +74,6 @@ To install them with the distribution's package manager:
   {{< /tab >}}
 {{< /tabs >}}
 
-and Go from [go.dev/dl](https://go.dev/dl/), as distributions often carry an
-older one.
-
 Check that KVM is there:
 
 ```console
@@ -80,8 +83,9 @@ crw-rw---- 1 root kvm 10, 232 Sep 24 09:12 /dev/kvm
 
 ## Install from packages
 
-Releases are published to an apt and a dnf repository at `pkg.dicer.sh`,
-signed with Dicer's key. Add it, then install `dicer`:
+Releases are published to apt and RPM repositories at `pkg.dicer.sh`,
+signed with Dicer's key. Add the repository, then install the `dicer`
+package:
 
 {{< tabs >}}
   {{< tab name="Debian, Ubuntu" >}}
@@ -94,7 +98,7 @@ signed with Dicer's key. Add it, then install `dicer`:
   $ sudo apt install dicer
   ```
 
-  The daemon is enabled and started.
+  The package enables and starts the daemon.
   {{< /tab >}}
   {{< tab name="Fedora, RHEL, Rocky, AlmaLinux" >}}
   On RHEL and its rebuilds, turn [EPEL](https://docs.fedoraproject.org/en-US/epel/)
@@ -106,7 +110,9 @@ signed with Dicer's key. Add it, then install `dicer`:
   $ sudo systemctl enable --now dicerd
   ```
 
-  dnf asks you to accept the repository's key the first time.
+  dnf asks you to accept the repository's key the first time. The package
+  leaves enabling the daemon to the system's presets, so the last command
+  enables and starts it.
   {{< /tab >}}
   {{< tab name="openSUSE" >}}
   ```console
@@ -115,14 +121,25 @@ signed with Dicer's key. Add it, then install `dicer`:
   $ sudo systemctl enable --now dicerd
   ```
 
-  zypper asks you to trust the repository's key the first time.
+  zypper asks you to trust the repository's key the first time. The package
+  leaves enabling the daemon to the system's presets, so the last command
+  enables and starts it.
   {{< /tab >}}
 {{< /tabs >}}
 
-The package installs `dicer` and `dicerd` to `/usr/bin`, the service,
-`/etc/dicerd/config.yaml`, and a sysctl setting that turns IPv4 forwarding
-on, and creates the `dicer` group. The package files are also attached to
-each [release](https://github.com/konradasb/dicer/releases).
+The package installs:
+
+- `dicer` and `dicerd`, in `/usr/bin`;
+- the `dicerd` service;
+- the configuration, `/etc/dicerd/config.yaml`;
+- a sysctl setting that turns IPv4 forwarding on;
+- the `dicer` firewalld zone;
+- shell completions for bash, zsh and fish.
+
+It also creates the `dicer` group. [Files and
+environment](../../reference/files-and-environment) lists where each file
+goes. The package files are also attached to each
+[release](https://github.com/konradasb/dicer/releases).
 
 ## Install with Ansible
 
@@ -171,15 +188,17 @@ $ ansible-playbook -i inventory dicer.yml
 
 `dicerd_config` holds the keys of the
 [configuration](../../reference/configuration). The role checks it with
-`dicerd validate` before it replaces the file, and restarts the daemon when
-it changes, which leaves the instances running. The TLS files are written
-under `/etc/dicerd/tls`, the private key readable only by root: keep it in
-Ansible Vault. Each role's README lists its variables, as does
-`ansible-doc -t role konradasb.general.dicerd`.
+`dicerd validate` before it replaces the file. When the file changes, the
+role restarts the daemon, which leaves the instances running.
 
-The role installs the package, so use it on a host that has no Dicer yet, or
-has the package: a host the install script set up keeps its own service,
-which starts the binaries the script built.
+The TLS files are written under `/etc/dicerd/tls`, and only root can read
+the private key. Keep the key in Ansible Vault. Each role's README lists
+its variables, and so does `ansible-doc -t role konradasb.general.dicerd`.
+
+Use the role on a host that has no Dicer yet, or that has the package. Don't
+use it on a host the install script set up: the script's service, in
+`/etc/systemd/system`, takes precedence over the package's, so the daemon
+would go on running the binaries the script built.
 
 ## Install from source
 
@@ -187,22 +206,25 @@ which starts the binaries the script built.
 $ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash
 ```
 
-The script asks for `sudo` when it needs it, then:
+The script asks for `sudo` when it needs it. Then it:
 
-1. checks the requirements above;
-2. builds `dicer` and `dicerd`, with the hypervisors and guest binaries
-   `dicerd` carries, from the `main` branch;
-3. installs both to `/usr/local/bin`;
-4. writes a configuration, `/etc/dicerd/config.yaml`, unless there is one;
-5. turns on IPv4 forwarding, now and at every boot;
-6. creates the `dicer` group, whose members can use the daemon without
+1. checks for the build tools, `mkfs.erofs`, `mke2fs`, systemd and KVM;
+2. turns on IPv4 forwarding, now and at every boot;
+3. builds `dicer` and `dicerd` from the `main` branch, with the hypervisors
+   and guest binaries that `dicerd` carries;
+4. stops the daemon if it is running, and installs both binaries to
+   `/usr/local/bin`;
+5. creates the `dicer` group, whose members can use the daemon without
    `sudo`;
-7. installs `dicerd.service`, enables it and starts it.
+6. writes a configuration, `/etc/dicerd/config.yaml`, unless there is one;
+7. installs `dicerd.service` and, where firewalld is installed, the `dicer`
+   zone;
+8. enables and starts the daemon.
 
 `--ref` builds a branch, tag or commit instead of `main`:
 
 ```console
-$ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash -s -- --ref v0.2.0
+$ curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash -s -- --ref v0.3.0
 ```
 
 ## Use Dicer without `sudo`
@@ -215,12 +237,12 @@ $ sudo usermod -aG dicer $USER
 $ newgrp dicer
 ```
 
-The docs' commands assume you have: without it, run each `dicer` command
-with `sudo`.
+The rest of these docs assume you are in the group. If you are not, run each
+`dicer` command with `sudo`.
 
 {{< callout type="warning" >}}
-  A member of the `dicer` group can do anything with the daemon, which is as
-  much as root on the host. Add only whom you would give root.
+  A member of the `dicer` group can do anything with the daemon, which
+  amounts to root on the host. Add only users you would give root.
 {{< /callout >}}
 
 ## Verify
@@ -231,13 +253,18 @@ $ dicer version
 $ dicer info
 ```
 
-`dicer info` shows the daemon, the hypervisors it carries, and how much of
-the host's CPU, memory and disk it may give instances. To manage the host
-from another machine, see [Remote access](../../guides/remote-access).
+The service should be `active (running)`. `dicer version` shows the
+command line's version and the daemon's. `dicer info` shows the daemon, the
+hypervisors it carries, its default kernel and network, and how much of the
+host's CPU, memory and disk it may give instances.
+
+To manage the host from another machine, see
+[Remote access](../../guides/remote-access).
 
 ## Upgrade and remove
 
-Upgrading the package, running the playbook again for a newer version, or
-running the install script again, upgrades Dicer without stopping the
-instances that are running. See
-[Operating the daemon](../../guides/operating-the-daemon#upgrading) for each.
+[Operating the daemon](../../guides/operating-the-daemon) shows how to
+[upgrade](../../guides/operating-the-daemon#upgrading) Dicer, without
+stopping running instances, and how to
+[uninstall](../../guides/operating-the-daemon#uninstalling) it, for each way
+of installing it.

@@ -11,28 +11,28 @@ related:
   - /docs/concepts/how-dicer-works
 ---
 
-From a fresh [install](../installation) to a web server running in a
-virtual machine. The commands assume you are in the `dicer` group, as
-[Installation](../installation#use-dicer-without-sudo) sets up; if not, run
-them with `sudo`.
+This page takes you from a fresh [install](../installation) to a web server
+running in a virtual machine. The commands assume you are in the `dicer`
+group, as [Installation](../installation#use-dicer-without-sudo) sets up. If
+you are not, run them with `sudo`.
 
 {{% steps %}}
 
 ### Create a network
 
-Instances need a network to be attached to. Create one, with a private
-subnet of your choice:
+An instance is attached to a network. Create one, with a private subnet of
+your choice:
 
 ```console
 $ dicer network create default --subnet 172.20.0.0/16
 ```
 
-Its gateway is the subnet's first address, `172.20.0.1`, on a bridge the
-daemon creates. See [Networking](../../concepts/networking).
+The daemon creates a bridge for it. The network's gateway is the subnet's
+first address, `172.20.0.1`. See [Networking](../../concepts/networking).
 
 ### Import a kernel
 
-A container image has no kernel; a virtual machine needs one. Import
+A container image has no kernel, but a virtual machine needs one. Import
 [Dicer's kernel](https://github.com/konradasb/dicer-kernel), a long-term
 Linux release built for Dicer's guests:
 
@@ -53,33 +53,42 @@ Linux release built for Dicer's guests:
   {{< /tab >}}
 {{< /tabs >}}
 
-It is downloaded the first time an instance boots with it, and checked
-against the checksum. See
+Importing only records the kernel. It is downloaded the first time an
+instance boots with it, and checked against the checksum. See
 [Kernels](../../concepts/kernels).
 
 ### Run an image
 
-With one network and one kernel, instances use them without being told:
+When there is only one network and one kernel, an instance uses them
+without being told:
 
 ```console
 $ dicer run -d --name web -p 8080:80 nginx:1.27
 Instance web started in 1.1s (172.20.61.102)
 ```
 
-Dicer pulled `nginx:1.27`, converted it to a disk, and booted it as a
-virtual machine, with its port 80 published on the host's port 8080.
+Dicer pulled `nginx:1.27`, showing its progress, and converted it to a
+disk. Then it booted the image as a virtual machine, with the guest's port
+80 published on the host's port 8080. The address in brackets is the
+guest's.
 
 ### Reach it
 
-From another machine, or from the host by the host's own address:
+Reach the published port from another machine, or from the host by the
+host's own address. Here the host is `192.0.2.10`:
 
 ```console
 $ curl -sI http://192.0.2.10:8080 | head -1
 HTTP/1.1 200 OK
 ```
 
-Published ports are not reachable through `localhost` on the host itself;
-from the host, use its address or the guest's, which `dicer run` printed.
+A published port is not reachable through `localhost` on the host itself.
+From the host, use the host's address, or the guest's address and port:
+
+```console
+$ curl -sI http://172.20.61.102 | head -1
+HTTP/1.1 200 OK
+```
 
 ### Look inside
 
@@ -89,8 +98,9 @@ $ dicer logs web
 $ dicer exec web
 ```
 
-`dicer logs` shows the guest's console: the kernel booting, then nginx.
-`dicer exec` opens a shell in the guest; `exit` leaves it.
+`dicer ps` lists the instances. `dicer logs` shows the guest's console: the
+kernel booting, then nginx. `dicer exec` opens a shell in the guest, and
+`exit` leaves it.
 
 ### Clean up
 

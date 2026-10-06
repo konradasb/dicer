@@ -1,6 +1,6 @@
 ---
 title: Using the API
-weight: 13
+weight: 14
 description: "Call the gRPC API from Go, Python or the shell."
 icon: code
 related:
@@ -9,21 +9,31 @@ related:
   - /docs/reference/events
 ---
 
-Everything the `dicer` command line does, it does through the daemon's gRPC
-API, and so can any program. The API is one service,
+The `dicer` command line does everything through the daemon's gRPC API, and
+any program can do the same. The API is one service,
 `dicerd.v1.DaemonService`, defined in
-[`proto/dicerd/v1/dicerd.proto`](https://github.com/konradasb/dicer/blob/main/proto/dicerd/v1/dicerd.proto);
-every call and message is listed in the [API reference](../../reference/api).
-`dicerd.v1` only grows: calls, messages and fields are added, but never
-renamed, renumbered, retyped or removed, so a client built against it keeps
-working with newer daemons.
+[`proto/dicerd/v1/dicerd.proto`](https://github.com/konradasb/dicer/blob/main/proto/dicerd/v1/dicerd.proto).
+The [API reference](../../reference/api) lists every call and message.
+
+The API is covered by Dicer's versioning. A patch release never breaks it.
+Until 1.0.0, a minor release may, and its release notes say what changed and
+what to do about it.
 
 ## Connecting
 
 The daemon serves the API on its Unix socket, `unix:///run/dicer/dicer.sock`,
-which root and the `dicer` group can open, and optionally on a TCP listener,
-with TLS. See
-[Remote access](../remote-access) for the listener and its certificates.
+which root and the `dicer` group can open. It can also serve it on a TCP
+listener, with TLS. See [Remote access](../remote-access) for the listener
+and its certificates.
+
+## Errors
+
+A failed call ends with a gRPC status. Its code says what kind of failure it
+was: `NOT_FOUND` for a resource that does not exist, for example, or
+`FAILED_PRECONDITION` for one in the wrong state for the call. Its message
+says what went wrong, for a person to read. The
+[API reference](../../reference/api) lists the codes. Match on the code, not
+the message, which may change.
 
 ## From Go
 
@@ -121,16 +131,19 @@ c, err := dicer.NewClient(
 )
 ```
 
+`dicer.WithKeepalive` sets how often the client checks that the daemon is
+still there (see [Remote access](../remote-access#connections-that-go-quiet)).
 `dicer.WithDialOptions` adds any other gRPC dial option, such as an
-interceptor or keepalives.
+interceptor.
 
 ## From other languages
 
-Generate a client from the proto file with your language's gRPC tools. It
-imports only Google's well-known types, which the tools include. For
-Python:
+Generate a client from the proto file with your language's gRPC tools. The
+file imports only Google's well-known types, which the tools include. For
+Python, with the repository cloned into `dicer`:
 
 ```console
+$ git clone https://github.com/konradasb/dicer
 $ pip install grpcio grpcio-tools
 $ python -m grpc_tools.protoc -I dicer/proto \
     --python_out=. --grpc_python_out=. dicerd/v1/dicerd.proto
@@ -153,14 +166,15 @@ with grpc.insecure_channel("unix:///run/dicer/dicer.sock") as channel:
             print("no db")
 ```
 
-`insecure_channel` is right for the socket, which has no TLS; for a TCP
+`insecure_channel` is right for the socket, which has no TLS. For a TCP
 listener with TLS, use `grpc.secure_channel` with
 `grpc.ssl_channel_credentials`.
 
 ## From the shell
 
-The daemon does not serve reflection, so give
-[grpcurl](https://github.com/fullstorydev/grpcurl) the proto file:
+The daemon does not serve gRPC reflection, so give
+[grpcurl](https://github.com/fullstorydev/grpcurl) the proto file, from the
+cloned repository:
 
 ```console
 $ grpcurl -plaintext -unix \
@@ -171,3 +185,7 @@ $ grpcurl -plaintext -unix \
     -d '{"name": "web"}' \
     /run/dicer/dicer.sock dicerd.v1.DaemonService/GetInstance
 ```
+
+For a TCP listener with TLS, replace `-plaintext -unix` and the socket with
+`-cacert ca.pem -cert client.pem -key client-key.pem` and the daemon's
+`HOST:PORT`.

@@ -9,13 +9,13 @@ related:
   - /docs/concepts/instances
 ---
 
-Dicer runs container images as virtual machines: each workload gets a
-kernel of its own, behind a hypervisor, and is still started with one
-command from an image you already have. It suits workloads that need more
-isolation than a container gives, or a whole machine: untrusted code, CI
-runners, services that need their own kernel.
+Dicer runs container images as virtual machines. Each workload gets a
+kernel of its own, behind a hypervisor, yet still starts with one command
+from an image you already have. That suits workloads that need more
+isolation than a container gives, or a whole machine, such as untrusted
+code, CI runners and services that need their own kernel.
 
-Getting started takes two steps: install Dicer on a Linux host with KVM,
+Getting started takes two steps. Install Dicer on a Linux host with KVM,
 then boot a first instance from a container image.
 
 {{< section-cards >}}

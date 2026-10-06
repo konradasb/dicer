@@ -5,7 +5,7 @@ description: "How Dicer turns an image into a machine, and how that machine beha
 icon: light-bulb
 ---
 
-What Dicer is made of and how it behaves: the ideas the guides and the
-reference take for granted.
+These pages explain what Dicer is made of and how it behaves. The guides and
+the reference take these ideas for granted.
 
 {{< section-cards >}}

@@ -1,7 +1,7 @@
 ---
 title: Reference
 weight: 5
-description: "The command line, the API, the configuration and the metrics, in full."
+description: "The command line, the API, the configuration, the compose file, the metrics and the events, in full."
 icon: document-text
 cascade:
   - params:
@@ -10,7 +10,7 @@ cascade:
 ---
 
 Everything there is to look up. The command line, the API, the
-configuration, the compose file and the metrics are generated from the code, so they cannot
-drift from it.
+configuration, the compose file and the metrics are generated from the code,
+so they cannot drift from it.
 
 {{< section-cards >}}

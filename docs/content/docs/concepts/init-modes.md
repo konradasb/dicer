@@ -9,42 +9,57 @@ related:
   - /docs/guides/health-checks
 ---
 
-A container runs one process. A virtual machine has an init system as its
+A container runs one process. A virtual machine runs an init system as its
 PID 1, and an image built for containers usually has none. Dicer runs an
-instance's command in one of two ways.
+instance's command in one of two init modes, `exec` and `systemd`, and by
+default picks one for it.
+
+| Mode | PID 1 | The instance ends when | Suits |
+|---|---|---|---|
+| `exec` | `dicer-init`, which runs the command | The command exits | An application image, such as `nginx` or `postgres` |
+| `systemd` | systemd | systemd powers the machine off | An image of a whole operating system, booting `/sbin/init` |
 
 ## exec
 
-The command runs as a container runs it: as PID 1 of a PID namespace of its
-own, with a `/proc` of its own, under `dicer-init`, which is the machine's
-PID 1. `ps` in it shows its processes and no others, and tools that look
-processes up in `/proc`, such as Docker's, find them. `dicer-init` supervises
-it, and when it exits, reports its exit code and ends the machine. The
-instance ends when its command does.
+The command runs as a container runs it. `dicer-init` stays the machine's
+PID 1, and starts the command as PID 1 of a PID namespace of its own, with
+its own mount namespace and `/proc`. `ps` in it shows its processes and no
+others, and tools that look processes up in `/proc`, such as Docker's, find
+them.
 
-A command that cannot be started, because the image does not have it, ends
-the instance at once, as a shell would: with exit code 127, or 126 for one
-that cannot be run.
+`dicer-init` supervises the command. When the command exits, `dicer-init`
+reports its exit code to the host and ends the machine, so the instance ends
+with it.
 
-This is how an application image, such as `nginx` or `postgres`, runs.
+If the command cannot be started, the instance ends at once, with the exit
+code a shell would give: 127 if the image does not have the command, or 126
+if it cannot be run.
 
 ## systemd
 
-The command is systemd, and it becomes the machine's PID 1, as it would on
-any Linux machine. Dicer adds two units to it: `dicer-agent.service`, for
-`dicer exec`, `dicer cp` and health checks, and one that reports the end to
-the host when the machine powers off. The instance ends when systemd powers
-the machine off.
+The command is systemd, and it becomes the machine's PID 1, as on any Linux
+machine. Dicer adds two units to it:
 
-This is how an image of a whole operating system, booting `/sbin/init`, runs.
+- `dicer-agent.service` runs the guest agent, for `dicer exec`, `dicer cp`
+  and health checks.
+- `dicer-exit.service` tells the host that the guest ended cleanly, as
+  systemd powers the machine off.
+
+The instance ends when systemd powers the machine off. A reboot or a halt
+inside the guest is not a clean end, so it leaves the instance Failed,
+unless its restart policy starts it again. See
+[How an instance ends](../instances#how-an-instance-ends).
 
 ## auto
 
-By default, the mode is `auto`: `systemd` if the command is the systemd
-binary, and `exec` otherwise. The command is the instance's own, or the
-image's `ENTRYPOINT` and `CMD`, or, if there is none, `/sbin/init`. It is
-looked up as the guest would, on its `PATH` and through its symlinks, so a
-Debian image's `/sbin/init` counts as systemd.
+The default mode is `auto`. It picks `systemd` if the command is the systemd
+binary, and `exec` otherwise.
 
-`--init-mode exec` or `--init-mode systemd` decides for an image where the
-guess is wrong.
+The command is the instance's own, if it has one, and otherwise the image's
+`ENTRYPOINT` and `CMD`. With neither, it is `/sbin/init`. The command is
+looked up as the guest would run it: on the guest's default `PATH`, and
+through any symlinks. So a Debian image's `/sbin/init`, a link to
+`/lib/systemd/systemd`, counts as systemd.
+
+If `auto` guesses wrong for an image, give the mode with `--init-mode exec`
+or `--init-mode systemd`.

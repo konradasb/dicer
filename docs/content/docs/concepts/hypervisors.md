@@ -16,8 +16,9 @@ its guest. Dicer carries two, built into `dicerd`:
 - **[Firecracker](https://firecracker-microvm.github.io)**, with
   `--hypervisor-type firecracker`.
 
-Both run the same images and kernels, and support everything Dicer does with
-an instance, pausing and snapshots included.
+Both run the same images and kernels. Both support pausing, standby,
+snapshots, forks and rate limits. The few things that differ are listed under
+[Differences](#differences).
 
 ## Versions
 
@@ -34,9 +35,9 @@ $ dicer info
 An instance runs the default version of its hypervisor unless it names one
 with `--hypervisor-version`. When the default changes, an instance that
 names no version moves to the new one the next time it boots. Resuming it
-from [standby](../instances) or a memory [snapshot](../../guides/snapshots)
-does not move it, because only the version that froze the guest can resume
-it.
+from [standby](../instances#standby), or restoring or forking a memory
+[snapshot](../../guides/snapshots), does not move it, because only the
+version that froze the guest can resume it.
 
 ### Support and deprecation
 
@@ -70,7 +71,7 @@ After the upgrade, what still uses it is stuck:
 
 | Still on the version | After the upgrade | Before it |
 |---|---|---|
-| An instance that names it | Refuses to start | Name another with `dicer update --hypervisor-version`, or none for the default |
+| An instance that names it | Refuses to start | Name another with `dicer update --hypervisor-version`, or `--hypervisor-version ""` for the default |
 | A running instance | Keeps running, but cannot be paused, resized, snapshotted or put on standby, and stopping it ends its hypervisor without a clean shutdown | Restart it |
 | An instance on standby | Cannot be resumed; stopping it discards the guest | Start it, then restart it |
 | A memory snapshot | Cannot be restored or forked | Restore or fork it, restart the instance, and take a new snapshot |
@@ -81,9 +82,17 @@ Disk snapshots need no hypervisor and are unaffected.
 
 | | Cloud Hypervisor | Firecracker |
 |---|---|---|
-| Kernel command line | `console=ttyS0 reboot=k panic=1` | the same, and `pci=off` |
-| Ending a guest | powers off | resets, as it has no power button |
-| Restoring memory | on demand, then the rest in the background (v53 and later) | on demand |
+| Resizing vCPUs with `dicer resize` | Yes | No: it cannot add vCPUs to a running guest |
+| Resizing memory with `dicer resize` | Returns without waiting, as it cannot tell when the guest has taken the change | Waits for the guest to take the change |
+| Restoring a memory snapshot | v53: on demand, then the rest in the background. v48 and v49: all of the memory before the guest resumes | On demand, only the pages the guest uses |
+| Kernel command line | `console=ttyS0 reboot=k panic=1` | The same, and `pci=off` |
+| How the guest ends its hypervisor | It powers off | It resets, as Firecracker has no power button |
 
-How a guest ends is `dicer-init`'s business, so the difference does not show:
-an instance ends the same way under either.
+How a guest ends its hypervisor is `dicer-init`'s business, so that
+difference does not show: an instance ends the same way under either.
+
+Firecracker places the memory a guest can grow into at 512 GiB in the
+guest's address space. A host CPU with fewer than 40 bits of physical
+address cannot reach it, so there Firecracker's guests cannot be given more
+memory. See [Resizing a running instance](../../guides/capacity#resizing-a-running-instance)
+and [How fast a restore is](../../guides/snapshots#how-fast-a-restore-is).

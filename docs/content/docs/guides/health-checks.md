@@ -8,13 +8,14 @@ related:
   - /docs/guides/monitoring
 ---
 
-A running instance is not necessarily a working one: a server can be up and
-answering nothing. A health check asks the workload, from inside the guest,
+A running instance is not necessarily a working one: a server can be up but
+answer nothing. A health check asks the workload, from inside the guest,
 whether it is well, and records the answer.
 
 ## Add a check
 
-A check is one of three probes, all run inside the guest by its agent:
+A check uses one of three probes. The guest agent runs each probe inside the
+guest:
 
 | Flag | Healthy when |
 |---|---|
@@ -34,9 +35,9 @@ what it prints is kept as the check's output.
 
 ## Timing
 
-| Flag | Default | |
+| Flag | Default | Meaning |
 |---|---|---|
-| `--health-interval` | 10s | Time from the end of one probe to the start of the next. The first runs one interval after the start. |
+| `--health-interval` | 10s | Time from the end of one probe to the start of the next. The first probe runs one interval after the instance starts. |
 | `--health-timeout` | 5s | A probe that takes longer has failed. |
 | `--health-retries` | 3 | Failures in a row that make the instance unhealthy. |
 | `--health-start-period` | none | Time after a start in which failures do not count, for a workload that is slow to come up. A success counts at once. |
@@ -48,7 +49,7 @@ $ dicer run -d --name search \
     ghcr.io/acme/search:8
 ```
 
-## What the answers mean
+## What the results mean
 
 ```mermaid
 stateDiagram-v2
@@ -60,29 +61,27 @@ stateDiagram-v2
 ```
 
 An instance is `starting` until its first probe succeeds. One success makes
-it `healthy`; `--health-retries` failures in a row, outside the start
-period, make it `unhealthy`; and one success makes it `healthy` again.
+it `healthy`. After `--health-retries` failures in a row, outside the start
+period, it is `unhealthy`. One success makes it `healthy` again.
 
-Health is shown beside the state:
+Health is shown beside the instance's status:
 
 ```console
 $ dicer ps --columns name,status
-NAME   STATUS
-api    Up 5 minutes (healthy)
+NAME  STATUS
+api   Up 5 minutes (healthy)
 $ dicer inspect api
 …
      Health: healthy, checked 6 seconds ago
              http :3000/healthz every 10s
+             timeout 5s, 3 retries
 ```
 
-Each change is also an event, `healthy` or `unhealthy`, with the probe's
-output:
+Each change of health is also an [event](../monitoring#events), `healthy` or
+`unhealthy`, with the first line of the probe's output. See them with
+`dicer events --name api`.
 
-```console
-$ dicer events --name api
-```
-
-A paused instance is not probed, and a new start, of the instance or of the
+A paused instance is not probed. Each new start, of the instance or of the
 daemon, begins again at `starting`.
 
 ## When an instance is unhealthy
@@ -92,12 +91,17 @@ What happens depends on the instance's [restart policy](../restarts):
 - **`no`**, the default: nothing. The instance is reported unhealthy and
   keeps running, for you to look into.
 - **`on-failure`, `unless-stopped` or `always`**: the daemon stops the
-  instance, as `dicer stop` would, and it ends as a failure, with the reason
-  "health check … failed 3 times in a row". Its restart policy then starts
-  it again, and the restart counts towards an `on-failure` limit.
+  instance, as `dicer stop` would, and records the end as a failure, with
+  the reason "health check … failed 3 times in a row". The restart policy
+  then starts it again, and the restart counts towards an `on-failure`
+  limit.
 
-So a check and a restart policy together keep a workload that hangs, and
-does not exit, running:
+An `on-failure:N` instance that has already been restarted `N` times in a
+row is not stopped: its policy would not restart it, so it is reported
+unhealthy and left running.
+
+So a check and a restart policy together keep alive a workload that hangs
+rather than exits:
 
 ```console
 $ dicer run -d --name api --restart on-failure:5 --health-http 3000/healthz ghcr.io/acme/api:3
@@ -110,15 +114,15 @@ $ dicer run -d --name api --restart on-failure:5 --health-http 3000/healthz ghcr
 
 ## The image's own check
 
-An image's `HEALTHCHECK` is used when the instance sets none, timings
-included. A check given with flags replaces it whole, and `--no-healthcheck`
-turns health checking off, the image's check with it.
+If the instance sets no check, the image's `HEALTHCHECK` is used, with its
+timings. A check given with flags replaces the image's check entirely.
+`--no-healthcheck` turns health checking off, including the image's check.
 
 ## Changing a check
 
-A check is part of the instance's definition, so it is changed on a stopped
-instance with `dicer update`, and a check given there replaces the old one
-whole:
+A check is part of the instance's definition, so you change it with
+`dicer update` while the instance is stopped. A check given to
+`dicer update` replaces the old one entirely:
 
 ```console
 $ dicer stop api

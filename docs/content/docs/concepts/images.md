@@ -10,7 +10,7 @@ related:
 ---
 
 A guest boots from a container image: any OCI image from any registry, such
-as `nginx:1.27` or `ghcr.io/acme/app:2`. Dicer converts it into a disk a
+as `nginx:1.27` or `ghcr.io/acme/app:2`. Dicer converts it into a disk that a
 virtual machine can boot from.
 
 ## From image to disk
@@ -24,50 +24,57 @@ flowchart LR
 ```
 
 The disk is compressed and read-only, and one copy serves every instance
-booting from the image. Each instance writes to a disk of its own, laid over
-it, so instances never see each other's changes; see [Storage](../storage).
-Downloaded layers are cached, so a new version of an image downloads only
-what changed.
+that boots from the image. Each instance writes to an overlay disk of its
+own, laid over it, so instances never see each other's changes. See
+[Storage](../storage). Downloaded layers are cached, so a new version of an
+image downloads only the layers that changed.
 
 An image is kept by its digest. A tag such as `latest` means the image most
 recently pulled under it on this host.
 
 ## What an instance takes from its image
 
-From the image's configuration, an instance takes its `ENTRYPOINT` and `CMD`,
-which the instance's own command replaces, its `ENV`, which the instance's
-environment adds to, its `WORKDIR`, and its `HEALTHCHECK`, unless the
-instance sets a [health check](../../guides/health-checks) of its own. Its `USER` is not applied: the workload runs as root.
+An instance takes these from the image's configuration:
 
-What an image needs to be a machine rather than a container, a
-[kernel](../kernels) and an init, Dicer supplies.
+| Image setting | How the instance uses it |
+|---|---|
+| `ENTRYPOINT` and `CMD` | Run as the workload. A command given to the instance replaces both. |
+| `ENV` | Set in the workload's environment. The instance's own variables are added, and win over the image's. |
+| `WORKDIR` | The workload's working directory. |
+| `HEALTHCHECK` | Used unless the instance sets a [health check](../../guides/health-checks) of its own. |
+
+`USER` is not applied: the workload runs as root.
+
+An image has no [kernel](../kernels) and usually no init system. Dicer
+supplies both, which is what turns a container image into a machine.
 
 ## Pulling
 
 An image is pulled when an instance is created from it, or ahead of time with
 `dicer pull`. Pulls of the same image share one download.
 
-When creating an instance pulls its image is its **pull policy**, as with
-`docker run --pull`:
+Whether creating an instance pulls its image depends on its **pull policy**,
+set with `--pull` as with `docker run --pull`:
 
 - `missing`, the default, pulls the image only if the host does not hold it.
 - `always` pulls it even if the host holds it, so that a tag that has moved
   is followed. Nothing is downloaded if the host already has what the tag
   points at.
 - `never` uses the image the host holds, and refuses to create the instance
-  if it holds none. Creating the instance then asks no registry anything.
+  if it holds none. Creating the instance then contacts no registry.
 
-An instance whose image the host has not held since, because it was deleted
-with `--force`, pulls it again at its next start.
+Starting an instance pulls its image again if the host no longer holds it,
+for example because it was deleted with `--force`.
 
 ## Keeping and removing images
 
 An image is **in use** while an instance is defined to boot from it, a
-running guest booted from it, or a snapshot needs it. An image in use is not
-deleted unless asked with `--force`; an instance defined to boot from it
-pulls it again at its next start.
+running guest booted from it, or a memory snapshot's guest booted from it.
+An image in use is not deleted unless asked with `--force`. An instance
+defined to boot from it then pulls it again at its next start.
 
 `dicer image prune` deletes every image not in use. The daemon can also do
-so itself, removing images unused for longer than an age, or the least
-recently used while the store is larger than a size. Images used in the last
-ten minutes are always kept. See [Managing images](../../guides/managing-images).
+this itself. It removes images unused for longer than a set age, or the
+least recently used ones while the store is larger than a set size. It
+always keeps images used in the last ten minutes. See
+[Managing images](../../guides/managing-images).

@@ -9,31 +9,28 @@ related:
   - /docs/guides/operating-the-daemon
 ---
 
-Everything a guest writes goes to the instance's own disk, which lasts until
-the instance is deleted. Mounts add three other kinds of storage, each for a
-different job:
+Everything a guest writes goes to the instance's overlay disk, which lasts
+until the instance is deleted. Mounts add three other kinds of storage, each
+for a different job: a [file](#configuration-files) mount for configuration
+from the host, a [volume](#volumes) for data that must outlive the instance,
+and a [tmpfs](#scratch-space) mount for scratch space.
+[Storage](../../concepts/storage#mounts) compares how long each lasts.
 
-| Type | For | Lives |
-|---|---|---|
-| `file` | Configuration from the host | A copy, made at each start |
-| `volume` | Data that must outlive the instance | Until the volume is deleted |
-| `tmpfs` | Scratch space | In the guest's memory, until it stops |
-
-Mounts are given with `--mount`, as comma-separated `key=value` pairs, once
-per mount:
+Each mount is given with its own `--mount` flag, as comma-separated
+`key=value` pairs:
 
 ```text
 --mount [type=volume|file|tmpfs,][source=...,]target=/path[,readonly]
 ```
 
-The type is `volume` unless given. A target must be an absolute path, and
-two mounts cannot share one. See [Storage](../../concepts/storage) for how
-this fits with the instance's disk.
+The type is `volume` unless you give another. The target must be an absolute
+path, other than `/`, and two mounts cannot share a target. `src`, `dst` and
+`ro` are accepted as short forms of `source`, `target` and `readonly`.
 
 ## Configuration files
 
-A `file` mount puts a file from the host into the guest: a configuration
-file, a certificate, a list of allowed users.
+A `file` mount puts a file from the host into the guest, such as a
+configuration file, a certificate or a list of allowed users.
 
 ```console
 $ dicer run -d --name web -p 8080:80 \
@@ -41,12 +38,12 @@ $ dicer run -d --name web -p 8080:80 \
     nginx:1.27
 ```
 
-The source must be an absolute path on the host, and must exist. At every
-start, the daemon reads it and hands the guest a copy, with the host file's
-owner and permissions, in place of whatever the image had at the target. A
-target that does not exist in the image is created.
+The source must be an absolute path on the host, and the file must exist. At
+every start, the daemon reads it and gives the guest a copy, with the host
+file's owner and permissions. The copy replaces whatever the image had at
+the target. If the image has nothing there, the target is created.
 
-The copy is the guest's own:
+The copy belongs to the guest:
 
 - **A change on the host reaches the guest at its next start**, not before.
   To apply an edited file, restart the instance:
@@ -56,22 +53,22 @@ The copy is the guest's own:
   ```
 
 - **A change in the guest never reaches the host.** The copy is held in the
-  guest's memory and is gone when it stops. Add `readonly` so the workload
-  cannot change it by mistake.
+  guest's memory and is gone when the instance stops. Add `readonly` so that
+  the workload cannot change it by mistake.
 
-A file mount is one file; the target cannot be a directory in the image. For
-a directory of files, mount each, or put them on a volume.
+A file mount is a single file, so its target cannot be a directory in the
+image. For a directory of files, mount each file, or put them on a volume.
 
 {{< callout type="info" >}}
-  The file's contents pass through the daemon's runtime directory, readable
-  only by root, on their way to the guest. A secret mounted this way is as
-  safe as the host's root account.
+  On its way to the guest, the file's contents pass through the daemon's
+  runtime directory, which only root can read. A secret mounted this way is
+  as safe as the host's root account.
 {{< /callout >}}
 
 ## Volumes
 
-A volume is a disk of its own, for data that must outlive any one instance:
-a database, uploads, a cache worth keeping.
+A volume is a disk of its own, for data that must outlive any one instance,
+such as a database, uploads, or a cache worth keeping.
 
 ```console
 $ dicer volume create pgdata --size 20GiB
@@ -83,17 +80,20 @@ $ dicer run -d --name db \
 ```
 
 A new volume is an empty ext4 filesystem. Like every ext4 filesystem, it has
-a `lost+found` directory at its root, which some software refuses: that is
-why PostgreSQL is pointed at a directory inside it above.
+a `lost+found` directory at its root. Some software refuses to use a
+directory that is not empty, which is why PostgreSQL is pointed at a
+directory inside the volume above.
 
 A volume is sparse: it takes up only what has been written to it, whatever
-its size. Its size is fixed when it is created; there is no resizing a
-volume.
+its size. Its size is fixed when it is created, and a volume cannot be
+resized.
+
+An instance can mount up to 22 volumes, and each volume only once.
 
 ### Keeping and deleting volumes
 
 Deleting an instance keeps the volumes it mounted. A volume is deleted only
-by asking:
+when you ask:
 
 ```console
 $ dicer volume list
@@ -101,43 +101,66 @@ $ dicer volume rm pgdata
 ```
 
 A volume that any instance is defined to mount, running or not, cannot be
-deleted: delete the instance, or `dicer update` it to mount something else,
-first.
+deleted. First delete that instance, or use `dicer update` to change its
+mounts.
+
+[Snapshots](../snapshots) do not include volumes, because a volume is
+storage of its own.
 
 ### Sharing a volume
 
-A volume can be used read-write by one running instance at a time. A second
-instance mounting it is refused at start while the first runs, with an error
-naming the instance that has it.
+Only one instance at a time can use a volume read-write. If another instance
+mounts the same volume, its start is refused while the first instance is
+running, paused or on standby. The error names the instance that has the
+volume.
 
-Mounted read-only by every instance that uses it, a volume can be shared by
-any number of them. That suits data written once and read by many, such as a
-model or a dataset:
+A volume that every instance mounts read-only can be shared by any number of
+them. That suits data written once and read by many, such as a model or a
+dataset:
 
 ```console
 $ dicer run -d --mount source=models,target=/models,readonly ghcr.io/acme/inference:1
 ```
 
-An instance can mount up to 22 volumes.
+### Volumes and frozen guests
+
+A memory [snapshot](../snapshots) and [standby](../standby) both freeze a
+guest, with all it knows of the volumes it mounts. Neither holds the volumes
+themselves, so a volume the guest can write to must not change while the
+guest is frozen:
+
+- **A memory snapshot** is refused for an instance that can write to a
+  volume. The volume would carry on changing after the snapshot, and a guest
+  restored from it would remember a volume that no longer exists. Either
+  stop the instance and take a disk snapshot, or mount its volumes
+  `readonly`. For the same reason, such an instance can be forked only while
+  it is stopped.
+- **Standby** is allowed. An instance on standby keeps the volumes it can
+  write to, so no other instance can change them before it resumes.
 
 ## Scratch space
 
-A `tmpfs` mount is an empty directory held in the guest's memory, for files
-that need not survive a stop, and that are faster in memory than on disk:
+A `tmpfs` mount is an empty directory held in the guest's memory. It is for
+files that need not survive a stop, and that are faster in memory than on
+disk:
 
 ```console
 $ dicer run -d --mount type=tmpfs,target=/cache ghcr.io/acme/app:2
 ```
 
-It takes no source, and cannot be read-only. What is written there counts
-against the instance's memory, so size `--memory` for it.
+A tmpfs mount takes no source and cannot be read-only. Anyone in the guest
+can write to it, as with `/tmp`. What is written there counts against the
+instance's memory, so size `--memory` to allow for it.
 
 ## When a mount fails
 
-A mount the host can refuse, such as a missing host file or a volume in use,
-stops the instance from starting, with the reason. A mount the guest cannot
-make, such as a file mount onto a directory the image has, does not: the
-guest boots without it, and says why in its console log:
+Some mounts are checked on the host, such as a host file that is missing or
+a volume in use. If one of those fails, the instance does not start, and the
+error says why.
+
+Other mounts are made by the guest, such as a file mount onto a directory
+the image has. If one of those fails, the guest boots without it, and its
+console log says why:
 
 ```console
 $ dicer logs web | grep 'mount failed'

@@ -1,10 +1,12 @@
 ---
 title: Guides
 weight: 3
-description: "How to do one thing well, step by step."
+description: "Step-by-step instructions, one task to a page."
 icon: book-open
 ---
 
-How to do one thing well, step by step.
+Each guide takes one task, such as running a workload or reclaiming disk
+space, and shows how to do it step by step. The guides build on the ideas in
+[Concepts](../concepts).
 
 {{< section-cards >}}
