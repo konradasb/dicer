@@ -217,7 +217,8 @@ The script asks for `sudo` when it needs it. Then it:
 5. creates the `dicer` group, whose members can use the daemon without
    `sudo`;
 6. writes a configuration, `/etc/dicerd/config.yaml`, unless there is one;
-7. installs `dicerd.service` and, where firewalld is installed, the `dicer`
+7. installs `dicerd.service`, the same unit the packages install with
+   `dicerd`'s path changed, and, where firewalld is installed, the `dicer`
    zone;
 8. enables and starts the daemon.
 

@@ -1,9 +1,10 @@
 # Copyright 2026 Dicer Authors
 # SPDX-License-Identifier: MIT
 
-# The dicerd service, as the deb and rpm packages install it. Put changes of
-# your own in a drop-in, /etc/systemd/system/dicerd.service.d/, which an
-# upgrade leaves alone.
+# The dicerd service, as the deb and rpm packages install it. install.sh
+# installs it too, with dicerd's path changed. Put changes of your own in a
+# drop-in, /etc/systemd/system/dicerd.service.d/, which an upgrade leaves
+# alone.
 
 [Unit]
 Description=Dicer Daemon

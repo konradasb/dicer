@@ -9,7 +9,7 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash -s -- --ref v0.2.0
+#   curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash -s -- --ref v0.3.0
 #
 
 set -e
@@ -49,7 +49,7 @@ Examples:
   curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash
 
   # Install from a specific tag
-  curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash -s -- --ref v0.2.0
+  curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash -s -- --ref v0.3.0
 
   # Install from a feature branch
   curl -fsSL https://raw.githubusercontent.com/konradasb/dicer/main/scripts/install.sh | bash -s -- --ref my-feature-branch
@@ -144,16 +144,14 @@ if [ "$CURRENT_IP_FORWARD" != "1" ]; then
   fi
 fi
 
-# File descriptor limits
-if [ -d /etc/security/limits.d ] && [ ! -f /etc/security/limits.d/99-dicer.conf ]; then
-  info "Configuring file descriptor limits..."
-  $SUDO tee /etc/security/limits.d/99-dicer.conf >/dev/null <<'EOF'
-# Dicer: increased file descriptor limits
-*     soft  nofile  65536
-*     hard  nofile  65536
-root  soft  nofile  65536
-root  hard  nofile  65536
-EOF
+# Earlier versions of this script raised every login's file descriptor limit
+# here. limits.d applies only to login sessions, so it never reached the
+# service, which now sets its own with LimitNOFILE. Remove the file if it is
+# still the one they wrote.
+LIMITS_FILE=/etc/security/limits.d/99-dicer.conf
+if [ -f "$LIMITS_FILE" ] && head -n 1 "$LIMITS_FILE" | grep -qx '# Dicer: increased file descriptor limits'; then
+  info "Removing ${LIMITS_FILE}, which earlier versions wrote..."
+  $SUDO rm -f "$LIMITS_FILE"
 fi
 
 # =============================================================================
@@ -238,38 +236,13 @@ fi
 # =============================================================================
 
 info "Installing systemd service..."
-$SUDO tee "${SYSTEMD_DIR}/${SERVICE_NAME}.service" >/dev/null <<EOF
-[Unit]
-Description=Dicer Daemon
-Documentation=https://github.com/konradasb/dicer
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=${INSTALL_DIR}/dicerd serve --config ${CONFIG_FILE}
-Restart=on-failure
-RestartSec=5
-# Running VMs are separate processes and outlive the daemon; recovery
-# re-adopts them on the next start.
-KillMode=process
-
-# Creates and owns /run/dicer, which holds the API socket and runtime state.
-# Being a tmpfs, it is cleared on reboot -- which is correct, since no
-# instance survives one. It must survive the service stopping, though: it
-# holds the state of the VMs that outlive the daemon, which the next one
-# needs to adopt them. Without Preserve, systemd deletes it on every stop.
-RuntimeDirectory=dicer
-RuntimeDirectoryMode=0755
-RuntimeDirectoryPreserve=yes
-
-# Security hardening
-ProtectSystem=strict
-PrivateTmp=true
-ReadWritePaths=${DATA_DIR}
-
-[Install]
-WantedBy=multi-user.target
-EOF
+# The packages' own unit, so that the two cannot drift apart. Only the
+# binary's path differs: the packages put dicerd in /usr/bin.
+sed "s|^ExecStart=/usr/bin/dicerd |ExecStart=${INSTALL_DIR}/dicerd |" \
+  "${TMP_DIR}/dicer/build/package/dicerd.service" |
+  $SUDO tee "${SYSTEMD_DIR}/${SERVICE_NAME}.service" >/dev/null
+grep -q "^ExecStart=${INSTALL_DIR}/dicerd " "${SYSTEMD_DIR}/${SERVICE_NAME}.service" ||
+  error "The service file from ${REF} has an ExecStart this script does not recognise."
 
 # =============================================================================
 # Install the firewalld zone
@@ -313,34 +286,25 @@ info "Dicer installed successfully!"
 echo ""
 echo "Next steps — create a network and import a kernel:"
 echo ""
-echo "  dicer network create default \\"
-echo "    --subnet 172.20.0.0/16 --gateway 172.20.0.1 --nameservers 8.8.8.8,1.1.1.1"
+echo "  dicer network create default --subnet 172.20.0.0/16"
 echo ""
 case "$ARCH" in
 amd64)
   echo "  dicer kernel import linux-6.18 --arch x86_64 \\"
   echo "    --url https://github.com/konradasb/dicer-kernel/releases/download/v6.18.53-1/vmlinux-x86_64 \\"
   echo "    --sha256 ca5db6c291deb8a409db1f1ab14cc55ef6d35504daf17fc0f5577ffc1662b669"
-  KERNEL_NAME="linux-6.18"
   ;;
 arm64)
   echo "  dicer kernel import linux-6.18 --arch aarch64 \\"
   echo "    --url https://github.com/konradasb/dicer-kernel/releases/download/v6.18.53-1/Image-arm64 \\"
   echo "    --sha256 1ce335854bc05535584dd57638f10832db91c4a20cbb76bab7851890c3d14568"
-  KERNEL_NAME="linux-6.18"
   ;;
 esac
 echo ""
-echo "Then define and start your first instance:"
+echo "Then run your first instance, and open a shell in it:"
 echo ""
-echo "  dicer image pull ubuntu:24.04"
-echo ""
-echo "  dicer instance create test1 \\"
-echo "    --image ubuntu:24.04 --kernel ${KERNEL_NAME} --network default \\"
-echo "    --vcpus 1 --memory 2GiB --disk 10GiB"
-echo ""
-echo "  dicer instance start test1"
-echo "  dicer instance exec test1 -- bash"
+echo "  dicer run -d --name web -p 8080:80 nginx:1.27"
+echo "  dicer exec web"
 echo ""
 echo "The commands above need sudo. To run dicer without it, join the dicer group,"
 echo "which gives as much as root on this host, then log in again:"
@@ -348,7 +312,7 @@ echo ""
 echo "  sudo usermod -aG dicer \$USER"
 echo ""
 echo "Full help: dicer --help"
+echo "Documentation: https://dicer.sh/docs/"
 echo ""
-echo "Join our community for support and updates: https://dicer.sh/community"
 echo -e "${YELLOW}Thank you for installing Dicer!${NC}"
 echo ""
