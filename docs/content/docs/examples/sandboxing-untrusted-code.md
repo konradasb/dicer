@@ -105,7 +105,7 @@ out its result:
 ```console
 $ dicer snapshot fork python-base job-1 --network sandbox
 Instance job-1 forked from snapshot python-base in 445ms (172.30.0.243)
-$ dicer exec -T --timeout 30 job-1 python3 - < job.py
+$ dicer exec -T --timeout 30s job-1 python3 - < job.py
 done
 $ dicer cp job-1:/tmp/result.json .
 Copied job-1:/tmp/result.json to . (2 KiB)
@@ -115,11 +115,11 @@ $ cat result.json
 
 `python3 -` reads the script from standard input, so it never has to be
 copied into the guest. `-T` passes the script through as it is, without a
-terminal. `dicer exec` exits with the script's exit code. `--timeout 30`
+terminal. `dicer exec` exits with the script's exit code. `--timeout 30s`
 kills a script that runs for longer, and the exit code is then 124:
 
 ```console
-$ echo 'while True: pass' | dicer exec -T --timeout 5 job-1 python3 -
+$ echo 'while True: pass' | dicer exec -T --timeout 5s job-1 python3 -
 $ echo $?
 124
 ```

@@ -7,9 +7,11 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -51,7 +53,7 @@ func newInstanceExecCommand() *cobra.Command {
 	cmd.Flags().StringArrayP("env", "e", nil,
 		"Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable)")
 	cmd.Flags().StringP("workdir", "w", "", "Working directory inside the instance")
-	cmd.Flags().Int32("timeout", 0, "Kill the command after this many seconds (0: no limit)")
+	cmd.Flags().Duration("timeout", 0, "Kill the command after this long, e.g. 30s (0: no limit)")
 	cmd.MarkFlagsMutuallyExclusive("tty", "no-tty")
 
 	return cmd
@@ -126,7 +128,16 @@ func buildExecStart(cmd *cobra.Command, args []string) (*dicerdv1.ExecInstanceSt
 	noTTY, _ := cmd.Flags().GetBool("no-tty")
 	envSpecs, _ := cmd.Flags().GetStringArray("env")
 	workdir, _ := cmd.Flags().GetString("workdir")
-	timeout, _ := cmd.Flags().GetInt32("timeout")
+	timeout, _ := cmd.Flags().GetDuration("timeout")
+	if timeout < 0 {
+		return nil, usagef(cmd, "invalid --timeout %s: it cannot be negative", timeout)
+	}
+	// The guest counts whole seconds. A part of one is rounded up, so that
+	// a short timeout never becomes no limit at all.
+	seconds := int64((timeout + time.Second - 1) / time.Second)
+	if seconds > math.MaxInt32 {
+		return nil, usagef(cmd, "invalid --timeout %s: it is too long", timeout)
+	}
 
 	env, err := parseEnv(envSpecs, nil)
 	if err != nil {
@@ -138,7 +149,7 @@ func buildExecStart(cmd *cobra.Command, args []string) (*dicerdv1.ExecInstanceSt
 		Command:        command,
 		Tty:            wantTTY(ttyFlag, noTTY, term.IsTerminal(int(os.Stdin.Fd())), term.IsTerminal(int(os.Stdout.Fd()))),
 		Cwd:            workdir,
-		TimeoutSeconds: timeout,
+		TimeoutSeconds: int32(seconds),
 		Env:            env,
 	}
 	if start.GetTty() {

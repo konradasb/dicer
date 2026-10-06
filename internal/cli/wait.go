@@ -52,7 +52,11 @@ func newInstanceWaitCommand() *cobra.Command {
 
 func runInstanceWaitCommand(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-	if timeout, _ := cmd.Flags().GetDuration("timeout"); timeout > 0 {
+	timeout, _ := cmd.Flags().GetDuration("timeout")
+	if timeout < 0 {
+		return usagef(cmd, "invalid --timeout %s: it cannot be negative", timeout)
+	}
+	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()

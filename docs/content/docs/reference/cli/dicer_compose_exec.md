@@ -28,7 +28,7 @@ $ dicer compose exec -T web cat /etc/nginx/nginx.conf > nginx.conf
 |---|---|
 | `-e`, `--env stringArray` | Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable). |
 | `-T`, `--no-tty` | Do not allocate a pseudo-TTY. |
-| `--timeout int32` | Kill the command after this many seconds (0: no limit). |
+| `--timeout duration` | Kill the command after this long, e.g. 30s (0: no limit). |
 | `-t`, `--tty` | Allocate a pseudo-TTY (default: when stdin and stdout are a terminal). |
 | `-w`, `--workdir string` | Working directory inside the instance. |
 
@@ -38,3 +38,4 @@ $ dicer compose exec -T web cat /etc/nginx/nginx.conf > nginx.conf
 |---|---|
 | `-D`, `--debug` | Trace every call to the daemon on stderr (or set `$DICER_DEBUG`). |
 | `-r`, `--remote string` | Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) (default `$DICER_REMOTE`, then the current remote, then local). |
+| `--request-timeout duration` | Give up on a single call to the daemon after this long, e.g. 30s (0: never; streams such as logs -f and exec are not bounded). |

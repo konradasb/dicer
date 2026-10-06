@@ -77,14 +77,29 @@ func TestDebugTracesCalls(t *testing.T) {
 	}
 }
 
-func TestTimeout(t *testing.T) {
+func TestRequestTimeout(t *testing.T) {
 	d := newFakeInstanceDaemon()
 	d.hostDelay = time.Second
 	serveFakeDaemon(t, d)
 
-	_, err := run(t, "--timeout", "50ms", "info")
-	if err == nil || !strings.Contains(err.Error(), "GetHostInfo took longer than --timeout 50ms") {
+	_, err := run(t, "--request-timeout", "50ms", "info")
+	if err == nil || !strings.Contains(err.Error(), "GetHostInfo took longer than --request-timeout 50ms") {
 		t.Errorf("err = %v, want it to name the call and the timeout", err)
+	}
+}
+
+func TestNegativeTimeoutsAreRefused(t *testing.T) {
+	isolateConfig(t)
+
+	for _, args := range [][]string{
+		{"exec", "--timeout", "-1s", "web", "true"},
+		{"wait", "--timeout", "-1s", "web"},
+		{"--request-timeout", "-1s", "info"},
+	} {
+		_, err := run(t, args...)
+		if err == nil || !strings.Contains(err.Error(), "cannot be negative") {
+			t.Errorf("%v = %v, want it refused as negative", args, err)
+		}
 	}
 }
 

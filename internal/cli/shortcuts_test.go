@@ -45,7 +45,7 @@ type fakeInstanceDaemon struct {
 	kernels  []string
 	networks []string
 	host     *dicerdv1.GetHostInfoResponse
-	// hostDelay holds up GetHostInfo, to trip --timeout.
+	// hostDelay holds up GetHostInfo, to trip --request-timeout.
 	hostDelay time.Duration
 
 	// events is what GetEvents streams once it has caught up. A test that

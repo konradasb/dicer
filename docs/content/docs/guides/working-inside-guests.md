@@ -62,10 +62,11 @@ $ tar -c ./site | dicer exec -T web tar -x -C /srv
 
 `dicer exec` exits with the command's exit code. As in a shell, it is 127
 for a command that is not found and 126 for one that cannot be run. It is
-124 for a command killed by `--timeout`, which is given in seconds:
+124 for a command killed by `--timeout`, which takes a duration such as
+`30s` or `2m`:
 
 ```console
-$ dicer exec --timeout 30 db pg_isready || echo "not ready: $?"
+$ dicer exec --timeout 30s db pg_isready || echo "not ready: $?"
 ```
 
 ## List its processes

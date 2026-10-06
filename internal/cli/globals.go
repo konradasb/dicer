@@ -33,7 +33,7 @@ func addGlobalFlags(cmd *cobra.Command) {
 		"Daemon to talk to: a remote's name, or an address (unix:///PATH or HOST:PORT) "+
 			"(default $"+remoteEnv+", then the current remote, then "+remote.Local+")")
 	flags.BoolP("debug", "D", false, "Trace every call to the daemon on stderr (or set $"+debugEnv+")")
-	flags.Duration("timeout", 0, "Give up on a call to the daemon after this long, e.g. 30s "+
+	flags.Duration("request-timeout", 0, "Give up on a single call to the daemon after this long, e.g. 30s "+
 		"(0: never; streams such as logs -f and exec are not bounded)")
 
 	_ = cmd.RegisterFlagCompletionFunc("remote", completeRemotes)
@@ -42,8 +42,8 @@ func addGlobalFlags(cmd *cobra.Command) {
 // validateGlobalFlags checks the global flags a command was given, before
 // it runs.
 func validateGlobalFlags(cmd *cobra.Command, _ []string) error {
-	if d, _ := cmd.Flags().GetDuration("timeout"); d < 0 {
-		return usagef(cmd, "invalid --timeout %s: it cannot be negative", d)
+	if d, _ := cmd.Flags().GetDuration("request-timeout"); d < 0 {
+		return usagef(cmd, "invalid --request-timeout %s: it cannot be negative", d)
 	}
 
 	return checkRequiredFlags(cmd)
@@ -95,14 +95,14 @@ func (t *tracer) call(method string, start time.Time, err error) {
 }
 
 // dialOptions are what every connection has: a bound on each unary call for
-// --timeout, and a trace of each call for --debug.
+// --request-timeout, and a trace of each call for --debug.
 func dialOptions(cmd *cobra.Command) []grpc.DialOption {
 	var (
 		unary  []grpc.UnaryClientInterceptor
 		stream []grpc.StreamClientInterceptor
 	)
 
-	if timeout, _ := cmd.Flags().GetDuration("timeout"); timeout > 0 {
+	if timeout, _ := cmd.Flags().GetDuration("request-timeout"); timeout > 0 {
 		unary = append(unary, func(
 			ctx context.Context, method string, req, reply any, cc *grpc.ClientConn,
 			invoker grpc.UnaryInvoker, opts ...grpc.CallOption,
@@ -113,10 +113,10 @@ func dialOptions(cmd *cobra.Command) []grpc.DialOption {
 
 			// The daemon is sent the deadline too, and its timer may run out
 			// before ours: a deadline passed while the caller's context lives
-			// is --timeout's either way.
+			// is --request-timeout's either way.
 			err := invoker(ctx, method, req, reply, cc, opts...)
 			if status.Code(err) == codes.DeadlineExceeded && parent.Err() == nil {
-				return fmt.Errorf("%s took longer than --timeout %s", path.Base(method), timeout)
+				return fmt.Errorf("%s took longer than --request-timeout %s", path.Base(method), timeout)
 			}
 			return err
 		})
