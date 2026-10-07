@@ -403,6 +403,10 @@ func (u *upper) up(s *compose.Service) error {
 
 // create defines a service's instance and starts it.
 func (u *upper) create(s *compose.Service, done string) error {
+	if warning := deprecatedHypervisorVersionWarning(u.ctx(), u.client,
+		s.Instance.HypervisorType, s.Instance.HypervisorVersion); warning != "" {
+		u.out.printf("%s", warning)
+	}
 	start := time.Now()
 	instance, err := u.client.Instances.Create(u.ctx(), s.Instance, dicer.CreateOptions{Start: true, PullPolicy: u.pull})
 	if err != nil {

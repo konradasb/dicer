@@ -6919,9 +6919,12 @@ type HypervisorInfo struct {
 	// The versions available, the one an instance gets by default first.
 	Versions []string `protobuf:"bytes,2,rep,name=versions,proto3" json:"versions,omitempty"`
 	// Whether this is the hypervisor an instance gets when it names none.
-	IsDefault     bool `protobuf:"varint,3,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	IsDefault bool `protobuf:"varint,3,opt,name=is_default,json=isDefault,proto3" json:"is_default,omitempty"`
+	// The versions that are deprecated: every one but the default. Each is
+	// kept only for what still uses it, and a later release removes it.
+	DeprecatedVersions []string `protobuf:"bytes,4,rep,name=deprecated_versions,json=deprecatedVersions,proto3" json:"deprecated_versions,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *HypervisorInfo) Reset() {
@@ -6973,6 +6976,13 @@ func (x *HypervisorInfo) GetIsDefault() bool {
 		return x.IsDefault
 	}
 	return false
+}
+
+func (x *HypervisorInfo) GetDeprecatedVersions() []string {
+	if x != nil {
+		return x.DeprecatedVersions
+	}
+	return nil
 }
 
 // Event is one thing that happened to one resource on this host.
@@ -7731,12 +7741,13 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12.\n" +
 	"\x05state\x18\x02 \x01(\x0e2\x18.dicerd.v1.InstanceStateR\x05state\x12\x14\n" +
 	"\x05vcpus\x18\x03 \x01(\x05R\x05vcpus\x12!\n" +
-	"\fmemory_bytes\x18\x04 \x01(\x03R\vmemoryBytes\"z\n" +
+	"\fmemory_bytes\x18\x04 \x01(\x03R\vmemoryBytes\"\xab\x01\n" +
 	"\x0eHypervisorInfo\x12-\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x19.dicerd.v1.HypervisorTypeR\x04type\x12\x1a\n" +
 	"\bversions\x18\x02 \x03(\tR\bversions\x12\x1d\n" +
 	"\n" +
-	"is_default\x18\x03 \x01(\bR\tisDefault\"\xd0\x02\n" +
+	"is_default\x18\x03 \x01(\bR\tisDefault\x12/\n" +
+	"\x13deprecated_versions\x18\x04 \x03(\tR\x12deprecatedVersions\"\xd0\x02\n" +
 	"\x05Event\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12(\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x14.dicerd.v1.EventKindR\x04kind\x12\x0e\n" +

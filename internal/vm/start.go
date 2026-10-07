@@ -70,6 +70,11 @@ func (m *Manager) boot(ctx context.Context, instance types.InstanceSpec, restart
 	if err != nil {
 		return err
 	}
+	hypervisorType := instance.EffectiveHypervisorType()
+	if hypervisor.IsDeprecated(m.starters[hypervisorType], instance.HypervisorVersion) {
+		m.logger.WarnContext(ctx, "booting an instance on a deprecated hypervisor version",
+			"instance", instance.Name, "hypervisor", hypervisorType, "hypervisor_version", instance.HypervisorVersion)
+	}
 	boot, err := m.resolveBoot(ctx, instance, starter)
 	if err != nil {
 		return err

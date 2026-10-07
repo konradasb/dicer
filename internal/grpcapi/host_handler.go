@@ -50,9 +50,10 @@ func (h *hostHandler) hypervisorInfos() []*dicerdv1.HypervisorInfo {
 		}
 
 		out = append(out, &dicerdv1.HypervisorInfo{
-			Type:      hypervisorTypes.toProto(hypervisorType),
-			Versions:  versions,
-			IsDefault: i == 0,
+			Type:               hypervisorTypes.toProto(hypervisorType),
+			Versions:           versions,
+			IsDefault:          i == 0,
+			DeprecatedVersions: hypervisor.DeprecatedVersions(starters),
 		})
 	}
 

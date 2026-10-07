@@ -28,7 +28,7 @@ first:
 
 ```console
 $ dicer info
-    Hypervisors: cloud-hypervisor v53.0.0 (default), v49.0.0, v48.0.0
+    Hypervisors: cloud-hypervisor v53.0.0 (default), v49.0.0 (deprecated), v48.0.0 (deprecated)
                  firecracker v1.17.0
 ```
 
@@ -54,6 +54,13 @@ version that froze the guest can resume it.
   changes.
 - **A version with a security flaw its project will not fix may be removed
   sooner**, in any release, whose notes say so.
+
+Dicer says when something uses a deprecated version. `dicer info` marks it,
+and the API reports it in `HypervisorInfo.deprecated_versions`. `dicer run`,
+`dicer create`, `dicer update` and `dicer compose up` warn when an instance
+names it. The daemon logs a warning whenever it boots an instance on it.
+Each time the daemon starts, it also logs a warning for each instance, guest
+and memory snapshot that still uses it.
 
 The versions this release of Dicer carries:
 

@@ -505,6 +505,7 @@ an instance may name.
 | `type` | [`HypervisorType`](#hypervisortype) |  |
 | `versions` | repeated `string` | The versions available, the one an instance gets by default first. |
 | `is_default` | `bool` | Whether this is the hypervisor an instance gets when it names none. |
+| `deprecated_versions` | repeated `string` | The versions that are deprecated: every one but the default. Each is kept only for what still uses it, and a later release removes it. |
 
 ### Image
 

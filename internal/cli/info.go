@@ -6,6 +6,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -179,7 +180,8 @@ func networkAPILines(host dicer.HostInfo) []string {
 }
 
 // hypervisorLines describe what an instance may be started with, one
-// hypervisor to a line: "cloud-hypervisor v53.0.0 (default), v49.0.0".
+// hypervisor to a line: "cloud-hypervisor v53.0.0 (default), v49.0.0
+// (deprecated)".
 func hypervisorLines(hypervisors []dicer.HypervisorInfo) []string {
 	if len(hypervisors) == 0 {
 		return []string{"none"}
@@ -187,11 +189,17 @@ func hypervisorLines(hypervisors []dicer.HypervisorInfo) []string {
 
 	lines := make([]string, 0, len(hypervisors))
 	for _, hypervisor := range hypervisors {
-		versions := hypervisor.Versions
-		if len(versions) > 0 && hypervisor.IsDefault {
-			// The first version is the one an instance gets by default, and
-			// the default hypervisor is listed first.
-			versions = append([]string{versions[0] + " (default)"}, versions[1:]...)
+		versions := make([]string, 0, len(hypervisor.Versions))
+		for i, v := range hypervisor.Versions {
+			switch {
+			case i == 0 && hypervisor.IsDefault:
+				// The first version is the one an instance gets by default,
+				// and the default hypervisor is listed first.
+				v += " (default)"
+			case slices.Contains(hypervisor.DeprecatedVersions, v):
+				v += " (deprecated)"
+			}
+			versions = append(versions, v)
 		}
 		lines = append(lines, string(hypervisor.Type)+" "+strings.Join(versions, ", "))
 	}

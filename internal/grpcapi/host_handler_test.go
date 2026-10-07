@@ -6,6 +6,7 @@ package grpcapi
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/konradasb/dicer/internal/hypervisor"
@@ -62,6 +63,28 @@ func TestHypervisorInfosPutTheDefaultFirst(t *testing.T) {
 	}
 	if got[1].GetType() != dicerdv1.HypervisorType_HYPERVISOR_TYPE_FIRECRACKER || got[1].GetIsDefault() {
 		t.Errorf("second entry = %+v, want firecracker, not the default", got[1])
+	}
+}
+
+// TestHypervisorInfosDeprecateAllButTheDefault covers the deprecation
+// policy: every version but a hypervisor's default is deprecated.
+func TestHypervisorInfosDeprecateAllButTheDefault(t *testing.T) {
+	h := &hostHandler{hypervisors: map[types.HypervisorType][]hypervisor.Starter{
+		types.HypervisorTypeCloudHypervisor: {
+			fakeStarter{version: "v53.0.0"}, fakeStarter{version: "v49.0.0"}, fakeStarter{version: "v48.0.0"},
+		},
+		types.HypervisorTypeFirecracker: {fakeStarter{version: "v1.17.0"}},
+	}}
+
+	got := h.hypervisorInfos()
+	if len(got) != 2 {
+		t.Fatalf("got %d hypervisors, want 2", len(got))
+	}
+	if got, want := got[0].GetDeprecatedVersions(), []string{"v49.0.0", "v48.0.0"}; !slices.Equal(got, want) {
+		t.Errorf("cloud-hypervisor's deprecated versions = %v, want %v", got, want)
+	}
+	if got := got[1].GetDeprecatedVersions(); len(got) != 0 {
+		t.Errorf("firecracker's deprecated versions = %v, want none", got)
 	}
 }
 

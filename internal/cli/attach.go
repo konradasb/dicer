@@ -41,6 +41,10 @@ func runAttached(cmd *cobra.Command, create instanceCreate) error {
 	}
 	defer cleanup()
 
+	if warning := deprecatedHypervisorVersionWarning(cmd.Context(), client,
+		create.spec.HypervisorType, create.spec.HypervisorVersion); warning != "" {
+		cmd.PrintErrln(warning)
+	}
 	if create.opts.PullPolicy, err = pullAsPolicy(cmd, client, create.spec.ImageRef, create.opts.PullPolicy); err != nil {
 		return err
 	}

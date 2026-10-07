@@ -276,6 +276,10 @@ func newInstanceUpdateCommand() *cobra.Command {
 			}
 
 			succeeded(cmd, "Instance %s updated", instance.Name)
+			if warning := deprecatedHypervisorVersionWarning(cmd.Context(), client,
+				instance.HypervisorType, instance.HypervisorVersion); warning != "" {
+				cmd.PrintErrln(warning)
+			}
 
 			return nil
 		},
@@ -299,6 +303,10 @@ func createInstance(cmd *cobra.Command, create instanceCreate) error {
 	}
 	defer cleanup()
 
+	if warning := deprecatedHypervisorVersionWarning(cmd.Context(), client,
+		create.spec.HypervisorType, create.spec.HypervisorVersion); warning != "" {
+		cmd.PrintErrln(warning)
+	}
 	if create.opts.PullPolicy, err = pullAsPolicy(cmd, client, create.spec.ImageRef, create.opts.PullPolicy); err != nil {
 		return err
 	}

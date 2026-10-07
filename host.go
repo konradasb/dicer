@@ -35,6 +35,11 @@ type HypervisorInfo struct {
 	// IsDefault reports whether this is the hypervisor an instance gets when
 	// it names none.
 	IsDefault bool `json:"is_default,omitzero"`
+
+	// DeprecatedVersions are the versions that are deprecated: every one but
+	// the default. Each is kept only for what still uses it, and a later
+	// release of Dicer removes it.
+	DeprecatedVersions []string `json:"deprecated_versions,omitzero"`
 }
 
 // Resources are how much CPU and memory instances may be given, how much is
@@ -136,9 +141,10 @@ func hostInfoFromProto(p *dicerdv1.GetHostInfoResponse) HostInfo {
 // hypervisorInfoFromProto returns the hypervisor p describes.
 func hypervisorInfoFromProto(p *dicerdv1.HypervisorInfo) HypervisorInfo {
 	return HypervisorInfo{
-		Type:      hypervisorTypes.fromProto(p.GetType()),
-		Versions:  p.GetVersions(),
-		IsDefault: p.GetIsDefault(),
+		Type:               hypervisorTypes.fromProto(p.GetType()),
+		Versions:           p.GetVersions(),
+		IsDefault:          p.GetIsDefault(),
+		DeprecatedVersions: p.GetDeprecatedVersions(),
 	}
 }
 

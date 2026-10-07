@@ -108,6 +108,7 @@ func (d *daemon) Run(ctx context.Context) error {
 	// Reconcile recorded state with what is running before serving.
 	d.instances.Recover(ctx)
 	defer d.instances.Close()
+	d.instances.WarnDeprecatedHypervisorVersions(ctx)
 
 	// Created before serving, so that no request finds either missing.
 	if err := d.ensureDefaultNetwork(); err != nil {

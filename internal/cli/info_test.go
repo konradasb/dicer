@@ -44,7 +44,10 @@ func TestWriteInfo(t *testing.T) {
 		Hostname: "compute-1",
 		Version:  "v0.5.0",
 		Hypervisors: []dicer.HypervisorInfo{
-			{Type: dicer.HypervisorTypeCloudHypervisor, Versions: []string{"v49.0.0", "v48.0.0"}, IsDefault: true},
+			{
+				Type: dicer.HypervisorTypeCloudHypervisor, Versions: []string{"v49.0.0", "v48.0.0"},
+				IsDefault: true, DeprecatedVersions: []string{"v48.0.0"},
+			},
 			{Type: dicer.HypervisorTypeFirecracker, Versions: []string{"v1.17.0"}},
 		},
 	}
@@ -67,7 +70,7 @@ func TestWriteInfo(t *testing.T) {
          Remote: local (unix:///run/dicer/dicer.sock)
     Network API: off (set api.tcp.listen to serve it over the network)
 
-    Hypervisors: cloud-hypervisor v49.0.0 (default), v48.0.0
+    Hypervisors: cloud-hypervisor v49.0.0 (default), v48.0.0 (deprecated)
                  firecracker v1.17.0
 
            vCPU: █████░░░░░░░░░░░░░░░  4 of 16         25%
