@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Go, at the version in `go.mod`
-- `make` and `curl`
+- `make`, `curl` and `zstd`
 - To run the daemon: a Linux host with KVM, `erofs-utils`, `e2fsprogs` and
   `iptables`
 
@@ -17,8 +17,10 @@ make build
 ```
 
 Builds `dicer` for your machine and `dicerd` for Linux into `bin/`, with the
-guest binaries and the hypervisors `dicerd` embeds. `make build GOARCH=arm64`
-targets the other architecture.
+binaries `dicerd` embeds. `make guest-binaries` builds `dicer-init` and
+`dicer-agent`, and downloads the default kernel. `make host-binaries`
+downloads the hypervisors. `make build GOARCH=arm64` targets the other
+architecture.
 
 ## Testing
 
@@ -58,7 +60,7 @@ make test-e2e DICER_E2E_HOST=my-kvm-host
 | `DICER_E2E_HOST` | — | Required |
 | `DICER_E2E_SSH_USER` | `root` | |
 | `DICER_E2E_SSH_KEY` | your SSH configuration and agent | |
-| `DICER_E2E_KERNEL_URL` | the kernel the installer recommends | |
+| `DICER_E2E_KERNEL_URL` | the default kernel's release | Where the host downloads the kernel the tests import |
 | `DICER_E2E_KEEP` | — | Leave the daemon running afterwards |
 
 They are behind the `e2e` build tag, so `go test ./...` and CI skip them. The

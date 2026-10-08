@@ -4,7 +4,6 @@
 package kernel
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -13,16 +12,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
-	"time"
 
-	"github.com/konradasb/dicer/internal/events"
+	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/types"
 )
 
-func newTestManager(t *testing.T, fetch fetchFunc) *Manager {
+func newTestManager(t *testing.T) *Manager {
 	t.Helper()
 
 	m, err := NewManager(Config{
@@ -32,38 +28,7 @@ func newTestManager(t *testing.T, fetch fetchFunc) *Manager {
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
-	m.fetchFunc = fetch
-
 	return m
-}
-
-// writeFetcher returns a fetchFunc that writes fixed contents and counts
-// calls.
-func writeFetcher(contents string, calls *int) fetchFunc {
-	return func(_ context.Context, _, dst string) (int64, error) {
-		*calls++
-		return writeFile(dst, contents)
-	}
-}
-
-// writeFile writes contents to dst as a fetch would, returning their size.
-func writeFile(dst, contents string) (int64, error) {
-	return int64(len(contents)), os.WriteFile(dst, []byte(contents), 0o755)
-}
-
-// fetchRecord is one call to RecordKernelFetch.
-type fetchRecord struct {
-	err          error
-	fetchedBytes int64
-}
-
-// fakeMetrics keeps every fetch recorded.
-type fakeMetrics struct {
-	fetches []fetchRecord
-}
-
-func (f *fakeMetrics) RecordKernelFetch(err error, _ time.Duration, fetchedBytes int64) {
-	f.fetches = append(f.fetches, fetchRecord{err: err, fetchedBytes: fetchedBytes})
 }
 
 func sha256Of(s string) string {
@@ -71,254 +36,153 @@ func sha256Of(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// TestPathFetchesOnceAndThenCaches is the behaviour the Manager exists for:
-// Path is called on every instance start, so it must not hit the network
-// every time.
-func TestPathFetchesOnceAndThenCaches(t *testing.T) {
-	var calls int
-	m := newTestManager(t, writeFetcher("vmlinux", &calls))
-	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux"}
+// importKernel imports contents as the kernel with the given ID and name, and
+// returns it.
+func importKernel(t *testing.T, m *Manager, id, name, contents string) types.Kernel {
+	t.Helper()
 
-	first, err := m.Path(context.Background(), k)
+	digest, err := m.Import(id, strings.NewReader(contents), "")
 	if err != nil {
-		t.Fatalf("first Path: %v", err)
+		t.Fatalf("Import: %v", err)
 	}
-	if calls != 1 {
-		t.Fatalf("fetches after first call = %d, want 1", calls)
-	}
-
-	second, err := m.Path(context.Background(), k)
-	if err != nil {
-		t.Fatalf("second Path: %v", err)
-	}
-	if second != first {
-		t.Errorf("path changed between calls: %q then %q", first, second)
-	}
-	if calls != 1 {
-		t.Errorf("fetches after second call = %d, want 1 (the copy on disk should be reused)", calls)
-	}
+	return types.Kernel{ID: id, Name: name, SHA256: digest}
 }
 
-func TestPathFailsOnChecksumMismatch(t *testing.T) {
-	var calls int
-	m := newTestManager(t, writeFetcher("wrong contents", &calls))
-	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("vmlinux")}
+// TestImportKeepsAKernelWithItsChecksum checks that an imported kernel is
+// kept as the binary instances boot, with the SHA-256 of what was sent, and
+// that one that fails a checksum it was given, or is empty, is not kept.
+func TestImportKeepsAKernelWithItsChecksum(t *testing.T) {
+	m := newTestManager(t)
 
-	if _, err := m.Path(context.Background(), k); err == nil {
-		t.Fatal("Path should fail when the download does not match the expected checksum")
+	k := importKernel(t, m, "k1", "test", "vmlinux")
+	if k.SHA256 != sha256Of("vmlinux") {
+		t.Errorf("Import returned %s, want the SHA-256 of what was sent", k.SHA256)
 	}
-
-	// A failed fetch must leave nothing behind for the next call to adopt.
-	if _, err := os.Stat(m.binaryPath(k.ID)); !errors.Is(err, fs.ErrNotExist) {
-		t.Error("failed download left a file on disk")
-	}
-}
-
-// TestPathRefetchesCorruptedCache covers a cached copy that no longer matches
-// its checksum -- a truncated download must not be served forever.
-func TestPathRefetchesCorruptedCache(t *testing.T) {
-	var calls int
-	m := newTestManager(t, writeFetcher("vmlinux", &calls))
-	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("vmlinux")}
-
-	path, err := m.Path(context.Background(), k)
+	path, err := m.Path(k)
 	if err != nil {
 		t.Fatalf("Path: %v", err)
 	}
-	if calls != 1 {
-		t.Fatalf("fetches = %d, want 1", calls)
+	if data, err := os.ReadFile(path); err != nil || string(data) != "vmlinux" {
+		t.Errorf("the kernel kept = %q, %v; want vmlinux", data, err)
 	}
 
-	if err := os.WriteFile(path, []byte("corrupted"), 0o755); err != nil {
-		t.Fatalf("corrupt the cached file: %v", err)
-	}
-
-	if _, err := m.Path(context.Background(), k); err != nil {
-		t.Fatalf("Path after corruption: %v", err)
-	}
-	if calls != 2 {
-		t.Errorf("fetches = %d, want 2 (the corrupted copy should be refetched)", calls)
+	for _, tt := range []struct {
+		name, contents, sha256 string
+	}{
+		{"a checksum it fails", "vmlinux", sha256Of("other")},
+		{"empty", "", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := m.Import("bad", strings.NewReader(tt.contents), tt.sha256); !errors.Is(err, errdefs.ErrInvalidArgument) {
+				t.Errorf("Import = %v, want errdefs.ErrInvalidArgument", err)
+			}
+			if _, err := os.Stat(m.binaryPath("bad")); !errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("a refused kernel was kept: %v", err)
+			}
+		})
 	}
 }
 
-func TestPathWithoutURLFails(t *testing.T) {
-	m := newTestManager(t, func(context.Context, string, string) (int64, error) {
-		t.Fatal("should not fetch without a URL")
-		return 0, nil
-	})
+// TestPathRefusesAMissingOrDamagedKernel checks that a kernel whose binary
+// has gone from the host, no longer matches its checksum, or has none, is
+// refused, saying so and what to do.
+func TestPathRefusesAMissingOrDamagedKernel(t *testing.T) {
+	m := newTestManager(t)
 
-	if _, err := m.Path(context.Background(), types.Kernel{ID: "k1", Name: "test"}); err == nil {
-		t.Error("Path should fail for a kernel with no URL and nothing cached")
+	tests := []struct {
+		name   string
+		kernel func() types.Kernel
+		want   string
+	}{
+		{
+			"missing",
+			func() types.Kernel {
+				k := importKernel(t, m, "k1", "gone", "vmlinux")
+				_ = os.Remove(m.binaryPath(k.ID))
+				return k
+			},
+			`kernel "gone" is missing from the host: delete it and import it again`,
+		},
+		{
+			"damaged",
+			func() types.Kernel {
+				k := importKernel(t, m, "k2", "bad", "vmlinux")
+				_ = os.WriteFile(m.binaryPath(k.ID), []byte("damaged"), 0o755)
+				return k
+			},
+			`kernel "bad" on the host does not match its checksum: delete it and import it again`,
+		},
+		{
+			"with no checksum",
+			func() types.Kernel {
+				k := importKernel(t, m, "k3", "old", "vmlinux")
+				k.SHA256 = ""
+				return k
+			},
+			`kernel "old" has no checksum to check it by: delete it and import it again`,
+		},
+		{
+			"the default kernel, missing",
+			func() types.Kernel {
+				k := importKernel(t, m, "k4", types.DefaultKernelName, "vmlinux")
+				_ = os.Remove(m.binaryPath(k.ID))
+				return k
+			},
+			`kernel "default" is missing from the host: restart the daemon, which puts it back`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := m.Path(tt.kernel())
+			if !errors.Is(err, errdefs.ErrInvalidState) || err.Error() != tt.want {
+				t.Errorf("Path = %v, want errdefs.ErrInvalidState: %s", err, tt.want)
+			}
+		})
 	}
 }
 
-// TestPathWithoutChecksumUsesCache covers kernels imported without a SHA256:
-// there is nothing to verify, so an existing copy is trusted.
-func TestPathWithoutChecksumUsesCache(t *testing.T) {
-	var calls int
-	m := newTestManager(t, writeFetcher("vmlinux", &calls))
-	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux"}
+// TestExtractDefaultReplacesWhatIsThere checks that the default kernel is
+// extracted as a kernel's binary, in place of whatever was there.
+func TestExtractDefaultReplacesWhatIsThere(t *testing.T) {
+	m := newTestManager(t)
+	importKernel(t, m, "k1", types.DefaultKernelName, "an older default kernel")
 
-	for range 3 {
-		if _, err := m.Path(context.Background(), k); err != nil {
-			t.Fatalf("Path: %v", err)
-		}
+	if err := m.ExtractDefault("k1"); err != nil {
+		t.Fatalf("ExtractDefault: %v", err)
 	}
-	if calls != 1 {
-		t.Errorf("fetches = %d, want 1", calls)
+
+	k := Default()
+	k.ID = "k1"
+	if _, err := m.Path(k); err != nil {
+		t.Errorf("Path of the extracted default kernel: %v", err)
 	}
 }
 
-// TestFetchesAreRecorded covers what the fetch metrics see: each fetch once,
-// failed or not, with the bytes it fetched, and nothing for a cached kernel.
-func TestFetchMetricsAreRecorded(t *testing.T) {
-	var calls int
-	m := newTestManager(t, writeFetcher("vmlinux", &calls))
-	metrics := &fakeMetrics{}
-	m.metrics = metrics
+func TestDiskBytesIsSizeOfTheKernel(t *testing.T) {
+	m := newTestManager(t)
 
-	bad := types.Kernel{ID: "k1", Name: "bad", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("other")}
-	if _, err := m.Path(t.Context(), bad); err == nil {
-		t.Fatal("Path should fail when the download does not match the expected checksum")
+	if got := m.DiskBytes("k1"); got != 0 {
+		t.Errorf("DiskBytes before import = %d, want 0", got)
 	}
-
-	good := types.Kernel{ID: "k2", Name: "good", URL: "https://example.invalid/vmlinux"}
-	for range 2 {
-		if _, err := m.Path(t.Context(), good); err != nil {
-			t.Fatalf("Path: %v", err)
-		}
-	}
-
-	if len(metrics.fetches) != 2 {
-		t.Fatalf("recorded fetches = %d, want 2: %+v", len(metrics.fetches), metrics.fetches)
-	}
-	if got := metrics.fetches[0]; got.err == nil || got.fetchedBytes != 7 {
-		t.Errorf("failed fetch recorded as %+v, want an error and 7 bytes", got)
-	}
-	if got := metrics.fetches[1]; got.err != nil || got.fetchedBytes != 7 {
-		t.Errorf("successful fetch recorded as %+v, want no error and 7 bytes", got)
-	}
-}
-
-// fakeRecorder keeps every event recorded.
-type fakeRecorder struct {
-	events []events.Event
-}
-
-func (f *fakeRecorder) Record(e events.Event) { f.events = append(f.events, e) }
-
-// TestFetchedIsRecorded covers the fetched event: one for a kernel fetched
-// and verified, saying so, and none for a fetch that failed or a kernel
-// already on disk.
-func TestFetchedEventIsRecorded(t *testing.T) {
-	var calls int
-	m := newTestManager(t, writeFetcher("vmlinux", &calls))
-	recorded := &fakeRecorder{}
-	m.events = recorded
-
-	bad := types.Kernel{ID: "k1", Name: "bad", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("other")}
-	if _, err := m.Path(t.Context(), bad); err == nil {
-		t.Fatal("Path should fail when the download does not match the expected checksum")
-	}
-
-	good := types.Kernel{ID: "k2", Name: "good", URL: "https://example.invalid/vmlinux", SHA256: sha256Of("vmlinux")}
-	for range 2 {
-		if _, err := m.Path(t.Context(), good); err != nil {
-			t.Fatalf("Path: %v", err)
-		}
-	}
-
-	if len(recorded.events) != 1 {
-		t.Fatalf("recorded %+v, want one event for the kernel fetched", recorded.events)
-	}
-	e := recorded.events[0]
-	if e.Kind != events.KindKernel || e.ID != "k2" || e.Name != "good" || e.Action != events.ActionFetched {
-		t.Errorf("event = %+v, want kernel good fetched", e)
-	}
-	if !strings.HasPrefix(e.Message, "Fetched kernel from https://example.invalid/vmlinux in ") ||
-		!strings.HasSuffix(e.Message, ": 7 B, checksum verified") {
-		t.Errorf("message = %q, want where it came from, its size and that it was verified", e.Message)
-	}
-	if e.Attributes["url"] != good.URL || e.Attributes["fetched_bytes"] != "7" {
-		t.Errorf("attributes = %v, want its URL and size", e.Attributes)
-	}
-}
-
-func TestDiskBytesIsSizeOfFetchedBinary(t *testing.T) {
-	var calls int
-	m := newTestManager(t, writeFetcher("vmlinux", &calls))
-	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux"}
-
-	if got := m.DiskBytes(k.ID); got != 0 {
-		t.Errorf("DiskBytes before download = %d, want 0", got)
-	}
-	if _, err := m.Path(t.Context(), k); err != nil {
-		t.Fatalf("Path: %v", err)
-	}
-	if got := m.DiskBytes(k.ID); got != 7 {
-		t.Errorf("DiskBytes after download = %d, want 7", got)
+	importKernel(t, m, "k1", "test", "vmlinux")
+	if got := m.DiskBytes("k1"); got != 7 {
+		t.Errorf("DiskBytes after import = %d, want 7", got)
 	}
 }
 
 func TestDeleteRemovesKernelDirectory(t *testing.T) {
-	var calls int
-	m := newTestManager(t, writeFetcher("vmlinux", &calls))
-	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux"}
-
-	path, err := m.Path(context.Background(), k)
-	if err != nil {
-		t.Fatalf("Path: %v", err)
-	}
+	m := newTestManager(t)
+	k := importKernel(t, m, "k1", "test", "vmlinux")
 
 	if err := m.Delete(k.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if _, err := os.Stat(filepath.Dir(path)); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(filepath.Dir(m.binaryPath(k.ID))); !errors.Is(err, fs.ErrNotExist) {
 		t.Error("kernel directory still present after Delete")
 	}
 
 	// Deleting again is not an error.
 	if err := m.Delete(k.ID); err != nil {
 		t.Errorf("second Delete: %v", err)
-	}
-}
-
-// TestConcurrentPathsShareOneDownload covers instances starting at once with
-// a kernel not yet fetched: they share one download, and none of them sees
-// the kernel before it is whole.
-func TestConcurrentPathsShareOneDownload(t *testing.T) {
-	var calls atomic.Int32
-	release := make(chan struct{})
-	m := newTestManager(t, func(_ context.Context, _, dst string) (int64, error) {
-		calls.Add(1)
-		<-release
-		return writeFile(dst, "vmlinux")
-	})
-	k := types.Kernel{ID: "k1", Name: "test", URL: "https://example.invalid/vmlinux"}
-
-	var wg sync.WaitGroup
-	for range 8 {
-		wg.Go(func() {
-			path, err := m.Path(t.Context(), k)
-			if err != nil {
-				t.Errorf("Path: %v", err)
-				return
-			}
-			if data, err := os.ReadFile(path); err != nil || string(data) != "vmlinux" {
-				t.Errorf("Path returned %q holding %q, %v; want the whole kernel", path, data, err)
-			}
-		})
-	}
-
-	// Give every caller the chance to find the download in progress.
-	time.Sleep(50 * time.Millisecond)
-	if _, err := os.Stat(m.binaryPath(k.ID)); !errors.Is(err, fs.ErrNotExist) {
-		t.Error("the kernel is in place before its download finished")
-	}
-	close(release)
-	wg.Wait()
-
-	if n := calls.Load(); n != 1 {
-		t.Errorf("downloads = %d, want 1", n)
 	}
 }

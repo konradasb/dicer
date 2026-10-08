@@ -16,13 +16,14 @@ apart from its image.
 ## The default kernel
 
 The daemon defines a kernel named `default`: a release of
-[Dicer's kernel](#kernel-requirements) for the host's architecture, pinned by
-this version of Dicer. An instance that names no kernel boots it. Like any
-kernel, it is downloaded the first time an instance boots with it, and
-checked against its checksum.
+[Dicer's kernel](#kernel-requirements) for the host's architecture, which
+`dicerd` carries inside its own binary, as it carries the hypervisors. An
+instance that names no kernel boots it. The daemon puts it on the host when
+it starts, so it needs no network, and puts it back if its copy goes
+missing or is damaged.
 
-A new version of Dicer may pin a newer release. When the daemon is upgraded,
-it updates the default kernel and discards the old download. Instances that
+A new version of Dicer may carry a newer release. When the daemon is
+upgraded, it replaces the default kernel with the new one. Instances that
 use the default kernel boot the new one the next time they start. A running
 instance keeps the kernel it booted, and so does one restored from a
 snapshot or resumed from standby.
@@ -32,19 +33,25 @@ under its name.
 
 ## Importing a kernel
 
-To boot a kernel of your own, import it by name, from a URL, for an
-architecture:
+To boot a kernel of your own, import it by name, for an architecture, from
+a file on the machine you run `dicer` on:
 
 ```console
-$ dicer kernel import custom-6.18 --arch x86_64 \
-    --url https://example.com/kernels/vmlinux-6.18 \
+$ dicer kernel import custom-6.18 ./vmlinux-6.18 --arch x86_64 \
     --sha256 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
 ```
 
-Importing only records the kernel. It is downloaded the first time an
-instance boots with it, and kept. With `--sha256`, the download is checked
-against that checksum. The URL can also be a `file://` URL or an absolute
-path on the host.
+The file is sent to the daemon, up to 512 MiB, and the import returns once
+the kernel is on the daemon's host, so an instance can boot it at once.
+With `--sha256`, the kernel is checked against that checksum, and nothing is
+imported if it does not match. An empty file is refused. The daemon never
+reads a kernel from a path on its own host.
+
+A kernel stays on the host for as long as it is listed, and is checked
+against its checksum each time an instance boots it. If its copy goes
+missing or is damaged, the instance fails to start, and says so: delete the
+kernel and import it again. The daemon puts the default kernel back when it
+next starts.
 
 The kernel's architecture must be the host's: `x86_64` or `aarch64`.
 

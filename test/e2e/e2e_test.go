@@ -337,10 +337,16 @@ func (e *environment) provision(ctx context.Context) error {
 		return fmt.Errorf("create the network: %w", err)
 	}
 
+	// A kernel is imported from a file, so it is downloaded on the host
+	// first, as a user would download it.
+	kernelFile := e.paths.root + "/vmlinux"
+	if _, err := e.host.run(ctx, "curl", "-fsSL", "-o", kernelFile, envOr(kernelURLEnv, defaultKernelURL)); err != nil {
+		return fmt.Errorf("download the kernel: %w", err)
+	}
 	if _, err := e.host.run(ctx,
 		e.paths.dicer, "--remote", e.remote(),
-		"kernel", "import", kernelName,
-		"--arch", "x86_64", "--url", envOr(kernelURLEnv, defaultKernelURL),
+		"kernel", "import", kernelName, kernelFile,
+		"--arch", "x86_64",
 	); err != nil {
 		return fmt.Errorf("import the kernel: %w", err)
 	}

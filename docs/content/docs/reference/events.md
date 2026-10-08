@@ -140,11 +140,10 @@ Every volume event has a `size_bytes` attribute.
 
 ## Kernels
 
-Every kernel event has a `url` attribute.
+Every kernel event has an `arch` attribute: the kernel's architecture.
 
 | Event | `action` | Attributes | What it means |
 |---|---|---|---|
-| Imported | `imported` | `url`, `arch` | The kernel was imported with `dicer kernel import`, or it is the default kernel, which the daemon defines when it first starts. It is recorded by its URL, and fetched when an instance first starts with it. `arch` is its architecture. The message says when it has no checksum to verify it against. |
-| Updated | `updated` | `url`, `arch` | The daemon was upgraded to a version that pins a newer default kernel. The old download was removed, and the new kernel is fetched when an instance next starts with it. |
-| Fetched | `fetched` | `url`, `fetched_bytes` | The kernel was downloaded, or copied from a local path, and verified against its checksum if it has one. `fetched_bytes` is its size. |
-| Deleted | `deleted` | `url`, `arch` | The kernel was deleted, along with its fetched copy if it had one. |
+| Imported | `imported` | `arch` | The kernel was imported with `dicer kernel import`, or it is the default kernel, which the daemon puts on the host when it starts if it is not there. It is on the host. The message says its size, and when it had no checksum to verify it against. |
+| Updated | `updated` | `arch` | The daemon was upgraded to a version that carries a newer default kernel, and has put it in place of the old one. |
+| Deleted | `deleted` | `arch` | The kernel was deleted, along with its copy on the host. |

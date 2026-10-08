@@ -3,6 +3,7 @@
 
 # Binaries dicerd embeds, built or downloaded by make; see the Makefile.
 /internal/initrd/bin/
+/internal/kernel/bin/
 /internal/hypervisor/cloudhypervisor/bin/
 /internal/hypervisor/firecracker/bin/
 

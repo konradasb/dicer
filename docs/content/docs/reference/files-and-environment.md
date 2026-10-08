@@ -49,7 +49,7 @@ which keeps them consistent.
 │   └── <id>/disk.raw         volume disks (sparse)
 ├── kernels/
 │   ├── <name>.yaml           kernel definitions
-│   └── <id>/vmlinux          kernels, once downloaded
+│   └── <id>/vmlinux          the kernels, the default one among them
 ├── images/<digest>/
 │   ├── disk.img              the image as a read-only EROFS disk
 │   └── metadata.json         its name, configuration and when it was used
@@ -127,4 +127,4 @@ environment. See [Compose file](../compose-file#variables).
 | Variable | |
 |---|---|
 | `PATH` | Where `mkfs.erofs`, `mke2fs`, `iptables` and any registry credential helpers are found. |
-| `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY` | The proxy that image pulls and kernel downloads go through, if any. Set them for the service in a systemd drop-in. |
+| `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY` | The proxy that image pulls go through, if any. Set them for the service in a systemd drop-in. |

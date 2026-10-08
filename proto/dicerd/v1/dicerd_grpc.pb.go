@@ -244,10 +244,14 @@ type DaemonServiceClient interface {
 	DeleteImage(ctx context.Context, in *DeleteImageRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// PruneImages removes every image no instance is defined to boot from.
 	PruneImages(ctx context.Context, in *PruneImagesRequest, opts ...grpc.CallOption) (*PruneImagesResponse, error)
-	// ImportKernel records a guest kernel by URL. It is downloaded the first
-	// time an instance boots with it. The daemon defines the kernel named
-	// "default" itself, which an instance boots when it names none.
-	ImportKernel(ctx context.Context, in *ImportKernelRequest, opts ...grpc.CallOption) (*Kernel, error)
+	// ImportKernel puts a guest kernel the client sends on the host, and
+	// returns once it is there. The first message must be an
+	// ImportKernelStart, and the rest carry the kernel in chunks, at most
+	// 512 MiB. The kernel is verified against the start's sha256 if that is
+	// set. Nothing is recorded if it does not match, or if the kernel is
+	// empty. The daemon carries the kernel named "default" itself, which an
+	// instance boots when it names none.
+	ImportKernel(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportKernelRequest, Kernel], error)
 	// ListKernels returns every kernel, the default one among them.
 	ListKernels(ctx context.Context, in *ListKernelsRequest, opts ...grpc.CallOption) (*ListKernelsResponse, error)
 	// GetKernel returns one kernel.
@@ -710,15 +714,18 @@ func (c *daemonServiceClient) PruneImages(ctx context.Context, in *PruneImagesRe
 	return out, nil
 }
 
-func (c *daemonServiceClient) ImportKernel(ctx context.Context, in *ImportKernelRequest, opts ...grpc.CallOption) (*Kernel, error) {
+func (c *daemonServiceClient) ImportKernel(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[ImportKernelRequest, Kernel], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Kernel)
-	err := c.cc.Invoke(ctx, DaemonService_ImportKernel_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[6], DaemonService_ImportKernel_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &grpc.GenericClientStream[ImportKernelRequest, Kernel]{ClientStream: stream}
+	return x, nil
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_ImportKernelClient = grpc.ClientStreamingClient[ImportKernelRequest, Kernel]
 
 func (c *daemonServiceClient) ListKernels(ctx context.Context, in *ListKernelsRequest, opts ...grpc.CallOption) (*ListKernelsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
@@ -772,7 +779,7 @@ func (c *daemonServiceClient) GetResources(ctx context.Context, in *GetResources
 
 func (c *daemonServiceClient) GetEvents(ctx context.Context, in *GetEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetEventsResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[6], DaemonService_GetEvents_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[7], DaemonService_GetEvents_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -962,10 +969,14 @@ type DaemonServiceServer interface {
 	DeleteImage(context.Context, *DeleteImageRequest) (*emptypb.Empty, error)
 	// PruneImages removes every image no instance is defined to boot from.
 	PruneImages(context.Context, *PruneImagesRequest) (*PruneImagesResponse, error)
-	// ImportKernel records a guest kernel by URL. It is downloaded the first
-	// time an instance boots with it. The daemon defines the kernel named
-	// "default" itself, which an instance boots when it names none.
-	ImportKernel(context.Context, *ImportKernelRequest) (*Kernel, error)
+	// ImportKernel puts a guest kernel the client sends on the host, and
+	// returns once it is there. The first message must be an
+	// ImportKernelStart, and the rest carry the kernel in chunks, at most
+	// 512 MiB. The kernel is verified against the start's sha256 if that is
+	// set. Nothing is recorded if it does not match, or if the kernel is
+	// empty. The daemon carries the kernel named "default" itself, which an
+	// instance boots when it names none.
+	ImportKernel(grpc.ClientStreamingServer[ImportKernelRequest, Kernel]) error
 	// ListKernels returns every kernel, the default one among them.
 	ListKernels(context.Context, *ListKernelsRequest) (*ListKernelsResponse, error)
 	// GetKernel returns one kernel.
@@ -1112,8 +1123,8 @@ func (UnimplementedDaemonServiceServer) DeleteImage(context.Context, *DeleteImag
 func (UnimplementedDaemonServiceServer) PruneImages(context.Context, *PruneImagesRequest) (*PruneImagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PruneImages not implemented")
 }
-func (UnimplementedDaemonServiceServer) ImportKernel(context.Context, *ImportKernelRequest) (*Kernel, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ImportKernel not implemented")
+func (UnimplementedDaemonServiceServer) ImportKernel(grpc.ClientStreamingServer[ImportKernelRequest, Kernel]) error {
+	return status.Errorf(codes.Unimplemented, "method ImportKernel not implemented")
 }
 func (UnimplementedDaemonServiceServer) ListKernels(context.Context, *ListKernelsRequest) (*ListKernelsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListKernels not implemented")
@@ -1805,23 +1816,12 @@ func _DaemonService_PruneImages_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DaemonService_ImportKernel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ImportKernelRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonServiceServer).ImportKernel(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: DaemonService_ImportKernel_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServiceServer).ImportKernel(ctx, req.(*ImportKernelRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+func _DaemonService_ImportKernel_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaemonServiceServer).ImportKernel(&grpc.GenericServerStream[ImportKernelRequest, Kernel]{ServerStream: stream})
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_ImportKernelServer = grpc.ClientStreamingServer[ImportKernelRequest, Kernel]
 
 func _DaemonService_ListKernels_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListKernelsRequest)
@@ -2064,10 +2064,6 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DaemonService_PruneImages_Handler,
 		},
 		{
-			MethodName: "ImportKernel",
-			Handler:    _DaemonService_ImportKernel_Handler,
-		},
-		{
 			MethodName: "ListKernels",
 			Handler:    _DaemonService_ListKernels_Handler,
 		},
@@ -2119,6 +2115,11 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "PullImage",
 			Handler:       _DaemonService_PullImage_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "ImportKernel",
+			Handler:       _DaemonService_ImportKernel_Handler,
+			ClientStreams: true,
 		},
 		{
 			StreamName:    "GetEvents",

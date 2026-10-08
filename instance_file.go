@@ -91,27 +91,35 @@ func (s *Instances) CopyArchiveTo(ctx context.Context, name, dest string, r io.R
 		return err
 	}
 
+	err = sendChunks(r, func(chunk []byte) error {
+		return send(&dicerdv1.CopyToInstanceRequest{Payload: &dicerdv1.CopyToInstanceRequest_Data{Data: chunk}})
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = stream.CloseAndRecv()
+	return fromStatus(err)
+}
+
+// sendChunks reads r to its end and passes it to send in chunks the size of
+// a message, each its own copy. It returns the first error either has.
+func sendChunks(r io.Reader, send func(chunk []byte) error) error {
 	buf := make([]byte, archive.ChunkSize)
 	for {
 		n, readErr := io.ReadFull(r, buf)
 		if n > 0 {
-			err := send(&dicerdv1.CopyToInstanceRequest{
-				Payload: &dicerdv1.CopyToInstanceRequest_Data{Data: bytes.Clone(buf[:n])},
-			})
-			if err != nil {
+			if err := send(bytes.Clone(buf[:n])); err != nil {
 				return err
 			}
 		}
 		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
-			break
+			return nil
 		}
 		if readErr != nil {
 			return readErr
 		}
 	}
-
-	_, err = stream.CloseAndRecv()
-	return fromStatus(err)
 }
 
 // CopyArchiveFrom returns a reader of a tar archive of src in an instance,

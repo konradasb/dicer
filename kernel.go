@@ -5,6 +5,8 @@ package dicer
 
 import (
 	"context"
+	"errors"
+	"io"
 	"time"
 
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
@@ -25,14 +27,13 @@ type Kernel struct {
 	UpdateTime time.Time `json:"update_time,omitzero"`
 }
 
-// KernelSpec is where a kernel is downloaded from, and what it is.
+// KernelSpec is what a kernel is.
 type KernelSpec struct {
 	Name         string       `json:"name,omitzero"`
-	URL          string       `json:"url,omitzero"`
 	Architecture Architecture `json:"architecture,omitzero"`
 
-	// SHA256 is the expected SHA-256 of the download, hex-encoded. It is
-	// verified when set.
+	// SHA256 is the SHA-256 of the kernel, hex-encoded. An import verifies
+	// the kernel against it when it is set, and sets it when it is not.
 	SHA256 string `json:"sha256,omitzero"`
 }
 
@@ -50,14 +51,44 @@ var architectures = enum[Architecture, dicerdv1.Architecture]{"architecture", ma
 	ArchitectureAArch64: dicerdv1.Architecture_ARCHITECTURE_AARCH64,
 }}
 
-// Import records a kernel by URL. It is downloaded the first time an
-// instance boots with it.
-func (s *Kernels) Import(ctx context.Context, spec KernelSpec) (Kernel, error) {
-	req, err := importKernelRequest(spec)
+// Import puts the kernel read from r on the daemon's host, and returns once
+// it is there. A kernel can be at most 512 MiB. It is verified against
+// spec.SHA256 if that is set, and given the SHA-256 of what was sent if not.
+func (s *Kernels) Import(ctx context.Context, spec KernelSpec, r io.Reader) (Kernel, error) {
+	start, err := importKernelStart(spec)
 	if err != nil {
 		return Kernel{}, err
 	}
-	resp, err := s.api.ImportKernel(ctx, req)
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	stream, err := s.api.ImportKernel(ctx)
+	if err != nil {
+		return Kernel{}, fromStatus(err)
+	}
+	send := func(req *dicerdv1.ImportKernelRequest) error {
+		if err := stream.Send(req); errors.Is(err, io.EOF) {
+			// The daemon ended the call, and says why when it is closed.
+			_, err = stream.CloseAndRecv()
+			return fromStatus(err)
+		} else if err != nil {
+			return fromStatus(err)
+		}
+		return nil
+	}
+
+	if err := send(&dicerdv1.ImportKernelRequest{Payload: &dicerdv1.ImportKernelRequest_Start{Start: start}}); err != nil {
+		return Kernel{}, err
+	}
+	err = sendChunks(r, func(chunk []byte) error {
+		return send(&dicerdv1.ImportKernelRequest{Payload: &dicerdv1.ImportKernelRequest_Data{Data: chunk}})
+	})
+	if err != nil {
+		return Kernel{}, err
+	}
+
+	resp, err := stream.CloseAndRecv()
 	if err != nil {
 		return Kernel{}, fromStatus(err)
 	}
@@ -89,15 +120,15 @@ func (s *Kernels) Delete(ctx context.Context, name string) error {
 	return fromStatus(err)
 }
 
-// importKernelRequest returns the request that imports the kernel spec
-// describes.
-func importKernelRequest(spec KernelSpec) (*dicerdv1.ImportKernelRequest, error) {
+// importKernelStart returns the message that starts an import of the
+// kernel spec describes.
+func importKernelStart(spec KernelSpec) (*dicerdv1.ImportKernelStart, error) {
 	arch, err := architectures.toProto(spec.Architecture)
 	if err != nil {
 		return nil, err
 	}
 
-	return &dicerdv1.ImportKernelRequest{Name: spec.Name, Url: spec.URL, Arch: arch, Sha256: spec.SHA256}, nil
+	return &dicerdv1.ImportKernelStart{Name: spec.Name, Arch: arch, Sha256: spec.SHA256}, nil
 }
 
 // kernelFromProto returns the kernel p describes.
@@ -106,7 +137,6 @@ func kernelFromProto(p *dicerdv1.Kernel) Kernel {
 		ID: p.GetId(),
 		KernelSpec: KernelSpec{
 			Name:         p.GetName(),
-			URL:          p.GetUrl(),
 			Architecture: architectures.fromProto(p.GetArch()),
 			SHA256:       p.GetSha256(),
 		},

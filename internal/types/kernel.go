@@ -22,29 +22,26 @@ const (
 // defines itself and an instance boots when it names no kernel.
 const DefaultKernelName = "default"
 
-// Kernel is a guest kernel image an instance can boot from, imported from a
-// URL and kept on the host.
+// Kernel is a guest kernel image an instance can boot from, kept on the
+// host.
 type Kernel struct {
 	ID           string    `yaml:"id"`
 	Name         string    `yaml:"name"`
 	Architecture string    `yaml:"arch"`
-	URL          string    `yaml:"url"`
 	SHA256       string    `yaml:"sha256"`
 	CreatedAt    time.Time `yaml:"created_at"`
 	UpdatedAt    time.Time `yaml:"updated_at"`
 }
 
 // Validate returns an invalid argument error unless the kernel has a valid
-// name, a URL to fetch it from and an architecture Dicer knows, and its
-// checksum, if it has one, is a hex-encoded SHA-256 digest.
+// name and an architecture Dicer knows, and its checksum, if it has one, is a
+// hex-encoded SHA-256 digest.
 func (k Kernel) Validate() error {
 	if err := naming.Validate(k.Name); err != nil {
 		return err
 	}
 
 	switch {
-	case k.URL == "":
-		return errdefs.InvalidArgument("a kernel needs a URL to fetch it from")
 	case k.Architecture == "":
 		return errdefs.InvalidArgument("a kernel needs an architecture: %s or %s",
 			ArchitectureX86_64, ArchitectureAArch64)

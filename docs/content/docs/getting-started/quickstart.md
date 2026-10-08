@@ -26,8 +26,7 @@ Instance web started in 1.1s (172.20.61.102)
 ```
 
 Dicer pulled `nginx:1.27`, showing its progress, and converted it to a
-disk. It also fetched the default kernel, which only the first instance to
-boot waits for. Then it booted the image as a virtual machine, with the
+disk. Then it booted the image as a virtual machine, with the
 guest's port 80 published on the host's port 8080. The address in brackets
 is the guest's.
 

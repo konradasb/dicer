@@ -710,7 +710,7 @@ func (f *fakeStarter) terminateAll() {
 // fakeKernels resolves every kernel to the same path.
 type fakeKernels struct{ path string }
 
-func (f fakeKernels) Path(context.Context, types.Kernel) (string, error) { return f.path, nil }
+func (f fakeKernels) Path(types.Kernel) (string, error) { return f.path, nil }
 
 // fakeInitrds prepares nothing and returns a fixed path.
 type fakeInitrds struct{ path string }

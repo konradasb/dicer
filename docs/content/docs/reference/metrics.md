@@ -74,10 +74,7 @@ What each running or paused instance uses of the host, read from its hypervisor 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
 | `dicer_kernels` | gauge |  | Kernels defined on this host. |
-| `dicer_kernel_disk_bytes` | gauge |  | Total size of those kernels fetched to this host's disk. A kernel not yet fetched counts as 0. |
-| `dicer_kernel_fetches_total` | counter | `outcome` | Kernel fetches, downloaded or copied from a local path, by outcome. A kernel is fetched when an instance first starts with it. `outcome` is `success` or `error`. |
-| `dicer_kernel_fetch_duration_seconds` | histogram |  | Time a kernel fetch took, including verifying its checksum. |
-| `dicer_kernel_fetched_bytes_total` | counter |  | Bytes of kernels fetched, including fetches that failed. |
+| `dicer_kernel_disk_bytes` | gauge |  | Total size of those kernels on this host's disk. |
 
 ## Volumes
 

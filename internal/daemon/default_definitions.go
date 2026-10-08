@@ -15,6 +15,7 @@ import (
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/hostnet"
+	"github.com/konradasb/dicer/internal/humanize"
 	"github.com/konradasb/dicer/internal/kernel"
 	"github.com/konradasb/dicer/internal/network"
 	"github.com/konradasb/dicer/internal/types"
@@ -53,14 +54,12 @@ func (d *daemon) ensureDefaultNetwork() error {
 	return nil
 }
 
-// ensureDefaultKernel defines the default kernel as this version of Dicer
-// pins it. It replaces the definition an older version left, and removes the
-// binary fetched for that, so that the new kernel is fetched in its place.
+// ensureDefaultKernel puts the default kernel this binary carries on the
+// host, and defines it once it is there. It extracts it again if its copy on
+// the host is missing or damaged, and in place of the one an older version of
+// Dicer carried.
 func (d *daemon) ensureDefaultKernel() error {
-	want, err := kernel.Default()
-	if err != nil {
-		return fmt.Errorf("define the default kernel: %w", err)
-	}
+	want := kernel.Default()
 	record := func(k types.Kernel, action events.Action, message string) {
 		d.events.Record(events.Event{
 			Kind:       events.KindKernel,
@@ -68,7 +67,7 @@ func (d *daemon) ensureDefaultKernel() error {
 			Name:       k.Name,
 			Action:     action,
 			Message:    message,
-			Attributes: map[string]string{"url": k.URL, "arch": k.Architecture},
+			Attributes: map[string]string{"arch": k.Architecture},
 		})
 	}
 
@@ -77,25 +76,37 @@ func (d *daemon) ensureDefaultKernel() error {
 	case errors.Is(err, errdefs.ErrNotFound):
 		now := time.Now()
 		want.ID, want.CreatedAt, want.UpdatedAt = cuid2.Generate(), now, now
+		if err := d.kernels.ExtractDefault(want.ID); err != nil {
+			return err
+		}
 		if err := d.definitions.CreateKernel(want); err != nil {
 			return fmt.Errorf("define the default kernel: %w", err)
 		}
-		record(want, events.ActionImported,
-			"Defined the default kernel, to be fetched when an instance first starts with it")
+		record(want, events.ActionImported, fmt.Sprintf("Imported the default kernel for %s, version %s: %s",
+			want.Architecture, kernel.DefaultVersion, humanize.Bytes(d.kernels.DiskBytes(want.ID))))
 		return nil
 	case err != nil:
 		return fmt.Errorf("define the default kernel: %w", err)
-	case k.Architecture == want.Architecture && k.URL == want.URL && k.SHA256 == want.SHA256:
+	case k.Architecture == want.Architecture && k.SHA256 == want.SHA256:
+		if _, err := d.kernels.Path(k); err == nil {
+			return nil
+		}
+		if err := d.kernels.ExtractDefault(k.ID); err != nil {
+			return err
+		}
+		record(k, events.ActionImported,
+			"Imported the default kernel again, as its copy on the host was missing or damaged")
 		return nil
 	}
 
-	k.Architecture, k.URL, k.SHA256, k.UpdatedAt = want.Architecture, want.URL, want.SHA256, time.Now()
+	if err := d.kernels.ExtractDefault(k.ID); err != nil {
+		return err
+	}
+	k.Architecture, k.SHA256, k.UpdatedAt = want.Architecture, want.SHA256, time.Now()
 	if err := d.definitions.UpdateKernel(k); err != nil {
 		return fmt.Errorf("update the default kernel: %w", err)
 	}
-	if err := d.kernels.Delete(k.ID); err != nil {
-		return fmt.Errorf("remove the previous default kernel: %w", err)
-	}
-	record(k, events.ActionUpdated, "Updated the default kernel to the one this version of Dicer pins")
+	record(k, events.ActionUpdated, fmt.Sprintf("Updated the default kernel to version %s, which this version of Dicer carries",
+		kernel.DefaultVersion))
 	return nil
 }

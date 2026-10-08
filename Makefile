@@ -49,8 +49,12 @@ ACTIONLINT    := $(BIN_DIR)/actionlint-$(ACTIONLINT_VERSION)
 GORELEASER    := $(BIN_DIR)/goreleaser-$(GORELEASER_VERSION)
 
 # Embedded binaries. Each dicerd embeds only its own architecture's; see
-# internal/initrd/embed.go and internal/hypervisor/cloudhypervisor/embed.go.
-GUEST_BIN := internal/initrd/bin
+# internal/initrd/embed.go, internal/kernel/embed.go and
+# internal/hypervisor/cloudhypervisor/embed.go. The guest binaries run in the
+# guest: dicer-init, dicer-agent and the default kernel. The host binaries run
+# on the host: the hypervisors.
+INITRD_BIN := internal/initrd/bin
+KERNEL_BIN := internal/kernel/bin
 CH_BIN    := internal/hypervisor/cloudhypervisor/bin
 FC_BIN    := internal/hypervisor/firecracker/bin
 CH_SPEC   := specs/cloud-hypervisor/v0.3.0/spec.yaml
@@ -66,39 +70,57 @@ ch_release_tag     = $(patsubst %.0,%,$(1))
 FC_VERSIONS       := v1.17.0
 FC_MACHINE_amd64  := x86_64
 FC_MACHINE_arm64  := aarch64
+# The default kernel, a release of https://github.com/konradasb/dicer-kernel.
+# It is checked against its SHA-256, which internal/kernel pins too, and kept
+# compressed. Keep the version in step with kernel.DefaultVersion.
+KERNEL_VERSION       := v6.18.53-1
+KERNEL_ASSET_amd64   := vmlinux-x86_64
+KERNEL_ASSET_arm64   := Image-arm64
+KERNEL_SHA256_amd64  := ca5db6c291deb8a409db1f1ab14cc55ef6d35504daf17fc0f5577ffc1662b669
+KERNEL_SHA256_arm64  := 1ce335854bc05535584dd57638f10832db91c4a20cbb76bab7851890c3d14568
 
 LICENSE_IGNORE := -ignore 'bin/**' -ignore '**/bin/**' -ignore 'specs/**' -ignore 'docs/public/**' -ignore 'docs/resources/**' -ignore 'docs/site/**' -ignore 'dist/**' -ignore 'completions/**'
 
 ##@ Building
 
 .PHONY: build
-build: embedded hypervisor-binaries ## Build dicer and dicerd into bin/
+build: guest-binaries host-binaries ## Build dicer and dicerd into bin/
 	go build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN_DIR)/dicer ./cmd/dicer
 	CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) go build -trimpath -tags containers_image_openpgp \
 		-ldflags '$(LDFLAGS)' -o $(BIN_DIR)/dicerd ./cmd/dicerd
 
-.PHONY: embedded
-embedded: $(GUEST_BIN)/$(GOARCH)/dicer-init $(GUEST_BIN)/$(GOARCH)/dicer-agent ## Build the guest binaries dicerd embeds
+guest_binaries = $(INITRD_BIN)/$(1)/dicer-init $(INITRD_BIN)/$(1)/dicer-agent \
+	$(KERNEL_BIN)/$(1)/$(KERNEL_VERSION)/vmlinux.zst
 
-.PHONY: embedded-all
-embedded-all: $(foreach a,$(ARCHES),$(GUEST_BIN)/$(a)/dicer-init $(GUEST_BIN)/$(a)/dicer-agent)
+.PHONY: guest-binaries
+guest-binaries: $(call guest_binaries,$(GOARCH)) ## Build and download the guest binaries dicerd embeds
+
+.PHONY: guest-binaries-all
+guest-binaries-all: $(foreach a,$(ARCHES),$(call guest_binaries,$(a)))
 
 # Always rebuilt: the Go build cache makes that cheap, and it is simpler and
 # more reliable than restating every package the guest binaries import.
-$(GUEST_BIN)/%/dicer-init: FORCE
+$(INITRD_BIN)/%/dicer-init: FORCE
 	CGO_ENABLED=0 GOOS=linux GOARCH=$* go build -trimpath -ldflags '$(LDFLAGS)' -o $@ ./cmd/dicer-init
 
-$(GUEST_BIN)/%/dicer-agent: FORCE
+$(INITRD_BIN)/%/dicer-agent: FORCE
 	CGO_ENABLED=0 GOOS=linux GOARCH=$* go build -trimpath -ldflags '$(LDFLAGS)' -o $@ ./cmd/dicer-agent
 
-hypervisor_binaries = $(foreach v,$(CH_VERSIONS),$(CH_BIN)/$(1)/$(v)/cloud-hypervisor) \
+$(KERNEL_BIN)/%/$(KERNEL_VERSION)/vmlinux.zst:
+	@mkdir -p $(@D)
+	curl -fsSL -o $(@D)/vmlinux \
+		https://github.com/konradasb/dicer-kernel/releases/download/$(KERNEL_VERSION)/$(KERNEL_ASSET_$*)
+	echo "$(KERNEL_SHA256_$*)  $(@D)/vmlinux" | shasum -a 256 -c -
+	zstd -19 -q --rm -f -o $@ $(@D)/vmlinux
+
+host_binaries = $(foreach v,$(CH_VERSIONS),$(CH_BIN)/$(1)/$(v)/cloud-hypervisor) \
 	$(foreach v,$(FC_VERSIONS),$(FC_BIN)/$(1)/$(v)/firecracker)
 
-.PHONY: hypervisor-binaries
-hypervisor-binaries: $(call hypervisor_binaries,$(GOARCH)) ## Download the hypervisor binaries dicerd embeds
+.PHONY: host-binaries
+host-binaries: $(call host_binaries,$(GOARCH)) ## Download the host binaries dicerd embeds: the hypervisors
 
-.PHONY: hypervisor-binaries-all
-hypervisor-binaries-all: $(foreach a,$(ARCHES),$(call hypervisor_binaries,$(a)))
+.PHONY: host-binaries-all
+host-binaries-all: $(foreach a,$(ARCHES),$(call host_binaries,$(a)))
 
 define ch_download
 $(CH_BIN)/$(1)/$(2)/cloud-hypervisor:
@@ -121,7 +143,7 @@ endef
 $(foreach a,$(ARCHES),$(foreach v,$(FC_VERSIONS),$(eval $(call fc_download,$(a),$(v)))))
 
 .PHONY: release-prep
-release-prep: embedded-all hypervisor-binaries-all ## Prepare every architecture's embedded binaries (run by GoReleaser)
+release-prep: guest-binaries-all host-binaries-all ## Prepare every architecture's embedded binaries (run by GoReleaser)
 
 COMPLETIONS_DIR := completions
 
@@ -303,7 +325,7 @@ DEPLOY_DIR    := $(BIN_DIR)/deploy
 
 .PHONY: deploy
 deploy: ## Build dicer and dicerd for Linux and install them on DEPLOY_HOST, restarting dicerd
-	$(MAKE) embedded hypervisor-binaries GOARCH=$(DEPLOY_GOARCH)
+	$(MAKE) guest-binaries host-binaries GOARCH=$(DEPLOY_GOARCH)
 	CGO_ENABLED=0 GOOS=linux GOARCH=$(DEPLOY_GOARCH) go build -trimpath -ldflags '$(LDFLAGS)' \
 		-o $(DEPLOY_DIR)/dicer ./cmd/dicer
 	CGO_ENABLED=0 GOOS=linux GOARCH=$(DEPLOY_GOARCH) go build -trimpath -tags containers_image_openpgp \
@@ -322,7 +344,7 @@ deploy: ## Build dicer and dicerd for Linux and install them on DEPLOY_HOST, res
 
 .PHONY: clean
 clean: ## Remove build output and downloaded binaries
-	rm -rf $(BIN_DIR) $(GUEST_BIN) $(CH_BIN) $(FC_BIN) $(COMPLETIONS_DIR)
+	rm -rf $(BIN_DIR) $(INITRD_BIN) $(KERNEL_BIN) $(CH_BIN) $(FC_BIN) $(COMPLETIONS_DIR)
 
 .PHONY: help
 help: ## Show this help

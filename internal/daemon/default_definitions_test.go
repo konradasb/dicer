@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/konradasb/dicer/internal/errdefs"
@@ -82,33 +83,90 @@ func TestDefaultNetworkRefusesATakenSubnet(t *testing.T) {
 	}
 }
 
-// TestDefaultKernelFollowsThePinnedRelease checks that the default kernel is
-// defined as this version pins it, and that one an older version defined is
-// updated in place, its fetched binary removed.
-func TestDefaultKernelFollowsThePinnedRelease(t *testing.T) {
-	d := newDefinitionsDaemon(t)
-	want, err := kernel.Default()
+// defaultKernelBinary returns the path of the default kernel's binary,
+// and what it holds.
+func defaultKernelBinary(t *testing.T, d *daemon) (string, []byte) {
+	t.Helper()
+
+	k, err := d.definitions.Kernel(types.DefaultKernelName)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("the default kernel is not defined: %v", err)
 	}
+	path := filepath.Join(d.cfg.DataDir, "kernels", k.ID, "vmlinux")
+	data, _ := os.ReadFile(path)
+	return path, data
+}
+
+// TestDefaultKernelIsExtractedBeforeItIsDefined checks that the default
+// kernel is on the host once it is defined, and is the one this binary
+// carries.
+func TestDefaultKernelIsExtractedBeforeItIsDefined(t *testing.T) {
+	d := newDefinitionsDaemon(t)
 
 	if err := d.ensureDefaultKernel(); err != nil {
 		t.Fatalf("ensureDefaultKernel: %v", err)
 	}
 	k, err := d.definitions.Kernel(types.DefaultKernelName)
-	if err != nil || k.URL != want.URL || k.SHA256 != want.SHA256 {
-		t.Fatalf("default kernel = %+v, %v; want %s", k, err, want.URL)
+	if err != nil || k.SHA256 != kernel.Default().SHA256 {
+		t.Fatalf("default kernel = %+v, %v; want the one this binary carries", k, err)
 	}
+	if _, err := d.kernels.Path(k); err != nil {
+		t.Errorf("the default kernel is not on the host: %v", err)
+	}
+}
 
-	k.URL, k.SHA256 = "https://example.invalid/old-vmlinux", ""
+// TestDefaultKernelIsExtractedAgainIfItsCopyIsGoneOrDamaged checks that a
+// default kernel whose copy has gone from the host, or been changed, is
+// extracted again at start, under the same ID.
+func TestDefaultKernelIsExtractedAgainIfItsCopyIsGoneOrDamaged(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		damage func(path string) error
+	}{
+		{"gone", os.Remove},
+		{"damaged", func(path string) error { return os.WriteFile(path, []byte("damaged"), 0o755) }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			d := newDefinitionsDaemon(t)
+			if err := d.ensureDefaultKernel(); err != nil {
+				t.Fatal(err)
+			}
+			path, _ := defaultKernelBinary(t, d)
+			if err := tt.damage(path); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := d.ensureDefaultKernel(); err != nil {
+				t.Fatal(err)
+			}
+			k, _ := d.definitions.Kernel(types.DefaultKernelName)
+			if again, _ := defaultKernelBinary(t, d); again != path {
+				t.Errorf("the default kernel moved from %s to %s", path, again)
+			}
+			if _, err := d.kernels.Path(k); err != nil {
+				t.Errorf("the default kernel is not on the host again: %v", err)
+			}
+		})
+	}
+}
+
+// TestDefaultKernelAnOlderVersionCarriedIsReplaced checks that the default
+// kernel an older version of Dicer carried, with another SHA-256, is
+// replaced in place by the one this binary carries.
+func TestDefaultKernelAnOlderVersionCarriedIsReplaced(t *testing.T) {
+	d := newDefinitionsDaemon(t)
+	if err := d.ensureDefaultKernel(); err != nil {
+		t.Fatal(err)
+	}
+	k, _ := d.definitions.Kernel(types.DefaultKernelName)
+	path, _ := defaultKernelBinary(t, d)
+
+	// What an older version would have left.
+	k.SHA256 = strings.Repeat("ab", 32)
 	if err := d.definitions.UpdateKernel(k); err != nil {
 		t.Fatal(err)
 	}
-	binary := filepath.Join(d.cfg.DataDir, "kernels", k.ID, "vmlinux")
-	if err := os.MkdirAll(filepath.Dir(binary), 0o750); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(binary, []byte("old"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("an older kernel"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,10 +174,10 @@ func TestDefaultKernelFollowsThePinnedRelease(t *testing.T) {
 		t.Fatalf("ensureDefaultKernel after an upgrade: %v", err)
 	}
 	updated, _ := d.definitions.Kernel(types.DefaultKernelName)
-	if updated.ID != k.ID || updated.URL != want.URL || updated.SHA256 != want.SHA256 {
-		t.Errorf("default kernel = %+v, want %s under the same ID", updated, want.URL)
+	if updated.ID != k.ID || updated.SHA256 != kernel.Default().SHA256 {
+		t.Errorf("default kernel = %+v, want the one this binary carries under the same ID", updated)
 	}
-	if _, err := os.Stat(binary); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("the old binary is still there: %v", err)
+	if _, err := d.kernels.Path(updated); err != nil {
+		t.Errorf("the new default kernel is not on the host: %v", err)
 	}
 }

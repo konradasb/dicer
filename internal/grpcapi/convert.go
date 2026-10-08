@@ -175,7 +175,6 @@ func kernelToProto(k types.Kernel) *dicerdv1.Kernel {
 		Id:         k.ID,
 		Name:       k.Name,
 		Arch:       architectures.toProto(k.Architecture),
-		Url:        k.URL,
 		Sha256:     k.SHA256,
 		CreateTime: timestamppb.New(k.CreatedAt),
 		UpdateTime: timestamppb.New(k.UpdatedAt),

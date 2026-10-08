@@ -98,7 +98,6 @@ type Metrics struct {
 	instance instanceMetrics
 	grpc     grpcMetrics
 	image    imageMetrics
-	kernel   kernelMetrics
 	dns      dnsMetrics
 }
 
@@ -134,7 +133,6 @@ func New(options Options) *Metrics {
 	if source := options.Sources.Kernels; source != nil {
 		m.registry.MustRegister(m.newKernelCollector(source))
 	}
-	m.kernel = m.newKernelMetrics()
 
 	if source := options.Sources.Volumes; source != nil {
 		m.registry.MustRegister(m.newVolumeCollector(source))

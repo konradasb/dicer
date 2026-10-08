@@ -3,56 +3,13 @@
 
 package metrics
 
-import (
-	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
-)
+import "github.com/prometheus/client_golang/prometheus"
 
 // KernelSummary is a point-in-time summary of the kernels defined on this
 // host.
 type KernelSummary struct {
 	Count     int
 	DiskBytes int64
-}
-
-// kernelMetrics measures fetching the kernels guests boot.
-type kernelMetrics struct {
-	fetches       *prometheus.CounterVec
-	fetchDuration prometheus.Histogram
-	fetchedBytes  prometheus.Counter
-}
-
-func (m *Metrics) newKernelMetrics() kernelMetrics {
-	return kernelMetrics{
-		fetches: m.counterVec(Description{
-			Name:   "dicer_kernel_fetches_total",
-			Labels: []string{"outcome"},
-			Help:   "Kernel fetches, downloaded or copied from a local path, by outcome.",
-			Doc:    "A kernel is fetched when an instance first starts with it. `outcome` is `success` or `error`.",
-			Group:  GroupKernels,
-		}),
-
-		fetchDuration: m.histogram(Description{
-			Name:  "dicer_kernel_fetch_duration_seconds",
-			Help:  "Time a kernel fetch took, including verifying its checksum.",
-			Group: GroupKernels,
-		}, prometheus.ExponentialBuckets(0.25, 2, 12)),
-
-		fetchedBytes: m.counter(Description{
-			Name:  "dicer_kernel_fetched_bytes_total",
-			Help:  "Bytes of kernels fetched, including fetches that failed.",
-			Group: GroupKernels,
-		}),
-	}
-}
-
-// RecordKernelFetch records a kernel fetch: its outcome, duration and
-// fetched bytes.
-func (m *Metrics) RecordKernelFetch(err error, d time.Duration, fetchedBytes int64) {
-	m.kernel.fetches.WithLabelValues(outcome(err)).Inc()
-	m.kernel.fetchDuration.Observe(d.Seconds())
-	m.kernel.fetchedBytes.Add(float64(fetchedBytes))
 }
 
 // kernelCollector exports the kernels defined and what they hold on disk.
@@ -74,8 +31,7 @@ func (m *Metrics) newKernelCollector(source func() KernelSummary) *kernelCollect
 		}),
 		disk: m.descriptor(Description{
 			Name:  "dicer_kernel_disk_bytes",
-			Help:  "Total size of those kernels fetched to this host's disk.",
-			Doc:   "A kernel not yet fetched counts as 0.",
+			Help:  "Total size of those kernels on this host's disk.",
 			Group: GroupKernels,
 		}),
 	}

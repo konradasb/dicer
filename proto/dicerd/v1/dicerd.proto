@@ -186,10 +186,14 @@ service DaemonService {
   // PruneImages removes every image no instance is defined to boot from.
   rpc PruneImages(PruneImagesRequest) returns (PruneImagesResponse);
 
-  // ImportKernel records a guest kernel by URL. It is downloaded the first
-  // time an instance boots with it. The daemon defines the kernel named
-  // "default" itself, which an instance boots when it names none.
-  rpc ImportKernel(ImportKernelRequest) returns (Kernel);
+  // ImportKernel puts a guest kernel the client sends on the host, and
+  // returns once it is there. The first message must be an
+  // ImportKernelStart, and the rest carry the kernel in chunks, at most
+  // 512 MiB. The kernel is verified against the start's sha256 if that is
+  // set. Nothing is recorded if it does not match, or if the kernel is
+  // empty. The daemon carries the kernel named "default" itself, which an
+  // instance boots when it names none.
+  rpc ImportKernel(stream ImportKernelRequest) returns (Kernel);
   // ListKernels returns every kernel, the default one among them.
   rpc ListKernels(ListKernelsRequest) returns (ListKernelsResponse);
   // GetKernel returns one kernel.
@@ -370,10 +374,8 @@ enum EventAction {
   EVENT_ACTION_PULLED = 17;
   // Garbage collection removed the image.
   EVENT_ACTION_COLLECTED = 18;
-  // A kernel, recorded by its URL to be fetched on first use.
+  // A kernel, put on the host.
   EVENT_ACTION_IMPORTED = 19;
-  // The kernel was downloaded, or copied from a local path, and verified.
-  EVENT_ACTION_FETCHED = 20;
   // A running instance was given other vCPUs or memory.
   EVENT_ACTION_RESIZED = 21;
   // The instance was frozen to disk, and its hypervisor ended.
@@ -1175,18 +1177,26 @@ message Kernel {
   string id = 1;
   string name = 2;
   Architecture arch = 3;
-  string url = 4;
+  // The SHA-256 of the kernel on the host, hex-encoded. It is checked each
+  // time an instance boots the kernel.
   string sha256 = 5;
   google.protobuf.Timestamp create_time = 6;
   google.protobuf.Timestamp update_time = 7;
 }
 
-message ImportKernelRequest {
+message ImportKernelStart {
   string name = 1;
-  string url = 2;
-  Architecture arch = 3;
-  // The expected SHA-256 of the download, hex-encoded. Verified when set.
-  string sha256 = 4;
+  Architecture arch = 2;
+  // The expected SHA-256 of the kernel, hex-encoded. Verified when set.
+  string sha256 = 3;
+}
+
+message ImportKernelRequest {
+  oneof payload {
+    ImportKernelStart start = 1;
+    // The next chunk of the kernel.
+    bytes data = 2;
+  }
 }
 
 message ListKernelsRequest {}

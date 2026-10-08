@@ -72,9 +72,9 @@ type Images interface {
 	Ensure(ctx context.Context, ref string, policy types.PullPolicy) (*types.Image, error)
 }
 
-// Kernels provides the local path of a kernel, fetching it if needed.
+// Kernels finds a kernel's binary on the host.
 type Kernels interface {
-	Path(ctx context.Context, k types.Kernel) (string, error)
+	Path(k types.Kernel) (string, error)
 }
 
 // Volumes locates the disk backing a volume.

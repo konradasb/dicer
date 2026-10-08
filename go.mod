@@ -13,6 +13,7 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/go-containerregistry v0.20.7
+	github.com/klauspost/compress v1.19.1
 	github.com/mdlayher/vsock v1.2.1
 	github.com/nrednav/cuid2 v1.1.0
 	github.com/olekukonko/tablewriter v1.1.3
@@ -50,7 +51,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/klauspost/compress v1.19.1 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect

@@ -106,13 +106,8 @@ const (
 	// EventActionCollected means garbage collection removed the image.
 	EventActionCollected EventAction = "collected"
 
-	// EventActionImported means a kernel was recorded by its URL, to be
-	// fetched on first use.
+	// EventActionImported means a kernel was imported, and is on the host.
 	EventActionImported EventAction = "imported"
-
-	// EventActionFetched means the kernel was downloaded, or copied from a
-	// local path, and verified.
-	EventActionFetched EventAction = "fetched"
 )
 
 var eventActions = enum[EventAction, dicerdv1.EventAction]{"event action", map[EventAction]dicerdv1.EventAction{
@@ -135,7 +130,6 @@ var eventActions = enum[EventAction, dicerdv1.EventAction]{"event action", map[E
 	EventActionPulled:           dicerdv1.EventAction_EVENT_ACTION_PULLED,
 	EventActionCollected:        dicerdv1.EventAction_EVENT_ACTION_COLLECTED,
 	EventActionImported:         dicerdv1.EventAction_EVENT_ACTION_IMPORTED,
-	EventActionFetched:          dicerdv1.EventAction_EVENT_ACTION_FETCHED,
 }}
 
 // EventOptions pick the events Client.Events streams: every one, unless

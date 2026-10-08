@@ -150,7 +150,7 @@ var requestBuilders = []requestBuilder{
 	builder(execInstanceStart),
 	builder2(getInstanceLogsRequest),
 	builder(func(spec NetworkSpec) (*dicerdv1.CreateNetworkRequest, error) { return createNetworkRequest(spec), nil }),
-	builder(importKernelRequest),
+	builder(importKernelStart),
 	builder(getEventsRequest),
 }
 
@@ -220,6 +220,7 @@ var sentByName = map[protoreflect.Name][]protoreflect.Name{
 	"RestoreSnapshotRequest":        {"name"},
 	"ExecInstanceRequest":           {"start", "stdin", "resize"},
 	"CopyToInstanceRequest":         {"start", "data"},
+	"ImportKernelRequest":           {"start", "data"},
 	"CopyFromInstanceRequest":       {"name", "path"},
 	"ListNetworksRequest":           {},
 	"GetNetworkRequest":             {"name"},

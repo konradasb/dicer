@@ -86,7 +86,7 @@ was, and whose message says it for a person:
 | `GetImage` | [`GetImageRequest`](#getimagerequest) | [`Image`](#image) | GetImage returns one pulled image. |
 | `DeleteImage` | [`DeleteImageRequest`](#deleteimagerequest) | `google.protobuf.Empty` | DeleteImage removes a pulled image. It refuses an image an instance is defined to boot from, unless force is set. |
 | `PruneImages` | [`PruneImagesRequest`](#pruneimagesrequest) | [`PruneImagesResponse`](#pruneimagesresponse) | PruneImages removes every image no instance is defined to boot from. |
-| `ImportKernel` | [`ImportKernelRequest`](#importkernelrequest) | [`Kernel`](#kernel) | ImportKernel records a guest kernel by URL. It is downloaded the first time an instance boots with it. The daemon defines the kernel named "default" itself, which an instance boots when it names none. |
+| `ImportKernel` | stream [`ImportKernelRequest`](#importkernelrequest) | [`Kernel`](#kernel) | ImportKernel puts a guest kernel the client sends on the host, and returns once it is there. The first message must be an ImportKernelStart, and the rest carry the kernel in chunks, at most 512 MiB. The kernel is verified against the start's sha256 if that is set. Nothing is recorded if it does not match, or if the kernel is empty. The daemon carries the kernel named "default" itself, which an instance boots when it names none. |
 | `ListKernels` | [`ListKernelsRequest`](#listkernelsrequest) | [`ListKernelsResponse`](#listkernelsresponse) | ListKernels returns every kernel, the default one among them. |
 | `GetKernel` | [`GetKernelRequest`](#getkernelrequest) | [`Kernel`](#kernel) | GetKernel returns one kernel. |
 | `DeleteKernel` | [`DeleteKernelRequest`](#deletekernelrequest) | `google.protobuf.Empty` | DeleteKernel removes a kernel that no instance references. The default kernel cannot be deleted. |
@@ -527,10 +527,16 @@ state to report.
 
 | Field | Type | Description |
 |---|---|---|
+| `start` | [`ImportKernelStart`](#importkernelstart) | One of `payload`.  |
+| `data` | `bytes` | One of `payload`. The next chunk of the kernel. |
+
+### ImportKernelStart
+
+| Field | Type | Description |
+|---|---|---|
 | `name` | `string` |  |
-| `url` | `string` |  |
 | `arch` | [`Architecture`](#architecture) |  |
-| `sha256` | `string` | The expected SHA-256 of the download, hex-encoded. Verified when set. |
+| `sha256` | `string` | The expected SHA-256 of the kernel, hex-encoded. Verified when set. |
 
 ### Instance
 
@@ -651,8 +657,7 @@ Kernel is a guest kernel image available to instances.
 | `id` | `string` |  |
 | `name` | `string` |  |
 | `arch` | [`Architecture`](#architecture) |  |
-| `url` | `string` |  |
-| `sha256` | `string` |  |
+| `sha256` | `string` | The SHA-256 of the kernel on the host, hex-encoded. It is checked each time an instance boots the kernel. |
 | `create_time` | `google.protobuf.Timestamp` |  |
 | `update_time` | `google.protobuf.Timestamp` |  |
 
@@ -1028,8 +1033,7 @@ EventAction is what happened to the resource.
 | `EVENT_ACTION_SNAPSHOT_RESTORED` | 15 | The instance was put back as a snapshot of it holds it. |
 | `EVENT_ACTION_PULLED` | 17 | An image. |
 | `EVENT_ACTION_COLLECTED` | 18 | Garbage collection removed the image. |
-| `EVENT_ACTION_IMPORTED` | 19 | A kernel, recorded by its URL to be fetched on first use. |
-| `EVENT_ACTION_FETCHED` | 20 | The kernel was downloaded, or copied from a local path, and verified. |
+| `EVENT_ACTION_IMPORTED` | 19 | A kernel, put on the host. |
 | `EVENT_ACTION_RESIZED` | 21 | A running instance was given other vCPUs or memory. |
 | `EVENT_ACTION_STANDBY` | 22 | The instance was frozen to disk, and its hypervisor ended. |
 

@@ -5,6 +5,7 @@ package cli
 
 import (
 	"context"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -17,7 +18,7 @@ type printableKernel struct {
 }
 
 func (p *printableKernel) Columns() []string {
-	return []string{"ID", "Name", "Arch", "URL", "SHA256", "Created"}
+	return []string{"ID", "Name", "Arch", "SHA256", "Created"}
 }
 
 func (p *printableKernel) Rows() []map[string]any {
@@ -27,7 +28,6 @@ func (p *printableKernel) Rows() []map[string]any {
 			"ID":      k.ID,
 			"Name":    k.Name,
 			"Arch":    string(k.Architecture),
-			"URL":     k.URL,
 			"SHA256":  orDash(k.SHA256),
 			"Created": age(k.CreateTime),
 		})
@@ -54,14 +54,17 @@ func newKernelCommand() *cobra.Command {
 
 func newKernelImportCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "import NAME",
-		Short: "Record a kernel to boot instances with",
-		Long: "Records a kernel by URL. It is downloaded, and verified against --sha256\n" +
-			"if given, the first time an instance boots with it. An instance that names\n" +
-			"no kernel boots the default kernel, which needs no import.",
-		Args: one("a name for the kernel"),
+		Use:   "import NAME FILE",
+		Short: "Import a kernel to boot instances with",
+		Long: "Imports a kernel that instances can boot. FILE is a kernel on this\n" +
+			"machine, of up to 512 MiB. It is sent to the daemon, and the command\n" +
+			"returns once the kernel is on the daemon's host. If --sha256 is given, the\n" +
+			"kernel is checked against it. An instance that names no kernel boots the\n" +
+			"default kernel, which needs no import.",
+		Example: "  dicer kernel import k6 ./vmlinux --arch x86_64",
+		Args:    needs([]string{"a name for the kernel", "the kernel's file"}),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			url, _ := cmd.Flags().GetString("url")
+			name, file := args[0], args[1]
 			archFlag, _ := cmd.Flags().GetString("arch")
 			sha256, _ := cmd.Flags().GetString("sha256")
 
@@ -70,18 +73,20 @@ func newKernelImportCommand() *cobra.Command {
 				return usagef(cmd, "%s", err)
 			}
 
+			f, err := os.Open(file)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = f.Close() }()
+
 			client, cleanup, err := newClient(cmd)
 			if err != nil {
 				return err
 			}
 			defer cleanup()
 
-			k, err := client.Kernels.Import(cmd.Context(), dicer.KernelSpec{
-				Name:         args[0],
-				URL:          url,
-				Architecture: arch,
-				SHA256:       sha256,
-			})
+			spec := dicer.KernelSpec{Name: name, Architecture: arch, SHA256: sha256}
+			k, err := client.Kernels.Import(cmd.Context(), spec, f)
 			if err != nil {
 				return err
 			}
@@ -91,10 +96,8 @@ func newKernelImportCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().String("url", "", "Where to fetch the kernel: an http(s) URL, a file:// URL or an absolute path")
 	cmd.Flags().String("arch", "", "Kernel architecture, e.g. x86_64")
 	cmd.Flags().String("sha256", "", "Expected SHA-256 of the kernel, hex-encoded")
-	requireFlag(cmd, "url", "https://example.com/vmlinux")
 	requireFlag(cmd, "arch", "x86_64")
 
 	return cmd

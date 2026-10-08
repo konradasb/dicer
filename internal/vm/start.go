@@ -189,8 +189,8 @@ func (m *Manager) resolveBoot(ctx context.Context, instance types.InstanceSpec, 
 	if err != nil {
 		return b, fmt.Errorf("get kernel %q: %w", instance.KernelName, err)
 	}
-	if b.kernelPath, err = m.kernels.Path(ctx, kernel); err != nil {
-		return b, fmt.Errorf("provision kernel %q: %w", instance.KernelName, err)
+	if b.kernelPath, err = m.kernels.Path(kernel); err != nil {
+		return b, err
 	}
 
 	if b.initrdPath, err = m.initrds.Prepare(ctx); err != nil {

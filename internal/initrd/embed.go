@@ -5,8 +5,9 @@ package initrd
 
 import "path"
 
-// The guest binaries are built into bin/$GOARCH by `make embedded`. Each
-// architecture's file embeds only its own directory.
+// dicer-init and dicer-agent are built into bin/$GOARCH by
+// `make guest-binaries`. Each architecture's file embeds only its own
+// directory.
 
 // embeddedBinary returns the embedded guest binary of a name, such as
 // dicer-init.

@@ -11,6 +11,6 @@ Manage guest kernels.
 | Command | Description |
 |---|---|
 | [`dicer kernel delete`]({{< relref "/docs/reference/cli/dicer_kernel_delete" >}}) | Delete one or more kernels no instance uses, or all of them. |
-| [`dicer kernel import`]({{< relref "/docs/reference/cli/dicer_kernel_import" >}}) | Record a kernel to boot instances with. |
+| [`dicer kernel import`]({{< relref "/docs/reference/cli/dicer_kernel_import" >}}) | Import a kernel to boot instances with. |
 | [`dicer kernel list`]({{< relref "/docs/reference/cli/dicer_kernel_list" >}}) | List kernels. |
 | [`dicer kernel show`]({{< relref "/docs/reference/cli/dicer_kernel_show" >}}) | Show a kernel. |

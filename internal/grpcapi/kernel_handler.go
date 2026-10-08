@@ -10,11 +10,13 @@ import (
 	"time"
 
 	"github.com/nrednav/cuid2"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/events"
 	"github.com/konradasb/dicer/internal/filestore"
+	"github.com/konradasb/dicer/internal/humanize"
 	"github.com/konradasb/dicer/internal/kernel"
 	"github.com/konradasb/dicer/internal/types"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
@@ -27,46 +29,95 @@ type kernelHandler struct {
 	events      recorder
 }
 
-// ImportKernel records a kernel by URL. It is downloaded on first use.
+// ImportKernel puts a kernel the client sends on the host, and records it
+// once it is there.
 func (h *kernelHandler) ImportKernel(
-	_ context.Context, req *dicerdv1.ImportKernelRequest,
-) (*dicerdv1.Kernel, error) {
-	arch, err := architectures.fromProto(req.GetArch())
+	stream grpc.ClientStreamingServer[dicerdv1.ImportKernelRequest, dicerdv1.Kernel],
+) error {
+	req, err := stream.Recv()
 	if err != nil {
-		return nil, err
+		return errdefs.InvalidArgument("receive start message: %v", err)
+	}
+	start := req.GetStart()
+	if start == nil {
+		return errdefs.InvalidArgument("first message must be an ImportKernelStart")
+	}
+	arch, err := architectures.fromProto(start.GetArch())
+	if err != nil {
+		return err
 	}
 
 	now := time.Now()
 	k := types.Kernel{
 		ID:           cuid2.Generate(),
-		Name:         req.GetName(),
+		Name:         start.GetName(),
 		Architecture: arch,
-		URL:          req.GetUrl(),
-		SHA256:       strings.ToLower(req.GetSha256()),
+		SHA256:       strings.ToLower(start.GetSha256()),
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
+	if err := h.checkNewKernel(k); err != nil {
+		return err
+	}
 
-	if err := k.Validate(); err != nil {
-		return nil, err
-	}
-	if k.Name == types.DefaultKernelName {
-		return nil, errdefs.InvalidArgument("%q is the default kernel's name: import the kernel under another", k.Name)
-	}
-	if _, err := h.definitions.Kernel(k.Name); err == nil {
-		return nil, errdefs.Exists("kernel %q already exists", k.Name)
+	// The SHA-256 is kept whether or not the client gave one, so that the
+	// kernel is checked each time an instance boots it.
+	k.SHA256, err = h.kernels.Import(k.ID, &importKernelReader{stream: stream}, k.SHA256)
+	if err != nil {
+		_ = h.kernels.Delete(k.ID)
+		return err
 	}
 	if err := h.definitions.CreateKernel(k); err != nil {
-		return nil, err
+		_ = h.kernels.Delete(k.ID)
+		return err
 	}
 
-	message := fmt.Sprintf("Imported kernel for %s from %s, to be fetched when an instance first starts with it", k.Architecture, k.URL)
-	if k.SHA256 == "" {
-		message += "; no checksum to verify it by"
+	verified := "checksum verified"
+	if start.GetSha256() == "" {
+		verified = "no checksum given to verify it by"
 	}
-	h.record(k, events.ActionImported, message)
+	h.record(k, events.ActionImported, fmt.Sprintf("Imported kernel for %s: %s, %s",
+		k.Architecture, humanize.Bytes(h.kernels.DiskBytes(k.ID)), verified))
 
-	return kernelToProto(k), nil
+	return stream.SendAndClose(kernelToProto(k))
+}
+
+// importKernelReader reads the kernel an ImportKernel stream carries after
+// its start message.
+type importKernelReader struct {
+	stream grpc.ClientStreamingServer[dicerdv1.ImportKernelRequest, dicerdv1.Kernel]
+	chunk  []byte
+}
+
+// Read reads the next of the kernel, and io.EOF once the client has sent it
+// all.
+func (r *importKernelReader) Read(p []byte) (int, error) {
+	for len(r.chunk) == 0 {
+		req, err := r.stream.Recv()
+		if err != nil {
+			return 0, err
+		}
+		r.chunk = req.GetData()
+	}
+
+	n := copy(p, r.chunk)
+	r.chunk = r.chunk[n:]
+	return n, nil
+}
+
+// checkNewKernel returns an error unless k is valid and can be added: it
+// does not take the default kernel's name, or another kernel's.
+func (h *kernelHandler) checkNewKernel(k types.Kernel) error {
+	if err := k.Validate(); err != nil {
+		return err
+	}
+	if k.Name == types.DefaultKernelName {
+		return errdefs.InvalidArgument("%q is the default kernel's name: import the kernel under another", k.Name)
+	}
+	if _, err := h.definitions.Kernel(k.Name); err == nil {
+		return errdefs.Exists("kernel %q already exists", k.Name)
+	}
+	return nil
 }
 
 // ListKernels lists the imported kernels, sorted by name.
@@ -97,7 +148,7 @@ func (h *kernelHandler) GetKernel(
 	return kernelToProto(k), nil
 }
 
-// DeleteKernel removes a kernel and its fetched copy, refusing the default
+// DeleteKernel removes a kernel and its copy on the host, refusing the default
 // kernel and one an instance uses.
 func (h *kernelHandler) DeleteKernel(
 	_ context.Context, req *dicerdv1.DeleteKernelRequest,
@@ -115,14 +166,10 @@ func (h *kernelHandler) DeleteKernel(
 		return nil, err
 	}
 
-	message := "Deleted kernel and its fetched copy"
-	if h.kernels.DiskBytes(k.ID) == 0 {
-		message = "Deleted kernel, never fetched"
-	}
 	if err := h.definitions.DeleteKernel(k.Name); err != nil {
 		return nil, err
 	}
-	h.record(k, events.ActionDeleted, message)
+	h.record(k, events.ActionDeleted, "Deleted kernel and its copy on the host")
 
 	if err := h.kernels.Delete(k.ID); err != nil {
 		return nil, fmt.Errorf("remove kernel binary: %w", err)
@@ -131,8 +178,8 @@ func (h *kernelHandler) DeleteKernel(
 	return &emptypb.Empty{}, nil
 }
 
-// record records that action happened to k, with its URL and architecture
-// among the attributes.
+// record records that action happened to k, with its architecture among
+// the attributes.
 func (h *kernelHandler) record(k types.Kernel, action events.Action, message string) {
 	h.events.Record(events.Event{
 		Kind:       events.KindKernel,
@@ -140,6 +187,6 @@ func (h *kernelHandler) record(k types.Kernel, action events.Action, message str
 		Name:       k.Name,
 		Action:     action,
 		Message:    message,
-		Attributes: map[string]string{"url": k.URL, "arch": k.Architecture},
+		Attributes: map[string]string{"arch": k.Architecture},
 	})
 }

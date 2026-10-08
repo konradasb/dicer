@@ -90,7 +90,7 @@ func (p palette) dot(state string) string {
 func (p palette) event(action dicer.EventAction, s string) string {
 	switch action {
 	case dicer.EventActionStarted, dicer.EventActionResumed, dicer.EventActionHealthy,
-		dicer.EventActionPulled, dicer.EventActionFetched:
+		dicer.EventActionPulled:
 		return p.paint(ansiGreen, s)
 	case dicer.EventActionStopped, dicer.EventActionPaused, dicer.EventActionRestarting,
 		dicer.EventActionCollected:

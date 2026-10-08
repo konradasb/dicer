@@ -32,7 +32,7 @@ jobs:
 
       # The packages that embed binaries do not compile without them.
       - name: Build embedded binaries
-        run: make embedded hypervisor-binaries
+        run: make guest-binaries host-binaries
 
       - name: Check for known vulnerabilities
         run: make vuln

@@ -13,7 +13,7 @@ import (
 )
 
 // The VMM binaries are downloaded into bin/$GOARCH/<version> by
-// `make hypervisor-binaries`. Each architecture's file embeds only its own
+// `make host-binaries`. Each architecture's file embeds only its own
 // directory, so a binary never carries a VMM it cannot run.
 
 // Extract atomically writes the embedded binary for version to dstPath,
