@@ -15,7 +15,7 @@ require (
 	github.com/google/go-containerregistry v0.20.7
 	github.com/klauspost/compress v1.19.1
 	github.com/mdlayher/vsock v1.2.1
-	github.com/nrednav/cuid2 v1.1.0
+	github.com/nrednav/cuid2 v1.1.1
 	github.com/olekukonko/tablewriter v1.1.3
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
