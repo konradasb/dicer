@@ -29,40 +29,50 @@ path, other than `/`, and two mounts cannot share a target. `src`, `dst` and
 
 ## Configuration files
 
-A `file` mount puts a file from the host into the guest, such as a
-configuration file, a certificate or a list of allowed users.
+A `file` mount puts a file into the guest, such as a configuration file, a
+certificate or a list of allowed users.
 
 ```console
 $ dicer run -d --name web -p 8080:80 \
-    --mount type=file,source=/etc/dicer/web/nginx.conf,target=/etc/nginx/nginx.conf,readonly \
+    --mount type=file,source=./nginx.conf,target=/etc/nginx/nginx.conf,readonly \
     nginx:1.27
 ```
 
-The source must be an absolute path on the host, and the file must exist. At
-every start, the daemon reads it and gives the guest a copy, with the host
-file's owner and permissions. The copy replaces whatever the image had at
-the target. If the image has nothing there, the target is created.
+The source is a file on the machine you run `dicer` on, which need not be
+the daemon's host. `dicer` reads it and sends its contents to the daemon,
+which keeps them with the instance. An instance's file mounts can hold at most 1 MiB
+between them. Put anything larger in a volume or the image.
+
+At every start, the guest gets a copy, with the file's permissions, owned
+by root. The copy replaces whatever the image had at the target. If the
+image has nothing there, the target is created.
 
 The copy belongs to the guest:
 
-- **A change on the host reaches the guest at its next start**, not before.
-  To apply an edited file, restart the instance:
+- **A change to the file you sent reaches the guest only when you send it
+  again.** Update the mount while the instance is stopped, and start it:
 
   ```console
-  $ dicer restart web
+  $ dicer stop web
+  $ dicer instance update web \
+      --mount type=file,source=./nginx.conf,target=/etc/nginx/nginx.conf,readonly
+  $ dicer start web
   ```
 
-- **A change in the guest never reaches the host.** The copy is held in the
-  guest's memory and is gone when the instance stops. Add `readonly` so that
-  the workload cannot change it by mistake.
+  `--mount` on `update` replaces every mount, so give them all.
+
+- **A change in the guest never reaches the daemon.** The copy is held in
+  the guest's memory and is gone when the instance stops. Add `readonly` so
+  that the workload cannot change it by mistake.
 
 A file mount is a single file, so its target cannot be a directory in the
 image. For a directory of files, mount each file, or put them on a volume.
 
 {{< callout type="info" >}}
-  On its way to the guest, the file's contents pass through the daemon's
-  runtime directory, which only root can read. A secret mounted this way is
-  as safe as the host's root account.
+  The daemon keeps the file's contents in the instance's definition, under
+  `/var/lib/dicer`, and passes them to the guest through its runtime
+  directory. Only root can read either. A secret mounted this way is as safe
+  as the host's root account.
 {{< /callout >}}
 
 ## Volumes
@@ -154,8 +164,8 @@ instance's memory, so size `--memory` to allow for it.
 
 ## When a mount fails
 
-Some mounts are checked on the host, such as a host file that is missing or
-a volume in use. If one of those fails, the instance does not start, and the
+Some mounts are checked on the host, such as a volume that is missing or in
+use. If one of those fails, the instance does not start, and the
 error says why.
 
 Other mounts are made by the guest, such as a file mount onto a directory

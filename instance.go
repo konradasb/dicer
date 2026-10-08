@@ -5,6 +5,9 @@ package dicer
 
 import (
 	"context"
+	"fmt"
+	"io/fs"
+	"os"
 	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -257,13 +260,12 @@ var restartModes = enum[RestartMode, dicerdv1.RestartMode]{"restart mode", map[R
 	RestartModeAlways:        dicerdv1.RestartMode_RESTART_MODE_ALWAYS,
 }}
 
-// Mount attaches a volume, a host file or a tmpfs at Target in the guest.
+// Mount attaches a volume, a file or a tmpfs at Target in the guest.
 type Mount struct {
 	Type MountType `json:"type,omitzero"`
 
-	// Source is the volume's name for a volume. For a file, it is the host
-	// file's absolute path: the daemon copies the file to the guest at each
-	// start. A tmpfs has none.
+	// Source is the volume's name for a volume. A file and a tmpfs have
+	// none.
 	Source string `json:"source,omitzero"`
 
 	// Target is the absolute path the mount appears at in the guest.
@@ -272,6 +274,34 @@ type Mount struct {
 	// ReadOnly mounts it read-only. A volume every instance mounts read-only
 	// can be shared between them.
 	ReadOnly bool `json:"read_only,omitzero"`
+
+	// Content is a file's contents. The daemon keeps them with the instance
+	// and writes them into the guest at each start. An instance's file
+	// mounts can hold at most 1 MiB between them. FileMount reads them from
+	// a file on this machine.
+	Content []byte `json:"content,omitzero"`
+
+	// Mode is a file's permission bits in the guest, where root owns it.
+	// Zero is 0644.
+	Mode fs.FileMode `json:"mode,omitzero"`
+}
+
+// FileMount returns a mount that puts a copy of the file at path, on this
+// machine, at target in the guest, with the file's permission bits.
+func FileMount(path, target string) (Mount, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return Mount{}, err
+	}
+	if !info.Mode().IsRegular() {
+		return Mount{}, fmt.Errorf("%s is not a regular file: only a file can be mounted", path)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return Mount{}, err
+	}
+
+	return Mount{Type: MountTypeFile, Target: target, Content: content, Mode: info.Mode().Perm()}, nil
 }
 
 // MountType is what a Mount attaches.
@@ -283,7 +313,8 @@ const (
 	// its own.
 	MountTypeVolume MountType = "volume"
 
-	// MountTypeFile is a copy of a host file, read at each start.
+	// MountTypeFile is a file whose contents the client gives, written
+	// into the guest at each start.
 	MountTypeFile MountType = "file"
 
 	// MountTypeTmpfs is an empty in-memory filesystem, lost when the guest
@@ -785,6 +816,8 @@ func mountFromProto(p *dicerdv1.Mount) Mount {
 		Source:   p.GetSource(),
 		Target:   p.GetTarget(),
 		ReadOnly: p.GetReadOnly(),
+		Content:  p.GetContent(),
+		Mode:     fs.FileMode(p.GetMode()),
 	}
 }
 
@@ -796,7 +829,14 @@ func mountsToProto(mounts []Mount) ([]*dicerdv1.Mount, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, &dicerdv1.Mount{Type: mountType, Source: m.Source, Target: m.Target, ReadOnly: m.ReadOnly})
+		out = append(out, &dicerdv1.Mount{
+			Type:     mountType,
+			Source:   m.Source,
+			Target:   m.Target,
+			ReadOnly: m.ReadOnly,
+			Content:  m.Content,
+			Mode:     uint32(m.Mode.Perm()),
+		})
 	}
 
 	return out, nil

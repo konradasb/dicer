@@ -302,7 +302,8 @@ enum MountType {
   MOUNT_TYPE_UNSPECIFIED = 0;
   // A named volume: persistent storage, as a disk of its own.
   MOUNT_TYPE_VOLUME = 1;
-  // A copy of a host file, read at each start.
+  // A file whose contents the client gives, written into the guest at each
+  // start.
   MOUNT_TYPE_FILE = 2;
   // An empty in-memory filesystem, lost when the guest stops.
   MOUNT_TYPE_TMPFS = 3;
@@ -536,18 +537,22 @@ message RestartPolicy {
   int32 max_retries = 2;
 }
 
-// Mount attaches a volume, a host file or a tmpfs at target in the guest.
+// Mount attaches a volume, a file or a tmpfs at target in the guest.
 message Mount {
   MountType type = 1;
-  // The volume's name for a volume. For a file, the host file's absolute
-  // path: the daemon reads it when the instance starts and puts a copy on
-  // the guest's config disk, so a change reaches the guest at its next
-  // start. A tmpfs has none.
+  // The volume's name for a volume. A file and a tmpfs have none.
   string source = 2;
   // The absolute path the mount appears at in the guest.
   string target = 3;
   // A volume every instance attaching it mounts read-only can be shared.
   bool read_only = 4;
+  // A file's contents. The daemon keeps them with the instance and puts a
+  // copy on the guest's config disk at each start. An instance's file
+  // mounts can hold at most 1 MiB between them.
+  bytes content = 5;
+  // A file's permission bits in the guest, such as 0600, where root owns
+  // it. Zero is 0644.
+  uint32 mode = 6;
 }
 
 // PortMapping publishes a guest port on the host, so the guest can be reached

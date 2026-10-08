@@ -364,7 +364,7 @@ func (m *Manager) restoreDisk(ctx context.Context, instance types.InstanceSpec, 
 func (m *Manager) restoreMemory(ctx context.Context, instance types.InstanceSpec, snapshot types.Snapshot) error {
 	started := time.Now()
 
-	if !slices.Equal(instance.Mounts, snapshot.Instance.Mounts) {
+	if !slices.EqualFunc(instance.Mounts, snapshot.Instance.Mounts, types.Mount.Equal) {
 		return errdefs.InvalidState("instance %q's mounts have changed since snapshot %q was taken, "+
 			"and its guest expects them as they were; change them back to restore it", instance.Name, snapshot.Name)
 	}

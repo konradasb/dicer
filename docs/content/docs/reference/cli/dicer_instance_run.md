@@ -59,7 +59,7 @@ $ dicer run -d --vcpus 2 alpine:3.21 sleep infinity
 | `--max-memory string` | Most memory `dicer resize` can give the running instance, e.g. 4GiB (0: none). |
 | `--max-vcpus int` | Most vCPUs `dicer resize` can give the running instance, on Cloud Hypervisor (0: none). |
 | `-m`, `--memory string` | Memory, e.g. 512MiB or 2GiB. Default: `512MiB`. |
-| `--mount stringArray` | Mount a volume, host file or tmpfs, as [type=volume\|file\|tmpfs,][source=...,]target=/path[,readonly] (repeatable). |
+| `--mount stringArray` | Mount a volume, a file on this machine or a tmpfs, as [type=volume\|file\|tmpfs,][source=...,]target=/path[,readonly] (repeatable). |
 | `--name string` | Instance name (default: the image's name and a random suffix). |
 | `--network string` | Network to attach to (default: the default network). |
 | `--no-healthcheck` | Check no health, not even as the image says to. |

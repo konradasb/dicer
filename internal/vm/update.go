@@ -157,7 +157,7 @@ func definitionChanges(a, b types.InstanceSpec) []string {
 	changed("command", slices.Equal(a.Cmd, b.Cmd))
 	changed("environment", maps.Equal(a.Env, b.Env))
 	changed("ports", slices.Equal(a.Ports, b.Ports))
-	changed("mounts", slices.Equal(a.Mounts, b.Mounts))
+	changed("mounts", slices.EqualFunc(a.Mounts, b.Mounts, types.Mount.Equal))
 	changed("labels", maps.Equal(a.Labels, b.Labels))
 	return out
 }

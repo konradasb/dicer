@@ -10,7 +10,6 @@ import (
 	"maps"
 	"os"
 	"strconv"
-	"syscall"
 	"time"
 
 	"gvisor.dev/gvisor/pkg/cleanup"
@@ -248,8 +247,7 @@ func (m *Manager) vmSpec(instance types.InstanceSpec, b bootAssets, nic hypervis
 }
 
 // resolveMounts turns instance's mounts into the guest's mount table and the
-// disks behind its volumes, which follow the four fixed disks in order. Host
-// files are read now, so each start sees their current contents.
+// disks behind its volumes, which follow the four fixed disks in order.
 func (m *Manager) resolveMounts(instance types.InstanceSpec) ([]guest.Mount, []hypervisor.DiskConfig, error) {
 	if len(instance.Mounts) == 0 {
 		return nil, nil, nil
@@ -271,11 +269,7 @@ func (m *Manager) resolveMounts(instance types.InstanceSpec) ([]guest.Mount, []h
 			guestMount.Volume = &guest.VolumeSource{Device: fmt.Sprintf("/dev/vd%c", 'e'+len(disks))}
 			disks = append(disks, hypervisor.DiskConfig{Path: path, ReadOnly: mount.ReadOnly})
 		case types.MountTypeFile:
-			file, err := readHostFile(mount.Source)
-			if err != nil {
-				return nil, nil, fmt.Errorf("mount on %s: %w", mount.Target, err)
-			}
-			guestMount.File = file
+			guestMount.File = &guest.FileSource{Data: mount.Content, Mode: mount.FileMode()}
 		case types.MountTypeTmpfs:
 			guestMount.Tmpfs = &guest.TmpfsSource{}
 		default:
@@ -300,25 +294,6 @@ func (m *Manager) volumeDisk(name string) (string, error) {
 		return "", fmt.Errorf("volume %q disk: %w", volume.Name, err)
 	}
 	return path, nil
-}
-
-// readHostFile reads a host file with the permissions and owner the guest's
-// copy gets.
-func readHostFile(path string) (*guest.FileSource, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read host file: %w", err)
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, fmt.Errorf("read host file: %w", err)
-	}
-
-	file := &guest.FileSource{Data: data, Mode: uint32(info.Mode().Perm())}
-	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-		file.UID, file.GID = int(stat.Uid), int(stat.Gid)
-	}
-	return file, nil
 }
 
 // writeGuestDisks builds the config disk and writes guestStatus to the status

@@ -60,7 +60,7 @@ $ dicer update web -- /usr/sbin/nginx -g 'daemon off;'
 | `--max-memory string` | Most memory `dicer resize` can give the running instance, e.g. 4GiB (0: none). |
 | `--max-vcpus int` | Most vCPUs `dicer resize` can give the running instance, on Cloud Hypervisor (0: none). |
 | `-m`, `--memory string` | Memory, e.g. 512MiB or 2GiB. |
-| `--mount stringArray` | Mount a volume, host file or tmpfs, as [type=volume\|file\|tmpfs,][source=...,]target=/path[,readonly] (repeatable). |
+| `--mount stringArray` | Mount a volume, a file on this machine or a tmpfs, as [type=volume\|file\|tmpfs,][source=...,]target=/path[,readonly] (repeatable). |
 | `--network string` | Network to attach to (default: the default network). |
 | `--no-healthcheck` | Check no health, not even as the image says to. |
 | `-p`, `--publish stringArray` | Publish a guest port on the host, as [hostIP:]hostPort:guestPort[/tcp\|udp] (repeatable). |

@@ -62,6 +62,8 @@ func instanceToProto(instance types.Instance) *dicerdv1.Instance {
 			Source:   m.Source,
 			Target:   m.Target,
 			ReadOnly: m.ReadOnly,
+			Content:  m.Content,
+			Mode:     m.Mode,
 		})
 	}
 
@@ -238,6 +240,8 @@ func mountsFromProto(in []*dicerdv1.Mount) ([]types.Mount, error) {
 			Source:   m.GetSource(),
 			Target:   target,
 			ReadOnly: m.GetReadOnly(),
+			Content:  m.GetContent(),
+			Mode:     m.GetMode(),
 		})
 	}
 	return mounts, nil

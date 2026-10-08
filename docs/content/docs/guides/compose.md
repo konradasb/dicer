@@ -213,9 +213,10 @@ service can do:
 - **`command` replaces the image's ENTRYPOINT and CMD**, as with
   `dicer run`. Give the whole command line, or `entrypoint` and `command`
   together.
-- **A host path in `volumes` is a file, not a directory.** It is copied into
-  the guest each time the instance starts, so a change reaches the guest at
-  its next start. With a remote daemon, the path is on the daemon's host.
+- **A path in `volumes` is a file, not a directory.** It is read on the
+  machine running `dicer compose`, and its contents are sent to the daemon,
+  which puts them in the guest at each start. A change to the file changes
+  the service, so the next `dicer compose up` recreates its instance.
 - **Each service joins one network.** A network the file gives no `subnet`
   gets a free /24 from `10.213.0.0/16`, one that no other network and none
   of the host's interfaces is on.

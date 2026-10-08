@@ -640,7 +640,8 @@ func parseProtocol(s string) (dicer.Protocol, error) {
 }
 
 // setMounts sets the service's volumes and tmpfs. A named volume must be one
-// of the file's, and a host path is a file, copied into the guest.
+// of the file's, and a path is a file on this machine, whose contents are
+// read now and put in the guest.
 func (b *builder) setMounts(raw *rawService, spec *dicer.InstanceSpec) error {
 	for _, m := range raw.Volumes {
 		mount, err := b.mount(m)
@@ -707,7 +708,12 @@ func (b *builder) mount(m rawMount) (dicer.Mount, error) {
 		if err != nil {
 			return dicer.Mount{}, err
 		}
-		return dicer.Mount{Type: dicer.MountTypeFile, Source: path, Target: target, ReadOnly: readOnly}, nil
+		file, err := dicer.FileMount(path, target)
+		if err != nil {
+			return dicer.Mount{}, fmt.Errorf("volume %s: %w", source, err)
+		}
+		file.ReadOnly = readOnly
+		return file, nil
 	case "tmpfs":
 		if source != "" {
 			return dicer.Mount{}, fmt.Errorf("tmpfs %s: a tmpfs has no source", target)

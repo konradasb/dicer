@@ -100,7 +100,8 @@ volumes:
   data:
     size: 5GiB
 `,
-		"web.env": "MODE=development\nFROM_FILE=1\n",
+		"web.env":    "MODE=development\nFROM_FILE=1\n",
+		"nginx.conf": "worker_processes 1;\n",
 	})
 
 	p, err := Load(Options{WorkDir: root, Lookup: lookupIn(map[string]string{"FROM_SHELL": "shell"})})
@@ -137,8 +138,8 @@ volumes:
 		Mounts: []dicer.Mount{
 			{Type: dicer.MountTypeVolume, Source: "shop-data", Target: "/srv/data"},
 			{
-				Type: dicer.MountTypeFile, Source: filepath.Join(root, "nginx.conf"),
-				Target: "/etc/nginx/nginx.conf", ReadOnly: true,
+				Type: dicer.MountTypeFile, Target: "/etc/nginx/nginx.conf", ReadOnly: true,
+				Content: []byte("worker_processes 1;\n"), Mode: 0o600,
 			},
 			{Type: dicer.MountTypeTmpfs, Target: "/cache"},
 			{Type: dicer.MountTypeTmpfs, Target: "/run"},

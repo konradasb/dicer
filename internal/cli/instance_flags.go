@@ -81,7 +81,7 @@ func addInstanceSpecFlags(cmd *cobra.Command, withDefaults bool) {
 	flags.StringArrayP("publish", "p", nil,
 		"Publish a guest port on the host, as [hostIP:]hostPort:guestPort[/tcp|udp] (repeatable)")
 	flags.StringArray("mount", nil,
-		"Mount a volume, host file or tmpfs, as [type=volume|file|tmpfs,][source=...,]target=/path[,readonly] (repeatable)")
+		"Mount a volume, a file on this machine or a tmpfs, as [type=volume|file|tmpfs,][source=...,]target=/path[,readonly] (repeatable)")
 	flags.StringArrayP("env", "e", nil,
 		"Environment variable as KEY=VALUE, or KEY to pass this shell's value (repeatable)")
 	flags.StringArray("env-file", nil, "Read environment variables from a file of KEY=VALUE lines (repeatable)")
@@ -485,7 +485,8 @@ func parseEach[T any](specs []string, parse func(string) (T, error)) ([]T, error
 // parseMount parses a mount written as docker run --mount takes it: comma
 // separated key=value pairs, e.g. type=volume,source=data,target=/data,readonly.
 // src and dst or destination may stand for source and target, and ro for
-// readonly. The type defaults to volume.
+// readonly. The type defaults to volume. A file mount's source is a file on
+// this machine, which is read now, so that its contents are sent.
 func parseMount(s string) (dicer.Mount, error) {
 	m := dicer.Mount{Type: dicer.MountTypeVolume}
 
@@ -520,7 +521,19 @@ func parseMount(s string) (dicer.Mount, error) {
 	if m.Target == "" {
 		return dicer.Mount{}, fmt.Errorf("invalid mount %q: it needs a target", s)
 	}
-	return m, nil
+	if m.Type != dicer.MountTypeFile {
+		return m, nil
+	}
+
+	if m.Source == "" {
+		return dicer.Mount{}, fmt.Errorf("invalid mount %q: a file mount needs the file on this machine as its source", s)
+	}
+	file, err := dicer.FileMount(m.Source, m.Target)
+	if err != nil {
+		return dicer.Mount{}, fmt.Errorf("invalid mount %q: %w", s, err)
+	}
+	file.ReadOnly = m.ReadOnly
+	return file, nil
 }
 
 // parsePortMapping parses a mapping as a person writes it: "8080:80",

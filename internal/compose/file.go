@@ -87,14 +87,16 @@ type rawService struct {
 	// alone is refused, as are ranges.
 	Ports []rawPort `yaml:"ports"`
 
-	// Volumes are the volumes and host files to mount, each as
+	// Volumes are the volumes and files to mount, each as
 	// `SOURCE:TARGET[:ro]` or as a mapping. A `SOURCE` that is a name is a
 	// volume, which must be declared under the file's `volumes`. One starting
-	// `/`, `.` or `~` is a host file, relative to the project directory: it must
-	// be a file, not a directory, and is copied into the guest each time
-	// the instance starts, as with `dicer run --mount type=file`. With a remote
-	// daemon, the path is on the daemon's host. A `TARGET` alone, an anonymous
-	// volume, is refused: name the volume.
+	// `/`, `.` or `~` is a file on the machine running `dicer compose`,
+	// relative to the project directory. It must be a file, not a directory.
+	// Its contents are read when the project is loaded and sent to the
+	// daemon, which puts them in the guest each time the instance starts, as
+	// with `dicer run --mount type=file`. A changed file changes the
+	// service's definition, so `dicer compose up` recreates its instance. A
+	// `TARGET` alone, an anonymous volume, is refused: name the volume.
 	Volumes []rawMount `yaml:"volumes"`
 
 	// Tmpfs is the paths to mount an empty tmpfs at. A tmpfs takes no
@@ -526,11 +528,11 @@ type rawMount struct {
 	// Short is the entry as written, if it was written as a string.
 	Short string `yaml:"-"`
 
-	// Type is `volume`, `bind`, for a host file, or `tmpfs`. Required.
+	// Type is `volume`, `bind`, for a file, or `tmpfs`. Required.
 	Type string `yaml:"type"`
 
-	// Source is the volume's name, or the host file's path. A tmpfs has
-	// none.
+	// Source is the volume's name, or the file's path on the machine
+	// running `dicer compose`. A tmpfs has none.
 	Source string `yaml:"source"`
 
 	// Target is the path in the guest. Required.

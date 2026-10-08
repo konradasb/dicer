@@ -48,7 +48,8 @@ The following are in scope for security reports:
 - Host networking — traffic crossing between networks, or between instances
   on an `--isolated` network, that the rules should stop
 - Files crossing the boundary — `dicer cp` writing outside the path it was
-  given on either side, and `file` mounts reading more than the file named
+  given on either side, and any way to make the daemon read or write a file
+  on its host that a request names
 - Integrity — images not matching their digest, or a kernel not matching the
   `--sha256` it was imported with
 - Dependency vulnerabilities with a direct, exploitable path in Dicer
@@ -68,10 +69,9 @@ Dicer runs virtual machines and requires elevated host privileges. Operators sho
 
 - Run Dicer on a hardened Linux host with an up-to-date kernel, and keep Dicer
   updated to the latest release
-- **Treat access to the API as root on the host.** The API has no users or
-  roles: every client the daemon accepts can do anything, including reading
-  any file on the host by mounting it into a guest
-  (`--mount type=file,...`), since the daemon reads it as root
+- **Treat access to the API as full control of the daemon.** The API has no
+  users or roles: every client the daemon accepts can do anything the API
+  allows.
 - Keep the Unix socket as it is set up: owned by root and the `dicer` group
   (`api.socket.group`), and not open to others (`api.socket.mode`). Whoever
   can open it controls the daemon, so add to the group only whom you would

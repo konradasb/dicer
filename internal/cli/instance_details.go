@@ -258,7 +258,7 @@ func portLines(ports []dicer.PortMapping) []string {
 }
 
 // mountLines describe an instance's mounts, one a line: "volume data on
-// /var/lib/data (read-only)".
+// /var/lib/data (read-only)", "file on /etc/app.conf (12 B, mode 0640)".
 func mountLines(mounts []dicer.Mount) []string {
 	lines := make([]string, 0, len(mounts))
 	for _, m := range mounts {
@@ -267,8 +267,18 @@ func mountLines(mounts []dicer.Mount) []string {
 			line += " " + m.Source
 		}
 		line += " on " + m.Target
+
+		var notes []string
+		if m.Type == dicer.MountTypeFile {
+			// A file given no mode gets 0644 in the guest.
+			mode := fmt.Sprintf("mode %04o", uint32(cmp.Or(m.Mode, 0o644)))
+			notes = append(notes, humanize.Bytes(int64(len(m.Content))), mode)
+		}
 		if m.ReadOnly {
-			line += " (read-only)"
+			notes = append(notes, "read-only")
+		}
+		if len(notes) > 0 {
+			line += " (" + strings.Join(notes, ", ") + ")"
 		}
 		lines = append(lines, line)
 	}

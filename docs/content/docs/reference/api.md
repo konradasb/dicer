@@ -739,14 +739,16 @@ Kernel is a guest kernel image available to instances.
 
 ### Mount
 
-Mount attaches a volume, a host file or a tmpfs at target in the guest.
+Mount attaches a volume, a file or a tmpfs at target in the guest.
 
 | Field | Type | Description |
 |---|---|---|
 | `type` | [`MountType`](#mounttype) |  |
-| `source` | `string` | The volume's name for a volume. For a file, the host file's absolute path: the daemon reads it when the instance starts and puts a copy on the guest's config disk, so a change reaches the guest at its next start. A tmpfs has none. |
+| `source` | `string` | The volume's name for a volume. A file and a tmpfs have none. |
 | `target` | `string` | The absolute path the mount appears at in the guest. |
 | `read_only` | `bool` | A volume every instance attaching it mounts read-only can be shared. |
+| `content` | `bytes` | A file's contents. The daemon keeps them with the instance and puts a copy on the guest's config disk at each start. An instance's file mounts can hold at most 1 MiB between them. |
+| `mode` | `uint32` | A file's permission bits in the guest, such as 0600, where root owns it. Zero is 0644. |
 
 ### Network
 
@@ -1117,7 +1119,7 @@ MountType is what a Mount attaches.
 |---|---|---|
 | `MOUNT_TYPE_UNSPECIFIED` | 0 |  |
 | `MOUNT_TYPE_VOLUME` | 1 | A named volume: persistent storage, as a disk of its own. |
-| `MOUNT_TYPE_FILE` | 2 | A copy of a host file, read at each start. |
+| `MOUNT_TYPE_FILE` | 2 | A file whose contents the client gives, written into the guest at each start. |
 | `MOUNT_TYPE_TMPFS` | 3 | An empty in-memory filesystem, lost when the guest stops. |
 
 ### Protocol

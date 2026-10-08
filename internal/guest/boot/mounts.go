@@ -24,8 +24,8 @@ import (
 	"github.com/konradasb/dicer/internal/types"
 )
 
-// filesDir is a tmpfs in the initramfs that holds the contents of mounted
-// host files, each bind-mounted onto its target. It is outside the guest's
+// filesDir is a tmpfs in the initramfs that holds the contents of file
+// mounts, each bind-mounted onto its target. It is outside the guest's
 // root, so the guest sees only the targets, and nothing is written to disk.
 const filesDir = "/dicer/files"
 
@@ -126,7 +126,7 @@ func mountTmpfs(target string) error {
 	return nil
 }
 
-// mountFile writes a host file's contents to filesDir and bind-mounts it
+// mountFile writes a file mount's contents to filesDir and bind-mounts it
 // onto target, creating an empty file there first if there is none.
 func mountFile(i int, file *guest.FileSource, target string, readOnly bool) error {
 	src := filepath.Join(filesDir, strconv.Itoa(i))

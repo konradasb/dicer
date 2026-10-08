@@ -207,57 +207,67 @@ func TestInstanceStopKeepsWrites(t *testing.T) {
 	}
 }
 
-// TestInstanceHostFiles checks the path a credential takes from the host into
-// a running guest.
+// TestInstanceFileMounts checks the path a credential takes from the client
+// into a running guest.
 //
-// Dicer stores nothing: the file is read from the host at every start and
-// handed over on the config disk. That makes the interesting property not
-// "the bytes arrived" but "the bytes are re-read", which the second half of
-// this test covers by editing the file between boots.
-func TestInstanceHostFiles(t *testing.T) {
+// The client sends the file's contents, and the daemon keeps them with the
+// instance: it never reads a path a caller names. So the interesting property
+// is not "the bytes arrived" but "the bytes are the ones sent", which the
+// second half covers by changing the file on the client: the guest keeps the
+// contents it was given until the mount is updated.
+func TestInstanceFileMounts(t *testing.T) {
 	var (
-		name     = instanceName(t)
-		hostPath = "/tmp/" + name + "-secret"
-		first    = "first-value"
-		second   = "rotated-value"
+		name       = instanceName(t)
+		clientPath = "/tmp/" + name + "-secret"
+		first      = "first-value"
+		second     = "rotated-value"
+		mount      = "type=file,source=" + clientPath + ",target=/run/secrets/token,readonly"
 	)
 
-	env.writeHostFile(t, hostPath, first)
+	env.writeHostFile(t, clientPath, first)
 
-	env.createInstance(t, name, "--mount", "type=file,source="+hostPath+",target=/run/secrets/token,readonly")
+	env.createInstance(t, name, "--mount", mount)
 	env.startInstance(t, name)
 
 	if got := strings.TrimSpace(env.exec(t, name, "cat", "/run/secrets/token")); got != first {
 		t.Fatalf("/run/secrets/token = %q, want %q", got, first)
 	}
 
-	// The README promises the file is read at every start, so whatever
-	// manages it on the host stays in charge of it.
 	env.dicer(t, "instance", "stop", name)
 	env.waitForState(t, name, "Stopped")
 
-	env.writeHostFile(t, hostPath, second)
+	// A change to the file the contents came from does not reach the
+	// guest: the daemon kept what it was sent.
+	env.writeHostFile(t, clientPath, second)
 	env.startInstance(t, name)
+	if got := strings.TrimSpace(env.exec(t, name, "cat", "/run/secrets/token")); got != first {
+		t.Errorf("/run/secrets/token = %q after the file changed, want %q until the mount is updated", got, first)
+	}
 
+	env.dicer(t, "instance", "stop", name)
+	env.waitForState(t, name, "Stopped")
+
+	env.dicer(t, "instance", "update", name, "--mount", mount)
+	env.startInstance(t, name)
 	if got := strings.TrimSpace(env.exec(t, name, "cat", "/run/secrets/token")); got != second {
-		t.Errorf("/run/secrets/token = %q after the host file changed, want %q", got, second)
+		t.Errorf("/run/secrets/token = %q after the mount was updated, want %q", got, second)
 	}
 }
 
-// TestInstanceMounts checks that a host file can be mounted at any path,
+// TestInstanceMounts checks that a file can be mounted at any path,
 // read-only, beside a tmpfs, and nested inside it.
 func TestInstanceMounts(t *testing.T) {
 	var (
-		name     = instanceName(t)
-		hostPath = "/tmp/" + name + "-conf"
+		name       = instanceName(t)
+		clientPath = "/tmp/" + name + "-conf"
 	)
 
-	env.writeHostFile(t, hostPath, "key=value")
+	env.writeHostFile(t, clientPath, "key=value")
 
 	env.createInstance(t, name,
-		"--mount", "type=file,source="+hostPath+",target=/etc/dicer-e2e.conf,readonly",
+		"--mount", "type=file,source="+clientPath+",target=/etc/dicer-e2e.conf,readonly",
 		"--mount", "type=tmpfs,target=/scratch",
-		"--mount", "type=file,source="+hostPath+",target=/scratch/nested/copy.conf")
+		"--mount", "type=file,source="+clientPath+",target=/scratch/nested/copy.conf")
 	env.startInstance(t, name)
 
 	if got := strings.TrimSpace(env.exec(t, name, "cat", "/etc/dicer-e2e.conf")); got != "key=value" {
@@ -836,9 +846,9 @@ func (e *environment) deleteInstance(t *testing.T, name string) {
 	}
 }
 
-// writeHostFile puts a file on the host under test and removes it afterwards.
-// It lives here because injecting host files into a guest is the only thing
-// these tests need one for.
+// writeHostFile puts a file on the host under test, where the tests run
+// dicer, and removes it afterwards. It lives here because file mounts are the
+// only thing these tests need one for.
 func (e *environment) writeHostFile(t *testing.T, path, content string) {
 	t.Helper()
 

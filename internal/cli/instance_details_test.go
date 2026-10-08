@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/konradasb/dicer"
@@ -63,5 +64,21 @@ func TestLimitsDetailNamesOnlyTheLimitsSet(t *testing.T) {
 				t.Errorf("limits = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMountLinesDescribeAFileBySizeAndMode(t *testing.T) {
+	got := mountLines([]dicer.Mount{
+		{Type: dicer.MountTypeFile, Target: "/etc/app.conf", Content: []byte("k=v\n"), Mode: 0o640, ReadOnly: true},
+		{Type: dicer.MountTypeFile, Target: "/etc/empty"},
+		{Type: dicer.MountTypeVolume, Source: "data", Target: "/data"},
+	})
+	want := []string{
+		"file on /etc/app.conf (4 B, mode 0640, read-only)",
+		"file on /etc/empty (0 B, mode 0644)",
+		"volume data on /data",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("mountLines = %q, want %q", got, want)
 	}
 }

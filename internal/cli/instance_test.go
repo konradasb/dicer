@@ -4,6 +4,9 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -105,11 +108,19 @@ func TestBuildCreateRequestStartFlag(t *testing.T) {
 	}
 }
 
+// TestBuildCreateRequestMountFlags checks each type of mount is parsed, and
+// that a file mount carries the contents and mode of the file on this
+// machine rather than its path.
 func TestBuildCreateRequestMountFlags(t *testing.T) {
+	appConf := filepath.Join(t.TempDir(), "app.conf")
+	if err := os.WriteFile(appConf, []byte("k=v"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
 	got, err := runBuild(t, "web",
 		"--mount", "type=tmpfs,target=/scratch",
 		"--mount", "source=data,target=/var/lib/data,readonly",
-		"--mount", "type=file,source=/etc/app.conf,target=/etc/app.conf")
+		"--mount", "type=file,source="+appConf+",target=/etc/app.conf,ro")
 	if err != nil {
 		t.Fatalf("buildCreate: %v", err)
 	}
@@ -117,9 +128,9 @@ func TestBuildCreateRequestMountFlags(t *testing.T) {
 	want := []dicer.Mount{
 		{Type: dicer.MountTypeTmpfs, Target: "/scratch"},
 		{Type: dicer.MountTypeVolume, Source: "data", Target: "/var/lib/data", ReadOnly: true},
-		{Type: dicer.MountTypeFile, Source: "/etc/app.conf", Target: "/etc/app.conf"},
+		{Type: dicer.MountTypeFile, Target: "/etc/app.conf", ReadOnly: true, Content: []byte("k=v"), Mode: 0o640},
 	}
-	if !slices.Equal(got.spec.Mounts, want) {
+	if !reflect.DeepEqual(got.spec.Mounts, want) {
 		t.Errorf("mounts = %+v, want %+v", got.spec.Mounts, want)
 	}
 }
@@ -128,6 +139,9 @@ func TestBuildCreateRequestRejectsBadMounts(t *testing.T) {
 	for _, argv := range [][]string{
 		{"--mount", "type=volume,source=data"},
 		{"--mount", "type=volume,target=/x,color=red"},
+		{"--mount", "type=file,target=/x"},
+		{"--mount", "type=file,source=" + t.TempDir() + ",target=/x"},
+		{"--mount", "type=file,source=/does/not/exist,target=/x"},
 	} {
 		if _, err := runBuild(t, append([]string{"web"}, argv...)...); err == nil {
 			t.Errorf("%v should be rejected", argv)

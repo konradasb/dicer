@@ -49,7 +49,7 @@ func readStatusDisk(path string) (guest.Status, error) {
 }
 
 // configDiskSize is the size of the sparse config disk, before room for the
-// config itself, which holds the contents of every mounted host file.
+// config itself, which holds the contents of every file mount.
 const configDiskSize = 4 << 20
 
 // provisionConfigDisk creates the ext4 disk holding dicer-init's

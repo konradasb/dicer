@@ -62,8 +62,8 @@ func TestResolveMountsMissingDisk(t *testing.T) {
 }
 
 // TestResolveMountsMixed checks each type becomes its guest mount, that
-// volume disks are lettered in order past the other mounts, and that a host
-// file is read at start with its permissions.
+// volume disks are lettered in order past the other mounts, and that a file
+// keeps its contents and permissions, and is owned by root.
 func TestResolveMountsMixed(t *testing.T) {
 	manager, definitions, _ := newTestManager(t)
 	volumes := fakeVolumes{dir: t.TempDir()}
@@ -79,15 +79,10 @@ func TestResolveMountsMixed(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	hostFile := filepath.Join(t.TempDir(), "app.conf")
-	if err := os.WriteFile(hostFile, []byte("k=v"), 0o640); err != nil {
-		t.Fatal(err)
-	}
-
 	instance := seedInstance(t, definitions, "web")
 	instance.Mounts = []types.Mount{
 		{Type: types.MountTypeVolume, Source: "a", Target: "/a"},
-		{Type: types.MountTypeFile, Source: hostFile, Target: "/etc/app.conf", ReadOnly: true},
+		{Type: types.MountTypeFile, Content: []byte("k=v"), Mode: 0o640, Target: "/etc/app.conf", ReadOnly: true},
 		{Type: types.MountTypeTmpfs, Target: "/scratch"},
 		{Type: types.MountTypeVolume, Source: "b", Target: "/b", ReadOnly: true},
 	}
@@ -106,8 +101,9 @@ func TestResolveMountsMixed(t *testing.T) {
 	if v := mounts[0].Volume; v == nil || v.Device != "/dev/vde" {
 		t.Errorf("mounts[0] = %+v, want /dev/vde", mounts[0])
 	}
-	if f := mounts[1].File; f == nil || string(f.Data) != "k=v" || f.Mode != 0o640 || !mounts[1].ReadOnly {
-		t.Errorf("mounts[1] = %+v, want the host file's contents, mode 0640, read-only", mounts[1])
+	if f := mounts[1].File; f == nil || string(f.Data) != "k=v" || f.Mode != 0o640 || f.UID != 0 || f.GID != 0 ||
+		!mounts[1].ReadOnly {
+		t.Errorf("mounts[1] = %+v, want the file's contents, mode 0640, owned by root, read-only", mounts[1])
 	}
 	if mounts[2].Tmpfs == nil {
 		t.Errorf("mounts[2] = %+v, want a tmpfs", mounts[2])

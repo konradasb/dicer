@@ -156,7 +156,7 @@ shows which one a command reaches.
 
 Everything works over a remote as it does locally, `exec`, `cp` and
 `logs -f` included. A path given to `cp` or `--env-file` is read on the
-client. A path given to a `file` mount is read on the daemon's host.
+client, and so is a path given to a `file` mount or to `kernel import`.
 
 `--remote` and `$DICER_REMOTE` also take an address, for a one-off
 connection: `unix:///PATH` or `HOST:PORT`. An address alone carries no TLS

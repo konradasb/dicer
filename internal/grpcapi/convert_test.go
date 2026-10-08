@@ -98,7 +98,7 @@ func TestInstanceToProtoMounts(t *testing.T) {
 		t.Errorf("mounts[0] = %+v, want the volume data, read-write", m)
 	}
 	if m := mounts[1]; m.GetType() != dicerdv1.MountType_MOUNT_TYPE_FILE || m.GetTarget() != "/run/secrets/db-password" || !m.GetReadOnly() {
-		t.Errorf("mounts[1] = %+v, want the host file, read-only under /run/secrets", m)
+		t.Errorf("mounts[1] = %+v, want the file, read-only under /run/secrets", m)
 	}
 	if len(got.GetPorts()) != 1 || got.GetPorts()[0].GetProtocol() != dicerdv1.Protocol_PROTOCOL_TCP {
 		t.Errorf("ports = %+v, want one with the protocol defaulted to tcp", got.GetPorts())

@@ -257,19 +257,19 @@ depends_on:
 
 *list of strings or mappings*
 
-`volumes` are the volumes and host files to mount, each as `SOURCE:TARGET[:ro]` or as a mapping. A `SOURCE` that is a name is a volume, which must be declared under the file's `volumes`. One starting `/`, `.` or `~` is a host file, relative to the project directory: it must be a file, not a directory, and is copied into the guest each time the instance starts, as with `dicer run --mount type=file`. With a remote daemon, the path is on the daemon's host. A `TARGET` alone, an anonymous volume, is refused: name the volume.
+`volumes` are the volumes and files to mount, each as `SOURCE:TARGET[:ro]` or as a mapping. A `SOURCE` that is a name is a volume, which must be declared under the file's `volumes`. One starting `/`, `.` or `~` is a file on the machine running `dicer compose`, relative to the project directory. It must be a file, not a directory. Its contents are read when the project is loaded and sent to the daemon, which puts them in the guest each time the instance starts, as with `dicer run --mount type=file`. A changed file changes the service's definition, so `dicer compose up` recreates its instance. A `TARGET` alone, an anonymous volume, is refused: name the volume.
 
 ### `services.*.volumes[].type` {#services-volumes-type}
 
 *string*
 
-`type` is `volume`, `bind`, for a host file, or `tmpfs`. Required.
+`type` is `volume`, `bind`, for a file, or `tmpfs`. Required.
 
 ### `services.*.volumes[].source` {#services-volumes-source}
 
 *string*
 
-`source` is the volume's name, or the host file's path. A tmpfs has none.
+`source` is the volume's name, or the file's path on the machine running `dicer compose`. A tmpfs has none.
 
 ### `services.*.volumes[].target` {#services-volumes-target}
 

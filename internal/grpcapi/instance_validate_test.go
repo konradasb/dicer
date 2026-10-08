@@ -6,7 +6,6 @@ package grpcapi
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -21,7 +20,7 @@ import (
 func TestMountsFromProtoCleansTargets(t *testing.T) {
 	got, err := mountsFromProto([]*dicerdv1.Mount{
 		{Type: dicerdv1.MountType_MOUNT_TYPE_VOLUME, Source: "v0", Target: "/data/"},
-		{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Source: "/etc/secret", Target: "/etc//app/secret", ReadOnly: true},
+		{Type: dicerdv1.MountType_MOUNT_TYPE_FILE, Content: []byte("s3cret"), Mode: 0o600, Target: "/etc//app/secret", ReadOnly: true},
 		{Type: dicerdv1.MountType_MOUNT_TYPE_TMPFS},
 	})
 	if err != nil {
@@ -29,10 +28,10 @@ func TestMountsFromProtoCleansTargets(t *testing.T) {
 	}
 	want := []types.Mount{
 		{Type: types.MountTypeVolume, Source: "v0", Target: "/data"},
-		{Type: types.MountTypeFile, Source: "/etc/secret", Target: "/etc/app/secret", ReadOnly: true},
+		{Type: types.MountTypeFile, Content: []byte("s3cret"), Mode: 0o600, Target: "/etc/app/secret", ReadOnly: true},
 		{Type: types.MountTypeTmpfs},
 	}
-	if !slices.Equal(got, want) {
+	if !slices.EqualFunc(got, want, types.Mount.Equal) {
 		t.Errorf("mounts = %+v, want %+v", got, want)
 	}
 
@@ -41,7 +40,7 @@ func TestMountsFromProtoCleansTargets(t *testing.T) {
 }
 
 // TestCheckMounts checks what of an instance's mounts needs the host: that
-// its volumes exist and fit, and its host files can be read.
+// its volumes exist and fit.
 func TestCheckMounts(t *testing.T) {
 	definitions, err := filestore.NewManager(filestore.Config{
 		DataDir: filepath.Join(t.TempDir(), "data"),
@@ -58,15 +57,9 @@ func TestCheckMounts(t *testing.T) {
 	}
 	h := &instanceHandler{definitions: definitions}
 
-	dir := t.TempDir()
-	hostFile := filepath.Join(dir, "secret")
-	if err := os.WriteFile(hostFile, []byte("s3cret"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
 	if err := h.checkMounts([]types.Mount{
 		{Type: types.MountTypeVolume, Source: "v0", Target: "/data"},
-		{Type: types.MountTypeFile, Source: hostFile, Target: "/etc/app/secret", ReadOnly: true},
+		{Type: types.MountTypeFile, Content: []byte("s3cret"), Target: "/etc/app/secret", ReadOnly: true},
 		{Type: types.MountTypeTmpfs, Target: "/scratch"},
 	}); err != nil {
 		t.Errorf("checkMounts = %v, want nil", err)
@@ -81,8 +74,6 @@ func TestCheckMounts(t *testing.T) {
 		mounts []types.Mount
 	}{
 		{"unknown volume", []types.Mount{{Type: types.MountTypeVolume, Source: "nope", Target: "/data"}}},
-		{"missing host file", []types.Mount{{Type: types.MountTypeFile, Source: filepath.Join(dir, "nope"), Target: "/s"}}},
-		{"host directory", []types.Mount{{Type: types.MountTypeFile, Source: dir, Target: "/s"}}},
 		{"too many volumes", tooMany},
 	}
 	for _, tt := range tests {

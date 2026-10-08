@@ -348,7 +348,8 @@ const (
 	MountType_MOUNT_TYPE_UNSPECIFIED MountType = 0
 	// A named volume: persistent storage, as a disk of its own.
 	MountType_MOUNT_TYPE_VOLUME MountType = 1
-	// A copy of a host file, read at each start.
+	// A file whose contents the client gives, written into the guest at each
+	// start.
 	MountType_MOUNT_TYPE_FILE MountType = 2
 	// An empty in-memory filesystem, lost when the guest stops.
 	MountType_MOUNT_TYPE_TMPFS MountType = 3
@@ -1740,19 +1741,23 @@ func (x *RestartPolicy) GetMaxRetries() int32 {
 	return 0
 }
 
-// Mount attaches a volume, a host file or a tmpfs at target in the guest.
+// Mount attaches a volume, a file or a tmpfs at target in the guest.
 type Mount struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Type  MountType              `protobuf:"varint,1,opt,name=type,proto3,enum=dicerd.v1.MountType" json:"type,omitempty"`
-	// The volume's name for a volume. For a file, the host file's absolute
-	// path: the daemon reads it when the instance starts and puts a copy on
-	// the guest's config disk, so a change reaches the guest at its next
-	// start. A tmpfs has none.
+	// The volume's name for a volume. A file and a tmpfs have none.
 	Source string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
 	// The absolute path the mount appears at in the guest.
 	Target string `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
 	// A volume every instance attaching it mounts read-only can be shared.
-	ReadOnly      bool `protobuf:"varint,4,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	ReadOnly bool `protobuf:"varint,4,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	// A file's contents. The daemon keeps them with the instance and puts a
+	// copy on the guest's config disk at each start. An instance's file
+	// mounts can hold at most 1 MiB between them.
+	Content []byte `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
+	// A file's permission bits in the guest, such as 0600, where root owns
+	// it. Zero is 0644.
+	Mode          uint32 `protobuf:"varint,6,opt,name=mode,proto3" json:"mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1813,6 +1818,20 @@ func (x *Mount) GetReadOnly() bool {
 		return x.ReadOnly
 	}
 	return false
+}
+
+func (x *Mount) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *Mount) GetMode() uint32 {
+	if x != nil {
+		return x.Mode
+	}
+	return 0
 }
 
 // PortMapping publishes a guest port on the host, so the guest can be reached
@@ -7388,12 +7407,14 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\rRestartPolicy\x12*\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x16.dicerd.v1.RestartModeR\x04mode\x12\x1f\n" +
 	"\vmax_retries\x18\x02 \x01(\x05R\n" +
-	"maxRetries\"~\n" +
+	"maxRetries\"\xac\x01\n" +
 	"\x05Mount\x12(\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x14.dicerd.v1.MountTypeR\x04type\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x16\n" +
 	"\x06target\x18\x03 \x01(\tR\x06target\x12\x1b\n" +
-	"\tread_only\x18\x04 \x01(\bR\breadOnly\"\x93\x01\n" +
+	"\tread_only\x18\x04 \x01(\bR\breadOnly\x12\x18\n" +
+	"\acontent\x18\x05 \x01(\fR\acontent\x12\x12\n" +
+	"\x04mode\x18\x06 \x01(\rR\x04mode\"\x93\x01\n" +
 	"\vPortMapping\x12\x17\n" +
 	"\ahost_ip\x18\x01 \x01(\tR\x06hostIp\x12\x1b\n" +
 	"\thost_port\x18\x02 \x01(\rR\bhostPort\x12\x1d\n" +
