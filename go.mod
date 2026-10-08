@@ -11,7 +11,7 @@ require (
 	github.com/distribution/reference v0.6.0
 	github.com/docker/docker-credential-helpers v0.9.9
 	github.com/docker/go-units v0.5.0
-	github.com/godbus/dbus/v5 v5.1.0
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/go-containerregistry v0.20.7
 	github.com/klauspost/compress v1.19.1
 	github.com/mdlayher/vsock v1.2.1
