@@ -53,7 +53,7 @@ was, and whose message says it for a person:
 | `CreateInstance` | [`CreateInstanceRequest`](#createinstancerequest) | [`Instance`](#instance) | CreateInstance records an instance definition without starting it, unless start is set. It first pulls the image as the request's pull policy says, reporting no progress: to show a pull's progress, call PullImage first. Nothing is recorded if the image cannot be had. |
 | `UpdateInstance` | [`UpdateInstanceRequest`](#updateinstancerequest) | [`Instance`](#instance) | UpdateInstance modifies the definition of a stopped instance. Its image cannot be changed: an instance always boots the image it was created with. |
 | `RenameInstance` | [`RenameInstanceRequest`](#renameinstancerequest) | [`Instance`](#instance) | RenameInstance changes a stopped instance's name. The instance keeps its ID, its disks and its address; only what people call it changes. |
-| `StartInstance` | [`StartInstanceRequest`](#startinstancerequest) | [`Instance`](#instance) | StartInstance boots a defined instance, or resumes one on standby. |
+| `StartInstance` | [`StartInstanceRequest`](#startinstancerequest) | [`Instance`](#instance) | StartInstance boots a defined instance, or resumes one on standby. It returns once the guest has booted, which is once its agent answers, or once its workload has ended cleanly. A guest that does not boot, because its kernel panics or its agent does not answer within a minute, is ended as a failure for its restart policy to handle, and FAILED_PRECONDITION says why, with what its console last said. |
 | `StopInstance` | [`StopInstanceRequest`](#stopinstancerequest) | [`Instance`](#instance) | StopInstance shuts a running instance down, keeping its definition, overlay disk and address. |
 | `PauseInstance` | [`PauseInstanceRequest`](#pauseinstancerequest) | [`Instance`](#instance) | PauseInstance halts a running instance's vCPUs, keeping it resident. |
 | `ResumeInstance` | [`ResumeInstanceRequest`](#resumeinstancerequest) | [`Instance`](#instance) | ResumeInstance continues a paused instance. |
@@ -166,7 +166,7 @@ CopyToInstanceStart is the first message on a CopyToInstance stream.
 | `init_mode` | [`InitMode`](#initmode) | How the guest starts the command. Unspecified means auto. |
 | `user` | `string` | Who the workload runs as in the exec init mode: user, uid, user:group or uid:gid, looked up in the guest's /etc/passwd and /etc/group. Empty means the image's USER, or root if it has none. The systemd init mode runs as root, so it cannot be combined with a user. |
 | `pull_policy` | [`PullPolicy`](#pullpolicy) | When the image is pulled; see PullPolicy. |
-| `start` | `bool` | Boots the instance immediately after defining it. |
+| `start` | `bool` | Boots the instance immediately after defining it, and returns once it has booted, as StartInstance does. |
 | `ports` | repeated [`PortMapping`](#portmapping) |  |
 | `remove_on_exit` | `bool` | Deletes the instance once it stops, whether its guest ended on its own or someone stopped it. The daemon does the deleting, so it happens even if whoever asked for it has gone. An instance that its restart policy will start again is not deleted. |
 | `standby_after` | `google.protobuf.Duration` | How long the instance may be idle, running with its guest using under 5% of a vCPU and its network carrying under a packet a second, before it is put on standby. At least a minute; unset is never. |

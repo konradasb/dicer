@@ -47,6 +47,8 @@ func newTestManager(t *testing.T) (*Manager, *fakeStore, *fakeHostNetwork) {
 	manager.attach = func(pid int, _ string) (*process.Process, error) {
 		return nil, fmt.Errorf("process %d: %w", pid, errNotRunning)
 	}
+	// Every guest boots at once, unless a test says otherwise.
+	manager.awaitAgent = func(context.Context, string) error { return nil }
 
 	return manager, store, hostNetwork
 }

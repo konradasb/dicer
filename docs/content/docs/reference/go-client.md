@@ -344,7 +344,8 @@ Wait waits for a started command to exit, and returns what Run does.
 
 ```go
 type CreateOptions struct {
-	// Start boots the instance once it is defined.
+	// Start boots the instance once it is defined, and Create returns once it
+	// has booted, as Instances.Start does.
 	Start bool
 
 	// PullPolicy is when the image is pulled. Empty means
@@ -1565,7 +1566,7 @@ Standby freezes a running or paused instance to disk and ends its hypervisor, fr
 func (s *Instances) Start(ctx context.Context, name string) (Instance, error)
 ```
 
-Start boots a defined instance, or resumes one on standby.
+Start boots a defined instance, or resumes one on standby. It returns once the guest has booted, which is once its agent answers, or once its workload has ended cleanly. A guest that does not boot fails with ErrInvalidState, saying why and what its console last said.
 
 #### func (*Instances) Stats {#instances-stats}
 

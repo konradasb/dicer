@@ -57,7 +57,12 @@ service DaemonService {
   // RenameInstance changes a stopped instance's name. The instance keeps its
   // ID, its disks and its address; only what people call it changes.
   rpc RenameInstance(RenameInstanceRequest) returns (Instance);
-  // StartInstance boots a defined instance, or resumes one on standby.
+  // StartInstance boots a defined instance, or resumes one on standby. It
+  // returns once the guest has booted, which is once its agent answers, or
+  // once its workload has ended cleanly. A guest that does not boot, because
+  // its kernel panics or its agent does not answer within a minute, is ended
+  // as a failure for its restart policy to handle, and FAILED_PRECONDITION
+  // says why, with what its console last said.
   rpc StartInstance(StartInstanceRequest) returns (Instance);
   // StopInstance shuts a running instance down, keeping its definition,
   // overlay disk and address.
@@ -675,7 +680,8 @@ message CreateInstanceRequest {
   string user = 34;
   // When the image is pulled; see PullPolicy.
   PullPolicy pull_policy = 26;
-  // Boots the instance immediately after defining it.
+  // Boots the instance immediately after defining it, and returns once it
+  // has booted, as StartInstance does.
   bool start = 19;
   repeated PortMapping ports = 20;
   // Deletes the instance once it stops, whether its guest ended on its own

@@ -196,6 +196,7 @@ type Manager struct {
 	setGuestIdentity    func(ctx context.Context, vsockPath string, req *diceragentv1.SetIdentityRequest) error
 	restartWait         func(at time.Time) time.Duration
 	dialGuest           func(ctx context.Context, address string) (net.Conn, error)
+	awaitAgent          func(ctx context.Context, vsockPath string) error
 
 	// shutdownTimeout is how long a VMM asked to exit has before it is
 	// killed.
@@ -203,6 +204,9 @@ type Manager struct {
 
 	// stopGracePeriod is how long a guest asked to shut down has to do it.
 	stopGracePeriod time.Duration
+
+	// bootTimeout is how long a guest has to boot. See boot_watch.go.
+	bootTimeout time.Duration
 
 	// admissionMu serialises admission. See admission.go.
 	admissionMu sync.Mutex
@@ -286,6 +290,8 @@ func NewManager(cfg Config) *Manager {
 
 		shutdownTimeout:  defaultShutdownTimeout,
 		stopGracePeriod:  defaultStopGracePeriod,
+		bootTimeout:      defaultBootTimeout,
+		awaitAgent:       awaitAgent,
 		shutdownGuest:    shutdownGuest,
 		setGuestClock:    setGuestClock,
 		setGuestIdentity: setGuestIdentity,

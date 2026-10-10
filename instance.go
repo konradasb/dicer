@@ -446,7 +446,8 @@ var protocols = enum[Protocol, dicerdv1.Protocol]{"protocol", map[Protocol]dicer
 
 // CreateOptions are how Instances.Create creates an instance.
 type CreateOptions struct {
-	// Start boots the instance once it is defined.
+	// Start boots the instance once it is defined, and Create returns once it
+	// has booted, as Instances.Start does.
 	Start bool
 
 	// PullPolicy is when the image is pulled. Empty means
@@ -651,7 +652,10 @@ func (s *Instances) Rename(ctx context.Context, name, newName string) (Instance,
 	return instanceOf(s.api.RenameInstance(ctx, &dicerdv1.RenameInstanceRequest{Name: name, NewName: newName}))
 }
 
-// Start boots a defined instance, or resumes one on standby.
+// Start boots a defined instance, or resumes one on standby. It returns once
+// the guest has booted, which is once its agent answers, or once its
+// workload has ended cleanly. A guest that does not boot fails with
+// ErrInvalidState, saying why and what its console last said.
 func (s *Instances) Start(ctx context.Context, name string) (Instance, error) {
 	return instanceOf(s.api.StartInstance(ctx, &dicerdv1.StartInstanceRequest{Name: name}))
 }

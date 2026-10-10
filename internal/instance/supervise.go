@@ -363,7 +363,9 @@ func (m *Manager) restart(ctx context.Context, instanceID string, pending *pendi
 		m.ended(ctx, instance, status, Exit{Failure: fmt.Errorf("restart: %w", err)})
 		return
 	}
-	if err := m.boot(ctx, instance, status.RestartCount); err != nil {
+	// The boot is watched, but not waited for: a guest that does not boot
+	// ends again, as another failure.
+	if _, err := m.boot(ctx, instance, status.RestartCount); err != nil {
 		m.ended(ctx, instance, status, Exit{Failure: fmt.Errorf("restart: %w", err)})
 	}
 }

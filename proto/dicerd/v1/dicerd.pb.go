@@ -2046,7 +2046,8 @@ type CreateInstanceRequest struct {
 	User string `protobuf:"bytes,34,opt,name=user,proto3" json:"user,omitempty"`
 	// When the image is pulled; see PullPolicy.
 	PullPolicy PullPolicy `protobuf:"varint,26,opt,name=pull_policy,json=pullPolicy,proto3,enum=dicerd.v1.PullPolicy" json:"pull_policy,omitempty"`
-	// Boots the instance immediately after defining it.
+	// Boots the instance immediately after defining it, and returns once it
+	// has booted, as StartInstance does.
 	Start bool           `protobuf:"varint,19,opt,name=start,proto3" json:"start,omitempty"`
 	Ports []*PortMapping `protobuf:"bytes,20,rep,name=ports,proto3" json:"ports,omitempty"`
 	// Deletes the instance once it stops, whether its guest ended on its own

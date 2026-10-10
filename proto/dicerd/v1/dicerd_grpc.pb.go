@@ -127,7 +127,12 @@ type DaemonServiceClient interface {
 	// RenameInstance changes a stopped instance's name. The instance keeps its
 	// ID, its disks and its address; only what people call it changes.
 	RenameInstance(ctx context.Context, in *RenameInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
-	// StartInstance boots a defined instance, or resumes one on standby.
+	// StartInstance boots a defined instance, or resumes one on standby. It
+	// returns once the guest has booted, which is once its agent answers, or
+	// once its workload has ended cleanly. A guest that does not boot, because
+	// its kernel panics or its agent does not answer within a minute, is ended
+	// as a failure for its restart policy to handle, and FAILED_PRECONDITION
+	// says why, with what its console last said.
 	StartInstance(ctx context.Context, in *StartInstanceRequest, opts ...grpc.CallOption) (*Instance, error)
 	// StopInstance shuts a running instance down, keeping its definition,
 	// overlay disk and address.
@@ -948,7 +953,12 @@ type DaemonServiceServer interface {
 	// RenameInstance changes a stopped instance's name. The instance keeps its
 	// ID, its disks and its address; only what people call it changes.
 	RenameInstance(context.Context, *RenameInstanceRequest) (*Instance, error)
-	// StartInstance boots a defined instance, or resumes one on standby.
+	// StartInstance boots a defined instance, or resumes one on standby. It
+	// returns once the guest has booted, which is once its agent answers, or
+	// once its workload has ended cleanly. A guest that does not boot, because
+	// its kernel panics or its agent does not answer within a minute, is ended
+	// as a failure for its restart policy to handle, and FAILED_PRECONDITION
+	// says why, with what its console last said.
 	StartInstance(context.Context, *StartInstanceRequest) (*Instance, error)
 	// StopInstance shuts a running instance down, keeping its definition,
 	// overlay disk and address.

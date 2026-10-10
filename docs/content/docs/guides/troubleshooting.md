@@ -181,6 +181,19 @@ $ dicer start web
 
 ## An instance never boots
 
+A start waits until the guest has booted, which is until its agent
+answers. A guest whose kernel panics, or whose agent does not answer within
+a minute, is ended as a failure, and the start says why, with what the
+console last said:
+
+```console
+$ dicer run -d --name web nginx:1.27
+Error: instance "web" did not boot: its kernel panicked: Kernel panic - not syncing: Attempted to kill init! exitcode=0x00000200; see 'dicer logs web'
+```
+
+The instance is then **Failed**, or **Restarting** if it has a
+[restart policy](../restarts), and `dicer inspect` shows the same reason.
+
 When `dicer logs` is empty, or stops during the kernel's boot messages, the
 guest did not get far. The hypervisor's own log says why:
 

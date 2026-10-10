@@ -26,8 +26,17 @@ import (
 	"github.com/konradasb/dicer/internal/virtiofs"
 )
 
-// start is Start, for an instance its caller has looked up.
-func (m *Manager) start(ctx context.Context, instance Spec) (err error) {
+// start is Start, for an instance its caller has looked up, except that it
+// does not wait for the guest to boot. A guest that does not boot ends as a
+// failure, for its restart policy to handle.
+func (m *Manager) start(ctx context.Context, instance Spec) error {
+	_, err := m.startWatched(ctx, instance)
+	return err
+}
+
+// startWatched is start, returning the watch of the guest's boot, or nil
+// for a guest resumed rather than booted.
+func (m *Manager) startWatched(ctx context.Context, instance Spec) (_ *bootWatch, err error) {
 	started := time.Now()
 	defer func() { m.observeOperation(operationStart, started, err) }()
 
@@ -35,55 +44,64 @@ func (m *Manager) start(ctx context.Context, instance Spec) (err error) {
 	lock.Lock()
 	defer lock.Unlock()
 	if err := m.rereadDefinition(&instance); err != nil {
-		return err
+		return nil, err
 	}
 	defer m.syncWaker(ctx, instance.ID)
 
 	status, err := m.statusOf(instance)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if status.State.IsActive() {
-		return errdefs.InvalidState("instance %q is already %s", instance.Name, status.State.Lowercase())
+		return nil, errdefs.InvalidState("instance %q is already %s", instance.Name, status.State.Lowercase())
 	}
 	m.cancelRestart(instance.ID)
 
 	if m.onStandby(instance) {
-		return m.resumeStandby(ctx, instance, 0)
+		return nil, m.resumeStandby(ctx, instance, 0)
 	}
 
 	if err := m.admit(instance, instance.Resources()); err != nil {
-		return err
+		return nil, err
 	}
 	m.setStoppedByUser(ctx, instance, false)
 
-	if err := m.boot(ctx, instance, 0); err != nil {
+	watch, err := m.boot(ctx, instance, 0)
+	if err != nil {
 		m.fail(instance.ID, err)
 		m.record(instance, event.ActionDied, "Failed to start instance: "+err.Error(), nil)
-		return err
+		return nil, err
 	}
-	return nil
+	return watch, nil
 }
 
 // Start boots a defined instance, or resumes one on standby where it was. It
 // cancels any pending restart, resets the restart count and clears
-// StoppedByUser.
+// StoppedByUser. It returns once the guest has booted, which is once its
+// agent answers, and an ErrInvalidState error, with what its console last
+// said, if it does not boot. A guest whose workload ends cleanly as it boots
+// has started.
 func (m *Manager) Start(ctx context.Context, nameOrID string) error {
 	instance, err := m.store.Instance(nameOrID)
 	if err != nil {
 		return err
 	}
-	return m.start(ctx, instance)
+	watch, err := m.startWatched(ctx, instance)
+	if err != nil {
+		return err
+	}
+	return watch.wait(ctx)
 }
 
-// boot starts the VMM of an instance admission has moved to Starting and
-// records it running. On failure everything acquired is undone and the caller
-// records the error. The caller must hold the instance lock.
-func (m *Manager) boot(ctx context.Context, instance Spec, restarts int) error {
+// boot starts the VMM of an instance admission has moved to Starting, records
+// it running, and returns the watch of its guest's boot. On failure
+// everything acquired is undone and the caller records the error. The caller
+// must hold the instance lock.
+func (m *Manager) boot(ctx context.Context, instance Spec, restarts int) (*bootWatch, error) {
 	booting := time.Now()
 	starter, err := m.resolveStarter(instance, instance.HypervisorVersion)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	hypervisorType := instance.EffectiveHypervisorType()
 	if hypervisor.IsDeprecated(m.starters[hypervisorType], instance.HypervisorVersion) {
@@ -92,48 +110,49 @@ func (m *Manager) boot(ctx context.Context, instance Spec, restarts int) error {
 	}
 	boot, err := m.resolveBoot(ctx, instance, starter)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Booted afresh, the disk moves on from anything frozen on standby.
 	if err := m.discardStandby(instance); err != nil {
-		return err
+		return nil, err
 	}
 
 	cu := cleanup.Make(func() {})
 	defer cu.Clean()
 
 	if err := m.prepareRuntimeDir(instance); err != nil {
-		return err
+		return nil, err
 	}
 	cu.Add(func() { _ = m.removeRuntimeDir(instance.ID) })
 
 	if err := ensureOverlayDisk(ctx, m.overlayDiskPath(instance), instance.DiskBytes); err != nil {
-		return fmt.Errorf("provision overlay disk: %w", err)
+		return nil, fmt.Errorf("provision overlay disk: %w", err)
 	}
 
 	setup, err := m.setupNetwork(ctx, instance)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cu.Add(setup.cleanup)
 
 	// virtiofsd listens before the VMM, which connects to it as it starts.
 	filesystems, stopShares, err := m.startShares(ctx, instance, boot.mounts.shares)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	cu.Add(stopShares)
 	boot.filesystems = filesystems
 
 	if err := m.writeGuestDisks(ctx, instance, starter, boot.image, boot.mounts.guest, setup, guest.Status{}); err != nil {
-		return err
+		return nil, err
 	}
 
+	console := newBootConsole(m.serialLogPath(instance))
 	spec := m.vmSpec(instance, boot, setup.nic)
 	vmm, _, err := starter.StartVM(ctx, m.hypervisorSocketPath(instance.ID), spec)
 	if err != nil {
-		return fmt.Errorf("start vm: %w", err)
+		return nil, fmt.Errorf("start vm: %w", err)
 	}
 	cu.Add(vmm.Terminate)
 
@@ -147,11 +166,12 @@ func (m *Manager) boot(ctx context.Context, instance Spec, restarts int) error {
 	}
 	status, err := m.recordRunning(instance, vmm, run)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	cu.Release()
 	m.supervise(ctx, instance, vmm, status)
+	watch := m.watchBoot(ctx, instance, vmm, status.VsockPath, console)
 
 	verb, why := "Started", ""
 	attrs := map[string]string{"ip": setup.nic.IP}
@@ -166,7 +186,7 @@ func (m *Manager) boot(ctx context.Context, instance Spec, restarts int) error {
 
 	m.logger.InfoContext(ctx, "started instance",
 		"instance", instance.Name, "pid", vmm.PID(), "ip", setup.nic.IP)
-	return nil
+	return watch, nil
 }
 
 // setStoppedByUser records whether a user last stopped an instance. It is
