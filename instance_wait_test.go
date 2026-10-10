@@ -21,7 +21,7 @@ type waitHost struct {
 	stop    chan struct{}
 
 	// req is the request the daemon was sent; waiting is closed once it
-	// has sent its headers.
+	// is waiting, before it sends its headers.
 	req     *dicerdv1.WaitInstanceRequest
 	waiting chan struct{}
 }
@@ -37,10 +37,11 @@ func (h *waitHost) daemon() *fakeDaemon {
 			if req.GetName() != "job" {
 				return status.Error(codes.NotFound, "no instance "+req.GetName())
 			}
+			// The client may return as soon as it has the headers.
+			close(h.waiting)
 			if err := stream.SendHeader(nil); err != nil {
 				return err
 			}
-			close(h.waiting)
 
 			select {
 			case <-h.stop:
