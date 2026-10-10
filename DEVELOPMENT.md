@@ -47,9 +47,11 @@ already runs the service, and restarts it:
 make deploy DEPLOY_HOST=root@my-kvm-host
 ```
 
-The end-to-end tests do the same under their own prefix, so they leave a
-real installation alone, then boot guests under both hypervisors and check
-what happened inside them:
+The end-to-end tests install `dicer` and `dicerd` under a prefix of their
+own, then boot guests under both hypervisors and check what happened inside
+them. They need a host of their own: a daemon of theirs beside another would
+share its default network's bridge and its firewall rules, so they refuse to
+run while another `dicerd` is running.
 
 ```console
 make test-e2e DICER_E2E_HOST=my-kvm-host
@@ -60,7 +62,8 @@ make test-e2e DICER_E2E_HOST=my-kvm-host
 | `DICER_E2E_HOST` | — | Required |
 | `DICER_E2E_SSH_USER` | `root` | |
 | `DICER_E2E_SSH_KEY` | your SSH configuration and agent | |
-| `DICER_E2E_KERNEL_URL` | the default kernel's release | Where the host downloads the kernel the tests import |
+| `DICER_E2E_SSH_PORT` | your SSH configuration, or 22 | |
+| `DICER_E2E_KERNEL_URL` | the default kernel's release, for the host's architecture | Where the host downloads the kernel the tests import. It must be for the host's architecture. |
 | `DICER_E2E_KEEP` | — | Leave the daemon running afterwards |
 
 They are behind the `e2e` build tag, so `go test ./...` and CI skip them. The

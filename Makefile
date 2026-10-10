@@ -209,6 +209,7 @@ test-e2e: ## Boot real VMs on a remote host (needs DICER_E2E_HOST; see DEVELOPME
 	DICER_E2E_HOST='$(DICER_E2E_HOST)' \
 	DICER_E2E_SSH_USER='$(DICER_E2E_SSH_USER)' \
 	DICER_E2E_SSH_KEY='$(DICER_E2E_SSH_KEY)' \
+	DICER_E2E_SSH_PORT='$(DICER_E2E_SSH_PORT)' \
 	DICER_E2E_KERNEL_URL='$(DICER_E2E_KERNEL_URL)' \
 	DICER_E2E_KEEP='$(DICER_E2E_KEEP)' \
 	go test -tags e2e -count 1 -v -timeout 30m ./test/e2e/...

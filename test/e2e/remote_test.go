@@ -22,6 +22,7 @@ type host struct {
 	address string
 	user    string
 	key     string
+	port    string
 }
 
 // sshArgs returns the options common to every ssh and scp invocation.
@@ -37,6 +38,10 @@ func (h *host) sshArgs() []string {
 	}
 	if h.key != "" {
 		args = append(args, "-i", h.key)
+	}
+	// As an option rather than -p, which scp spells -P.
+	if h.port != "" {
+		args = append(args, "-o", "Port="+h.port)
 	}
 
 	return args

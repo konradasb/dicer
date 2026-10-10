@@ -23,6 +23,7 @@ const (
 	hostEnv      = "DICER_E2E_HOST"
 	userEnv      = "DICER_E2E_SSH_USER"
 	keyEnv       = "DICER_E2E_SSH_KEY"
+	portEnv      = "DICER_E2E_SSH_PORT"
 	kernelURLEnv = "DICER_E2E_KERNEL_URL"
 	keepEnv      = "DICER_E2E_KEEP"
 )
@@ -31,11 +32,10 @@ const (
 const (
 	defaultUser = "root"
 
-	// defaultKernelURL is the release of the default kernel, which dicerd
+	// kernelRelease is the release of the default kernel, which dicerd
 	// embeds, so the tests boot what a new user would boot. Keep it in step
 	// with KERNEL_VERSION in the Makefile.
-	defaultKernelURL = "https://github.com/konradasb/dicer-kernel/releases/download/" +
-		"v6.18.53-1/vmlinux-x86_64"
+	kernelRelease = "https://github.com/konradasb/dicer-kernel/releases/download/v6.18.53-1/"
 
 	// testImage is small, boots quickly and has a shell, which is all the
 	// guest-side assertions need.
@@ -112,6 +112,22 @@ type environment struct {
 	host  *host
 	paths paths
 	keep  bool
+
+	// arch is the host's architecture, as GOARCH names it.
+	arch string
+}
+
+// kernel is the default kernel's file in its release, and the architecture
+// dicer names it by.
+type kernel struct {
+	asset, arch string
+}
+
+// kernels are the default kernel for each host architecture, by its GOARCH.
+// Keep them in step with KERNEL_ASSET_* in the Makefile.
+var kernels = map[string]kernel{
+	"amd64": {asset: "vmlinux-x86_64", arch: "x86_64"},
+	"arm64": {asset: "Image-arm64", arch: "aarch64"},
 }
 
 // env is the shared environment. Tests reach it directly: there is exactly
@@ -131,6 +147,7 @@ func TestMain(m *testing.M) {
 			address: address,
 			user:    envOr(userEnv, defaultUser),
 			key:     os.Getenv(keyEnv),
+			port:    os.Getenv(portEnv),
 		},
 		paths: newPaths(),
 		keep:  os.Getenv(keepEnv) != "",
@@ -171,6 +188,7 @@ func (e *environment) deploy(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	e.arch = hostArch
 
 	binaries, err := build(ctx, hostArch)
 	if err != nil {
@@ -180,6 +198,17 @@ func (e *environment) deploy(ctx context.Context) error {
 	// A previous run that was killed rather than torn down would still be
 	// serving on the socket, and its data directory would still hold state.
 	e.teardown(ctx)
+
+	// The tests' daemon would take another's default network, whose bridge
+	// is named after it, and share its firewall chains, breaking both.
+	running, err := e.host.runShell(ctx, "pgrep -x dicerd || true")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(running) != "" {
+		return errors.New("another dicerd is running on the host: " +
+			"the end-to-end tests need a host of their own, since their daemon would share its network and firewall")
+	}
 
 	if _, err := e.host.run(ctx, "mkdir", "-p", e.paths.root, e.paths.runDir); err != nil {
 		return fmt.Errorf("create %s: %w", e.paths.root, err)
@@ -346,14 +375,15 @@ func (e *environment) provision(ctx context.Context) error {
 
 	// A kernel is imported from a file, so it is downloaded on the host
 	// first, as a user would download it.
+	k := kernels[e.arch]
 	kernelFile := e.paths.root + "/vmlinux"
-	if _, err := e.host.run(ctx, "curl", "-fsSL", "-o", kernelFile, envOr(kernelURLEnv, defaultKernelURL)); err != nil {
+	if _, err := e.host.run(ctx, "curl", "-fsSL", "-o", kernelFile, envOr(kernelURLEnv, kernelRelease+k.asset)); err != nil {
 		return fmt.Errorf("download the kernel: %w", err)
 	}
 	if _, err := e.host.run(ctx,
 		e.paths.dicer, "--remote", e.remote(),
 		"kernel", "import", kernelName, kernelFile,
-		"--arch", "x86_64",
+		"--arch", k.arch,
 	); err != nil {
 		return fmt.Errorf("import the kernel: %w", err)
 	}

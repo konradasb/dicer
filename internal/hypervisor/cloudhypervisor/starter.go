@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"gvisor.dev/gvisor/pkg/cleanup"
 
@@ -61,7 +62,20 @@ func (s *Starter) Version() string { return s.version }
 // need: output on the serial port, which is the console, and a reboot on
 // panic.
 func (s *Starter) DefaultKernelArgs() string {
-	return "console=ttyS0 reboot=k panic=1"
+	return defaultKernelArgs(runtime.GOARCH)
+}
+
+// defaultKernelArgs returns DefaultKernelArgs for a guest of goarch, which
+// under KVM is always the host's. The serial port is a 16550 UART on x86_64,
+// which Linux calls ttyS0, and a PL011 on aarch64, which it calls ttyAMA0.
+// Naming a console that does not exist leaves the guest's init with no
+// standard streams, and dicer-init, as a Go program, then exits at once.
+func defaultKernelArgs(goarch string) string {
+	console := "ttyS0"
+	if goarch == "arm64" {
+		console = "ttyAMA0"
+	}
+	return "console=" + console + " reboot=k panic=1"
 }
 
 // PowerOffEndsVM is true: Cloud Hypervisor exits when its guest powers off
