@@ -74,6 +74,7 @@ const (
 	DaemonService_DeleteToken_FullMethodName            = "/dicerd.v1.DaemonService/DeleteToken"
 	DaemonService_GetHostInfo_FullMethodName            = "/dicerd.v1.DaemonService/GetHostInfo"
 	DaemonService_GetResources_FullMethodName           = "/dicerd.v1.DaemonService/GetResources"
+	DaemonService_CheckHost_FullMethodName              = "/dicerd.v1.DaemonService/CheckHost"
 	DaemonService_GetEvents_FullMethodName              = "/dicerd.v1.DaemonService/GetEvents"
 )
 
@@ -299,6 +300,14 @@ type DaemonServiceClient interface {
 	// how much is committed to them, and how full the data directory's disk
 	// is.
 	GetResources(ctx context.Context, in *GetResourcesRequest, opts ...grpc.CallOption) (*GetResourcesResponse, error)
+	// CheckHost checks that the host can run instances and reach them: KVM,
+	// IPv4 forwarding, the firewall, the tools the daemon runs, its uplink and
+	// its free disk. Those checks change nothing. With test_instance, it then
+	// boots a small test instance, has it run a command and reach the
+	// internet, and deletes it, which needs instances:write. It sends each
+	// result as it is found: the host's first, then the test instance's, then
+	// whether it reached the internet.
+	CheckHost(ctx context.Context, in *CheckHostRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[HostCheckResult], error)
 	// GetEvents streams what has happened to the resources on this host: the
 	// history kept, oldest first, in batches, then, with follow, each new
 	// event as it happens, none missed between the two. A follower that does
@@ -879,9 +888,28 @@ func (c *daemonServiceClient) GetResources(ctx context.Context, in *GetResources
 	return out, nil
 }
 
+func (c *daemonServiceClient) CheckHost(ctx context.Context, in *CheckHostRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[HostCheckResult], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[8], DaemonService_CheckHost_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[CheckHostRequest, HostCheckResult]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_CheckHostClient = grpc.ServerStreamingClient[HostCheckResult]
+
 func (c *daemonServiceClient) GetEvents(ctx context.Context, in *GetEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GetEventsResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[8], DaemonService_GetEvents_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &DaemonService_ServiceDesc.Streams[9], DaemonService_GetEvents_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1120,6 +1148,14 @@ type DaemonServiceServer interface {
 	// how much is committed to them, and how full the data directory's disk
 	// is.
 	GetResources(context.Context, *GetResourcesRequest) (*GetResourcesResponse, error)
+	// CheckHost checks that the host can run instances and reach them: KVM,
+	// IPv4 forwarding, the firewall, the tools the daemon runs, its uplink and
+	// its free disk. Those checks change nothing. With test_instance, it then
+	// boots a small test instance, has it run a command and reach the
+	// internet, and deletes it, which needs instances:write. It sends each
+	// result as it is found: the host's first, then the test instance's, then
+	// whether it reached the internet.
+	CheckHost(*CheckHostRequest, grpc.ServerStreamingServer[HostCheckResult]) error
 	// GetEvents streams what has happened to the resources on this host: the
 	// history kept, oldest first, in batches, then, with follow, each new
 	// event as it happens, none missed between the two. A follower that does
@@ -1287,6 +1323,9 @@ func (UnimplementedDaemonServiceServer) GetHostInfo(context.Context, *GetHostInf
 }
 func (UnimplementedDaemonServiceServer) GetResources(context.Context, *GetResourcesRequest) (*GetResourcesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetResources not implemented")
+}
+func (UnimplementedDaemonServiceServer) CheckHost(*CheckHostRequest, grpc.ServerStreamingServer[HostCheckResult]) error {
+	return status.Errorf(codes.Unimplemented, "method CheckHost not implemented")
 }
 func (UnimplementedDaemonServiceServer) GetEvents(*GetEventsRequest, grpc.ServerStreamingServer[GetEventsResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method GetEvents not implemented")
@@ -2161,6 +2200,17 @@ func _DaemonService_GetResources_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DaemonService_CheckHost_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(CheckHostRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonServiceServer).CheckHost(m, &grpc.GenericServerStream[CheckHostRequest, HostCheckResult]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type DaemonService_CheckHostServer = grpc.ServerStreamingServer[HostCheckResult]
+
 func _DaemonService_GetEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(GetEventsRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -2393,6 +2443,11 @@ var DaemonService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "ImportKernel",
 			Handler:       _DaemonService_ImportKernel_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "CheckHost",
+			Handler:       _DaemonService_CheckHost_Handler,
+			ServerStreams: true,
 		},
 		{
 			StreamName:    "GetEvents",

@@ -18,6 +18,7 @@ from what you see and works back to the cause.
 
 | To find out | Run |
 |---|---|
+| Whether the host can run instances at all, and what to fix if not | `dicer doctor` |
 | Why an instance is not running, and how it last ended | `dicer inspect NAME` |
 | What the guest printed while booting and running | `dicer logs NAME` |
 | Why a guest never booted at all | `dicer logs --source hypervisor NAME` |

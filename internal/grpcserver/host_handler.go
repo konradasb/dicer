@@ -4,11 +4,19 @@
 package grpcserver
 
 import (
+	"cmp"
 	"context"
+	"iter"
 	"net/netip"
 	"os"
+	"slices"
 
+	"google.golang.org/grpc"
+
+	"github.com/konradasb/dicer/internal/doctor"
+	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/hypervisor"
+	"github.com/konradasb/dicer/internal/token"
 	dicerdv1 "github.com/konradasb/dicer/proto/dicerd/v1"
 )
 
@@ -19,6 +27,77 @@ type hostHandler struct {
 	listenAddress string
 	hostAddresses func() ([]netip.Addr, error)
 	fingerprint   string
+	checkHost     func(ctx context.Context, opts doctor.Options) iter.Seq[doctor.Result]
+}
+
+// CheckHost checks that the host can run instances and reach them, and
+// boots a test instance if the request asks for one, sending each result as
+// it is found. Booting a test instance needs instances:write.
+func (h *hostHandler) CheckHost(
+	req *dicerdv1.CheckHostRequest, stream grpc.ServerStreamingServer[dicerdv1.HostCheckResult],
+) error {
+	hypervisorType, err := hypervisorTypes.fromProto(req.GetTestInstanceHypervisor())
+	if err != nil {
+		return err
+	}
+	opts := doctor.Options{
+		TestInstance:                  req.GetTestInstance(),
+		TestInstanceImage:             req.GetTestInstanceImage(),
+		TestInstanceHypervisor:        hypervisorType,
+		TestInstanceHypervisorVersion: req.GetTestInstanceHypervisorVersion(),
+		TestInstanceTimeout:           req.GetTestInstanceTimeout().AsDuration(),
+		KeepFailedTestInstance:        req.GetKeepFailedTestInstance(),
+	}
+	if err := opts.Validate(); err != nil {
+		return err
+	}
+	// A call over the socket has no token, and may.
+	if t, ok := tokenFrom(stream.Context()); ok && opts.TestInstance && !t.Allows(token.ScopeInstancesWrite) {
+		return errdefs.PermissionDenied("token %q lacks scope %s, which booting a test instance needs",
+			t.Name, token.ScopeInstancesWrite)
+	}
+	if opts.TestInstance {
+		if err := h.checkCarries(cmp.Or(hypervisorType, hypervisor.DefaultType), opts.TestInstanceHypervisorVersion); err != nil {
+			return err
+		}
+	}
+	if h.checkHost == nil {
+		return nil
+	}
+
+	for r := range h.checkHost(stream.Context(), opts) {
+		if err := stream.Send(hostCheckResultToProto(r)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkCarries returns an errdefs.ErrInvalidArgument error unless the
+// daemon carries a hypervisor's version. An empty version is the
+// hypervisor's default.
+func (h *hostHandler) checkCarries(hypervisorType hypervisor.Type, version string) error {
+	starters := h.starters[hypervisorType]
+	if len(starters) == 0 {
+		return errdefs.InvalidArgument("hypervisor %s is not on this host: name one 'dicer info' lists", hypervisorType)
+	}
+	if version != "" && !slices.ContainsFunc(starters, func(s hypervisor.Starter) bool { return s.Version() == version }) {
+		return errdefs.InvalidArgument("hypervisor %s %s is not on this host: name a version 'dicer info' lists",
+			hypervisorType, version)
+	}
+	return nil
+}
+
+// hostCheckResultToProto converts what one check of the host found.
+func hostCheckResultToProto(r doctor.Result) *dicerdv1.HostCheckResult {
+	return &dicerdv1.HostCheckResult{
+		Group:   hostCheckGroups.toProto(r.Group),
+		Name:    r.Name,
+		Status:  hostCheckStatuses.toProto(r.Status),
+		Detail:  r.Detail,
+		Hint:    r.Hint,
+		Console: r.Console,
+	}
 }
 
 // GetHostInfo reports the daemon's version, hostname, hypervisors and API

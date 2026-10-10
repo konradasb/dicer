@@ -101,10 +101,22 @@ was, and whose message says it for a person:
 | `DeleteToken` | [`DeleteTokenRequest`](#deletetokenrequest) | `google.protobuf.Empty` | DeleteToken removes a token. A client using it is refused from its next call. |
 | `GetHostInfo` | [`GetHostInfoRequest`](#gethostinforequest) | [`GetHostInfoResponse`](#gethostinforesponse) | GetHostInfo reports what the daemon is: its version, the hypervisors it carries, and how it is reached. |
 | `GetResources` | [`GetResourcesRequest`](#getresourcesrequest) | [`GetResourcesResponse`](#getresourcesresponse) | GetResources reports how much CPU and memory instances may be given, how much is committed to them, and how full the data directory's disk is. |
+| `CheckHost` | [`CheckHostRequest`](#checkhostrequest) | stream [`HostCheckResult`](#hostcheckresult) | CheckHost checks that the host can run instances and reach them: KVM, IPv4 forwarding, the firewall, the tools the daemon runs, its uplink and its free disk. Those checks change nothing. With test_instance, it then boots a small test instance, has it run a command and reach the internet, and deletes it, which needs instances:write. It sends each result as it is found: the host's first, then the test instance's, then whether it reached the internet. |
 | `GetEvents` | [`GetEventsRequest`](#geteventsrequest) | stream [`GetEventsResponse`](#geteventsresponse) | GetEvents streams what has happened to the resources on this host: the history kept, oldest first, in batches, then, with follow, each new event as it happens, none missed between the two. A follower that does not keep up is disconnected with RESOURCE_EXHAUSTED rather than slowing the host. |
 
 
 ## Messages
+
+### CheckHostRequest
+
+| Field | Type | Description |
+|---|---|---|
+| `test_instance` | `bool` | Boot a test instance after checking the host. It creates and deletes an instance, and pulls its image if the host does not have it. |
+| `test_instance_image` | `string` | The test instance's image: one with sh and wget, such as busybox. Empty is docker.io/library/busybox:1.37. |
+| `test_instance_hypervisor` | [`HypervisorType`](#hypervisortype) | The hypervisor the test instance boots on. Unset is cloud-hypervisor. |
+| `test_instance_hypervisor_version` | `string` | The version of the hypervisor the test instance boots on. Empty is the hypervisor's default version. |
+| `test_instance_timeout` | `google.protobuf.Duration` | How long a test instance may take to run its command. Unset is 2 minutes. |
+| `keep_failed_test_instance` | `bool` | Keep a test instance that failed, to look into, rather than delete it. |
 
 ### CopyFromInstanceRequest
 
@@ -529,6 +541,19 @@ HealthCheckExec runs a command as the workload's user.
 | Field | Type | Description |
 |---|---|---|
 | `port` | `uint32` |  |
+
+### HostCheckResult
+
+HostCheckResult is what one check of the host found.
+
+| Field | Type | Description |
+|---|---|---|
+| `group` | [`HostCheckGroup`](#hostcheckgroup) | Which part of the checks the result belongs to. |
+| `name` | `string` | What was checked. For the host it is kvm, ip_forwarding, firewall, tools, uplink or disk. For the test instance it is its hypervisor's type, or internet. |
+| `status` | [`HostCheckStatus`](#hostcheckstatus) | What the check found. |
+| `detail` | `string` | What was found, in a line, for a person. |
+| `hint` | `string` | What to do about it. Empty for a check that passed. |
+| `console` | repeated `string` | A failed test instance's last console lines, which say why it failed. |
 
 ### HypervisorInfo
 
@@ -1155,6 +1180,27 @@ HealthStatus is what an instance's health check has found.
 | `HEALTH_STATUS_STARTING` | 1 | No verdict yet: the workload is in its start period, or has not been probed. |
 | `HEALTH_STATUS_HEALTHY` | 2 | The last probe passed. |
 | `HEALTH_STATUS_UNHEALTHY` | 3 | The check's retries have failed in a row. |
+
+### HostCheckGroup
+
+HostCheckGroup is which part of CheckHost's checks a result belongs to.
+
+| Value | Number | Description |
+|---|---|---|
+| `HOST_CHECK_GROUP_UNSPECIFIED` | 0 |  |
+| `HOST_CHECK_GROUP_HOST` | 1 | The checks of the host itself. |
+| `HOST_CHECK_GROUP_INSTANCES` | 2 | What the test instance showed, and whether it reached the internet. |
+
+### HostCheckStatus
+
+HostCheckStatus is what a HostCheckResult found.
+
+| Value | Number | Description |
+|---|---|---|
+| `HOST_CHECK_STATUS_UNSPECIFIED` | 0 |  |
+| `HOST_CHECK_STATUS_OK` | 1 | All is well. |
+| `HOST_CHECK_STATUS_WARNING` | 2 | Something may go wrong, such as little free disk. |
+| `HOST_CHECK_STATUS_FAILED` | 3 | Instances cannot boot, or cannot be reached, until it is fixed. |
 
 ### HypervisorType
 

@@ -72,6 +72,7 @@ var fromProtoConversions = []fromProtoConversion{
 	conversion(issuedTokenFromProto),
 	conversion(hostInfoFromProto),
 	conversion(hypervisorInfoFromProto),
+	conversion(hostCheckResultFromProto),
 	conversion(resourcesFromProto),
 	conversion(resourceCapacityFromProto),
 	conversion(diskUsageFromProto),
@@ -154,6 +155,7 @@ var requestBuilders = []requestBuilder{
 	builder(func(spec NetworkSpec) (*dicerdv1.CreateNetworkRequest, error) { return createNetworkRequest(spec), nil }),
 	builder(importKernelStart),
 	builder(getEventsRequest),
+	builder(checkHostRequest),
 }
 
 // unsentFields are the fields of a client input that no request carries:

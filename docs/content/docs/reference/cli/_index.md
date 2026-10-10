@@ -63,6 +63,7 @@ The common commands are shortcuts for the management commands most used: `dicer 
 
 | Command | Description |
 |---|---|
+| [`dicer doctor`]({{< relref "/docs/reference/cli/dicer_doctor" >}}) | Check that the host can run instances, and boot a test instance. |
 | [`dicer events`]({{< relref "/docs/reference/cli/dicer_events" >}}) | Show what has happened to the instances, snapshots, images, networks, volumes and kernels on the host. |
 | [`dicer info`]({{< relref "/docs/reference/cli/dicer_info" >}}) | Show the daemon, and how much of its host is in use. |
 | [`dicer version`]({{< relref "/docs/reference/cli/dicer_version" >}}) | Show the client's version, and the daemon's. |

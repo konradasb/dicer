@@ -4,6 +4,7 @@
 package grpcserver
 
 import (
+	"github.com/konradasb/dicer/internal/doctor"
 	"github.com/konradasb/dicer/internal/errdefs"
 	"github.com/konradasb/dicer/internal/event"
 	"github.com/konradasb/dicer/internal/guest"
@@ -155,4 +156,15 @@ var pullStages = enum[image.PullStage, dicerdv1.PullStage]{"pull stage", map[ima
 	image.PullStageDownloading: dicerdv1.PullStage_PULL_STAGE_DOWNLOADING,
 	image.PullStageUnpacking:   dicerdv1.PullStage_PULL_STAGE_UNPACKING,
 	image.PullStageConverting:  dicerdv1.PullStage_PULL_STAGE_CONVERTING,
+}}
+
+var hostCheckStatuses = enum[doctor.Status, dicerdv1.HostCheckStatus]{"host check status", map[doctor.Status]dicerdv1.HostCheckStatus{
+	doctor.StatusOK:      dicerdv1.HostCheckStatus_HOST_CHECK_STATUS_OK,
+	doctor.StatusWarning: dicerdv1.HostCheckStatus_HOST_CHECK_STATUS_WARNING,
+	doctor.StatusFailed:  dicerdv1.HostCheckStatus_HOST_CHECK_STATUS_FAILED,
+}}
+
+var hostCheckGroups = enum[doctor.Group, dicerdv1.HostCheckGroup]{"host check group", map[doctor.Group]dicerdv1.HostCheckGroup{
+	doctor.GroupHost:      dicerdv1.HostCheckGroup_HOST_CHECK_GROUP_HOST,
+	doctor.GroupInstances: dicerdv1.HostCheckGroup_HOST_CHECK_GROUP_INSTANCES,
 }}

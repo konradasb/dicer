@@ -964,6 +964,114 @@ func (PullStage) EnumDescriptor() ([]byte, []int) {
 	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{14}
 }
 
+// HostCheckGroup is which part of CheckHost's checks a result belongs to.
+type HostCheckGroup int32
+
+const (
+	HostCheckGroup_HOST_CHECK_GROUP_UNSPECIFIED HostCheckGroup = 0
+	// The checks of the host itself.
+	HostCheckGroup_HOST_CHECK_GROUP_HOST HostCheckGroup = 1
+	// What the test instance showed, and whether it reached the internet.
+	HostCheckGroup_HOST_CHECK_GROUP_INSTANCES HostCheckGroup = 2
+)
+
+// Enum value maps for HostCheckGroup.
+var (
+	HostCheckGroup_name = map[int32]string{
+		0: "HOST_CHECK_GROUP_UNSPECIFIED",
+		1: "HOST_CHECK_GROUP_HOST",
+		2: "HOST_CHECK_GROUP_INSTANCES",
+	}
+	HostCheckGroup_value = map[string]int32{
+		"HOST_CHECK_GROUP_UNSPECIFIED": 0,
+		"HOST_CHECK_GROUP_HOST":        1,
+		"HOST_CHECK_GROUP_INSTANCES":   2,
+	}
+)
+
+func (x HostCheckGroup) Enum() *HostCheckGroup {
+	p := new(HostCheckGroup)
+	*p = x
+	return p
+}
+
+func (x HostCheckGroup) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HostCheckGroup) Descriptor() protoreflect.EnumDescriptor {
+	return file_dicerd_v1_dicerd_proto_enumTypes[15].Descriptor()
+}
+
+func (HostCheckGroup) Type() protoreflect.EnumType {
+	return &file_dicerd_v1_dicerd_proto_enumTypes[15]
+}
+
+func (x HostCheckGroup) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HostCheckGroup.Descriptor instead.
+func (HostCheckGroup) EnumDescriptor() ([]byte, []int) {
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{15}
+}
+
+// HostCheckStatus is what a HostCheckResult found.
+type HostCheckStatus int32
+
+const (
+	HostCheckStatus_HOST_CHECK_STATUS_UNSPECIFIED HostCheckStatus = 0
+	// All is well.
+	HostCheckStatus_HOST_CHECK_STATUS_OK HostCheckStatus = 1
+	// Something may go wrong, such as little free disk.
+	HostCheckStatus_HOST_CHECK_STATUS_WARNING HostCheckStatus = 2
+	// Instances cannot boot, or cannot be reached, until it is fixed.
+	HostCheckStatus_HOST_CHECK_STATUS_FAILED HostCheckStatus = 3
+)
+
+// Enum value maps for HostCheckStatus.
+var (
+	HostCheckStatus_name = map[int32]string{
+		0: "HOST_CHECK_STATUS_UNSPECIFIED",
+		1: "HOST_CHECK_STATUS_OK",
+		2: "HOST_CHECK_STATUS_WARNING",
+		3: "HOST_CHECK_STATUS_FAILED",
+	}
+	HostCheckStatus_value = map[string]int32{
+		"HOST_CHECK_STATUS_UNSPECIFIED": 0,
+		"HOST_CHECK_STATUS_OK":          1,
+		"HOST_CHECK_STATUS_WARNING":     2,
+		"HOST_CHECK_STATUS_FAILED":      3,
+	}
+)
+
+func (x HostCheckStatus) Enum() *HostCheckStatus {
+	p := new(HostCheckStatus)
+	*p = x
+	return p
+}
+
+func (x HostCheckStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HostCheckStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_dicerd_v1_dicerd_proto_enumTypes[16].Descriptor()
+}
+
+func (HostCheckStatus) Type() protoreflect.EnumType {
+	return &file_dicerd_v1_dicerd_proto_enumTypes[16]
+}
+
+func (x HostCheckStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HostCheckStatus.Descriptor instead.
+func (HostCheckStatus) EnumDescriptor() ([]byte, []int) {
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{16}
+}
+
 // Instance combines an instance's definition with its observed runtime state.
 // Fields from state onwards are output only and are empty when the instance
 // is not running.
@@ -7366,6 +7474,192 @@ func (x *GetHostInfoResponse) GetToken() string {
 	return ""
 }
 
+type CheckHostRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Boot a test instance after checking the host. It creates and deletes an
+	// instance, and pulls its image if the host does not have it.
+	TestInstance bool `protobuf:"varint,1,opt,name=test_instance,json=testInstance,proto3" json:"test_instance,omitempty"`
+	// The test instance's image: one with sh and wget, such as busybox. Empty
+	// is docker.io/library/busybox:1.37.
+	TestInstanceImage string `protobuf:"bytes,2,opt,name=test_instance_image,json=testInstanceImage,proto3" json:"test_instance_image,omitempty"`
+	// The hypervisor the test instance boots on. Unset is cloud-hypervisor.
+	TestInstanceHypervisor HypervisorType `protobuf:"varint,3,opt,name=test_instance_hypervisor,json=testInstanceHypervisor,proto3,enum=dicerd.v1.HypervisorType" json:"test_instance_hypervisor,omitempty"`
+	// The version of the hypervisor the test instance boots on. Empty is the
+	// hypervisor's default version.
+	TestInstanceHypervisorVersion string `protobuf:"bytes,4,opt,name=test_instance_hypervisor_version,json=testInstanceHypervisorVersion,proto3" json:"test_instance_hypervisor_version,omitempty"`
+	// How long a test instance may take to run its command. Unset is 2 minutes.
+	TestInstanceTimeout *durationpb.Duration `protobuf:"bytes,5,opt,name=test_instance_timeout,json=testInstanceTimeout,proto3" json:"test_instance_timeout,omitempty"`
+	// Keep a test instance that failed, to look into, rather than delete it.
+	KeepFailedTestInstance bool `protobuf:"varint,6,opt,name=keep_failed_test_instance,json=keepFailedTestInstance,proto3" json:"keep_failed_test_instance,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *CheckHostRequest) Reset() {
+	*x = CheckHostRequest{}
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[90]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckHostRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckHostRequest) ProtoMessage() {}
+
+func (x *CheckHostRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[90]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckHostRequest.ProtoReflect.Descriptor instead.
+func (*CheckHostRequest) Descriptor() ([]byte, []int) {
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{90}
+}
+
+func (x *CheckHostRequest) GetTestInstance() bool {
+	if x != nil {
+		return x.TestInstance
+	}
+	return false
+}
+
+func (x *CheckHostRequest) GetTestInstanceImage() string {
+	if x != nil {
+		return x.TestInstanceImage
+	}
+	return ""
+}
+
+func (x *CheckHostRequest) GetTestInstanceHypervisor() HypervisorType {
+	if x != nil {
+		return x.TestInstanceHypervisor
+	}
+	return HypervisorType_HYPERVISOR_TYPE_UNSPECIFIED
+}
+
+func (x *CheckHostRequest) GetTestInstanceHypervisorVersion() string {
+	if x != nil {
+		return x.TestInstanceHypervisorVersion
+	}
+	return ""
+}
+
+func (x *CheckHostRequest) GetTestInstanceTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.TestInstanceTimeout
+	}
+	return nil
+}
+
+func (x *CheckHostRequest) GetKeepFailedTestInstance() bool {
+	if x != nil {
+		return x.KeepFailedTestInstance
+	}
+	return false
+}
+
+// HostCheckResult is what one check of the host found.
+type HostCheckResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Which part of the checks the result belongs to.
+	Group HostCheckGroup `protobuf:"varint,1,opt,name=group,proto3,enum=dicerd.v1.HostCheckGroup" json:"group,omitempty"`
+	// What was checked. For the host it is kvm, ip_forwarding, firewall,
+	// tools, uplink or disk. For the test instance it is its hypervisor's
+	// type, or internet.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// What the check found.
+	Status HostCheckStatus `protobuf:"varint,3,opt,name=status,proto3,enum=dicerd.v1.HostCheckStatus" json:"status,omitempty"`
+	// What was found, in a line, for a person.
+	Detail string `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`
+	// What to do about it. Empty for a check that passed.
+	Hint string `protobuf:"bytes,5,opt,name=hint,proto3" json:"hint,omitempty"`
+	// A failed test instance's last console lines, which say why it failed.
+	Console       []string `protobuf:"bytes,6,rep,name=console,proto3" json:"console,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HostCheckResult) Reset() {
+	*x = HostCheckResult{}
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[91]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HostCheckResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HostCheckResult) ProtoMessage() {}
+
+func (x *HostCheckResult) ProtoReflect() protoreflect.Message {
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[91]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HostCheckResult.ProtoReflect.Descriptor instead.
+func (*HostCheckResult) Descriptor() ([]byte, []int) {
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{91}
+}
+
+func (x *HostCheckResult) GetGroup() HostCheckGroup {
+	if x != nil {
+		return x.Group
+	}
+	return HostCheckGroup_HOST_CHECK_GROUP_UNSPECIFIED
+}
+
+func (x *HostCheckResult) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *HostCheckResult) GetStatus() HostCheckStatus {
+	if x != nil {
+		return x.Status
+	}
+	return HostCheckStatus_HOST_CHECK_STATUS_UNSPECIFIED
+}
+
+func (x *HostCheckResult) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *HostCheckResult) GetHint() string {
+	if x != nil {
+		return x.Hint
+	}
+	return ""
+}
+
+func (x *HostCheckResult) GetConsole() []string {
+	if x != nil {
+		return x.Console
+	}
+	return nil
+}
+
 type GetResourcesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -7374,7 +7668,7 @@ type GetResourcesRequest struct {
 
 func (x *GetResourcesRequest) Reset() {
 	*x = GetResourcesRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[90]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7386,7 +7680,7 @@ func (x *GetResourcesRequest) String() string {
 func (*GetResourcesRequest) ProtoMessage() {}
 
 func (x *GetResourcesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[90]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7399,7 +7693,7 @@ func (x *GetResourcesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResourcesRequest.ProtoReflect.Descriptor instead.
 func (*GetResourcesRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{90}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{92}
 }
 
 type GetResourcesResponse struct {
@@ -7419,7 +7713,7 @@ type GetResourcesResponse struct {
 
 func (x *GetResourcesResponse) Reset() {
 	*x = GetResourcesResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[91]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7431,7 +7725,7 @@ func (x *GetResourcesResponse) String() string {
 func (*GetResourcesResponse) ProtoMessage() {}
 
 func (x *GetResourcesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[91]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7444,7 +7738,7 @@ func (x *GetResourcesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResourcesResponse.ProtoReflect.Descriptor instead.
 func (*GetResourcesResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{91}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *GetResourcesResponse) GetCpu() *ResourceCapacity {
@@ -7498,7 +7792,7 @@ type ResourceCapacity struct {
 
 func (x *ResourceCapacity) Reset() {
 	*x = ResourceCapacity{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[92]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7510,7 +7804,7 @@ func (x *ResourceCapacity) String() string {
 func (*ResourceCapacity) ProtoMessage() {}
 
 func (x *ResourceCapacity) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[92]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7523,7 +7817,7 @@ func (x *ResourceCapacity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceCapacity.ProtoReflect.Descriptor instead.
 func (*ResourceCapacity) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{92}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *ResourceCapacity) GetHost() int64 {
@@ -7587,7 +7881,7 @@ type DiskUsage struct {
 
 func (x *DiskUsage) Reset() {
 	*x = DiskUsage{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[93]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7599,7 +7893,7 @@ func (x *DiskUsage) String() string {
 func (*DiskUsage) ProtoMessage() {}
 
 func (x *DiskUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[93]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7612,7 +7906,7 @@ func (x *DiskUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiskUsage.ProtoReflect.Descriptor instead.
 func (*DiskUsage) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{93}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *DiskUsage) GetPath() string {
@@ -7656,7 +7950,7 @@ type InstanceResources struct {
 
 func (x *InstanceResources) Reset() {
 	*x = InstanceResources{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[94]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7668,7 +7962,7 @@ func (x *InstanceResources) String() string {
 func (*InstanceResources) ProtoMessage() {}
 
 func (x *InstanceResources) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[94]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7681,7 +7975,7 @@ func (x *InstanceResources) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstanceResources.ProtoReflect.Descriptor instead.
 func (*InstanceResources) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{94}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *InstanceResources) GetName() string {
@@ -7730,7 +8024,7 @@ type HypervisorInfo struct {
 
 func (x *HypervisorInfo) Reset() {
 	*x = HypervisorInfo{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[95]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7742,7 +8036,7 @@ func (x *HypervisorInfo) String() string {
 func (*HypervisorInfo) ProtoMessage() {}
 
 func (x *HypervisorInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[95]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7755,7 +8049,7 @@ func (x *HypervisorInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HypervisorInfo.ProtoReflect.Descriptor instead.
 func (*HypervisorInfo) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{95}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *HypervisorInfo) GetType() HypervisorType {
@@ -7807,7 +8101,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[96]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7819,7 +8113,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[96]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7832,7 +8126,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{96}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *Event) GetTime() *timestamppb.Timestamp {
@@ -7905,7 +8199,7 @@ type GetEventsRequest struct {
 
 func (x *GetEventsRequest) Reset() {
 	*x = GetEventsRequest{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[97]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7917,7 +8211,7 @@ func (x *GetEventsRequest) String() string {
 func (*GetEventsRequest) ProtoMessage() {}
 
 func (x *GetEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[97]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7930,7 +8224,7 @@ func (x *GetEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventsRequest.ProtoReflect.Descriptor instead.
 func (*GetEventsRequest) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{97}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *GetEventsRequest) GetKind() EventKind {
@@ -7989,7 +8283,7 @@ type GetEventsResponse struct {
 
 func (x *GetEventsResponse) Reset() {
 	*x = GetEventsResponse{}
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[98]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8001,7 +8295,7 @@ func (x *GetEventsResponse) String() string {
 func (*GetEventsResponse) ProtoMessage() {}
 
 func (x *GetEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dicerd_v1_dicerd_proto_msgTypes[98]
+	mi := &file_dicerd_v1_dicerd_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8014,7 +8308,7 @@ func (x *GetEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventsResponse.ProtoReflect.Descriptor instead.
 func (*GetEventsResponse) Descriptor() ([]byte, []int) {
-	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{98}
+	return file_dicerd_v1_dicerd_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *GetEventsResponse) GetEvents() []*Event {
@@ -8562,7 +8856,21 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\vhypervisors\x18\x03 \x03(\v2\x19.dicerd.v1.HypervisorInfoR\vhypervisors\x12-\n" +
 	"\x12listener_addresses\x18\x05 \x03(\tR\x11listenerAddresses\x12 \n" +
 	"\vfingerprint\x18\b \x01(\tR\vfingerprint\x12\x14\n" +
-	"\x05token\x18\t \x01(\tR\x05tokenJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x0edefault_kernelR\x0fdefault_network\"\x15\n" +
+	"\x05token\x18\t \x01(\tR\x05tokenJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x0edefault_kernelR\x0fdefault_network\"\x8f\x03\n" +
+	"\x10CheckHostRequest\x12#\n" +
+	"\rtest_instance\x18\x01 \x01(\bR\ftestInstance\x12.\n" +
+	"\x13test_instance_image\x18\x02 \x01(\tR\x11testInstanceImage\x12S\n" +
+	"\x18test_instance_hypervisor\x18\x03 \x01(\x0e2\x19.dicerd.v1.HypervisorTypeR\x16testInstanceHypervisor\x12G\n" +
+	" test_instance_hypervisor_version\x18\x04 \x01(\tR\x1dtestInstanceHypervisorVersion\x12M\n" +
+	"\x15test_instance_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x13testInstanceTimeout\x129\n" +
+	"\x19keep_failed_test_instance\x18\x06 \x01(\bR\x16keepFailedTestInstance\"\xd0\x01\n" +
+	"\x0fHostCheckResult\x12/\n" +
+	"\x05group\x18\x01 \x01(\x0e2\x19.dicerd.v1.HostCheckGroupR\x05group\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x122\n" +
+	"\x06status\x18\x03 \x01(\x0e2\x1a.dicerd.v1.HostCheckStatusR\x06status\x12\x16\n" +
+	"\x06detail\x18\x04 \x01(\tR\x06detail\x12\x12\n" +
+	"\x04hint\x18\x05 \x01(\tR\x04hint\x12\x18\n" +
+	"\aconsole\x18\x06 \x03(\tR\aconsole\"\x15\n" +
 	"\x13GetResourcesRequest\"\xe0\x01\n" +
 	"\x14GetResourcesResponse\x12-\n" +
 	"\x03cpu\x18\x01 \x01(\v2\x1b.dicerd.v1.ResourceCapacityR\x03cpu\x123\n" +
@@ -8716,7 +9024,16 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\x14PULL_STAGE_RESOLVING\x10\x01\x12\x1a\n" +
 	"\x16PULL_STAGE_DOWNLOADING\x10\x02\x12\x18\n" +
 	"\x14PULL_STAGE_UNPACKING\x10\x03\x12\x19\n" +
-	"\x15PULL_STAGE_CONVERTING\x10\x042\xd4\x1e\n" +
+	"\x15PULL_STAGE_CONVERTING\x10\x04*m\n" +
+	"\x0eHostCheckGroup\x12 \n" +
+	"\x1cHOST_CHECK_GROUP_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15HOST_CHECK_GROUP_HOST\x10\x01\x12\x1e\n" +
+	"\x1aHOST_CHECK_GROUP_INSTANCES\x10\x02*\x8b\x01\n" +
+	"\x0fHostCheckStatus\x12!\n" +
+	"\x1dHOST_CHECK_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14HOST_CHECK_STATUS_OK\x10\x01\x12\x1d\n" +
+	"\x19HOST_CHECK_STATUS_WARNING\x10\x02\x12\x1c\n" +
+	"\x18HOST_CHECK_STATUS_FAILED\x10\x032\x9c\x1f\n" +
 	"\rDaemonService\x12G\n" +
 	"\x0eCreateInstance\x12 .dicerd.v1.CreateInstanceRequest\x1a\x13.dicerd.v1.Instance\x12G\n" +
 	"\x0eUpdateInstance\x12 .dicerd.v1.UpdateInstanceRequest\x1a\x13.dicerd.v1.Instance\x12G\n" +
@@ -8771,7 +9088,8 @@ const file_dicerd_v1_dicerd_proto_rawDesc = "" +
 	"\vRotateToken\x12\x1d.dicerd.v1.RotateTokenRequest\x1a\x16.dicerd.v1.IssuedToken\x12D\n" +
 	"\vDeleteToken\x12\x1d.dicerd.v1.DeleteTokenRequest\x1a\x16.google.protobuf.Empty\x12L\n" +
 	"\vGetHostInfo\x12\x1d.dicerd.v1.GetHostInfoRequest\x1a\x1e.dicerd.v1.GetHostInfoResponse\x12O\n" +
-	"\fGetResources\x12\x1e.dicerd.v1.GetResourcesRequest\x1a\x1f.dicerd.v1.GetResourcesResponse\x12H\n" +
+	"\fGetResources\x12\x1e.dicerd.v1.GetResourcesRequest\x1a\x1f.dicerd.v1.GetResourcesResponse\x12F\n" +
+	"\tCheckHost\x12\x1b.dicerd.v1.CheckHostRequest\x1a\x1a.dicerd.v1.HostCheckResult0\x01\x12H\n" +
 	"\tGetEvents\x12\x1b.dicerd.v1.GetEventsRequest\x1a\x1c.dicerd.v1.GetEventsResponse0\x01B5Z3github.com/konradasb/dicer/proto/dicerd/v1;dicerdv1b\x06proto3"
 
 var (
@@ -8786,8 +9104,8 @@ func file_dicerd_v1_dicerd_proto_rawDescGZIP() []byte {
 	return file_dicerd_v1_dicerd_proto_rawDescData
 }
 
-var file_dicerd_v1_dicerd_proto_enumTypes = make([]protoimpl.EnumInfo, 15)
-var file_dicerd_v1_dicerd_proto_msgTypes = make([]protoimpl.MessageInfo, 107)
+var file_dicerd_v1_dicerd_proto_enumTypes = make([]protoimpl.EnumInfo, 17)
+var file_dicerd_v1_dicerd_proto_msgTypes = make([]protoimpl.MessageInfo, 109)
 var file_dicerd_v1_dicerd_proto_goTypes = []any{
 	(HypervisorType)(0),                    // 0: dicerd.v1.HypervisorType
 	(InstanceState)(0),                     // 1: dicerd.v1.InstanceState
@@ -8804,334 +9122,344 @@ var file_dicerd_v1_dicerd_proto_goTypes = []any{
 	(LogSource)(0),                         // 12: dicerd.v1.LogSource
 	(SnapshotKind)(0),                      // 13: dicerd.v1.SnapshotKind
 	(PullStage)(0),                         // 14: dicerd.v1.PullStage
-	(*Instance)(nil),                       // 15: dicerd.v1.Instance
-	(*HealthCheck)(nil),                    // 16: dicerd.v1.HealthCheck
-	(*HealthCheckExec)(nil),                // 17: dicerd.v1.HealthCheckExec
-	(*HealthCheckHTTP)(nil),                // 18: dicerd.v1.HealthCheckHTTP
-	(*HealthCheckTCP)(nil),                 // 19: dicerd.v1.HealthCheckTCP
-	(*Health)(nil),                         // 20: dicerd.v1.Health
-	(*RestartPolicy)(nil),                  // 21: dicerd.v1.RestartPolicy
-	(*Mount)(nil),                          // 22: dicerd.v1.Mount
-	(*PortMapping)(nil),                    // 23: dicerd.v1.PortMapping
-	(*CreateInstanceRequest)(nil),          // 24: dicerd.v1.CreateInstanceRequest
-	(*UpdateInstanceRequest)(nil),          // 25: dicerd.v1.UpdateInstanceRequest
-	(*StartInstanceRequest)(nil),           // 26: dicerd.v1.StartInstanceRequest
-	(*ResizeInstanceRequest)(nil),          // 27: dicerd.v1.ResizeInstanceRequest
-	(*StopInstanceRequest)(nil),            // 28: dicerd.v1.StopInstanceRequest
-	(*PauseInstanceRequest)(nil),           // 29: dicerd.v1.PauseInstanceRequest
-	(*ResumeInstanceRequest)(nil),          // 30: dicerd.v1.ResumeInstanceRequest
-	(*StandbyInstanceRequest)(nil),         // 31: dicerd.v1.StandbyInstanceRequest
-	(*ForkInstanceRequest)(nil),            // 32: dicerd.v1.ForkInstanceRequest
-	(*RenameInstanceRequest)(nil),          // 33: dicerd.v1.RenameInstanceRequest
-	(*DeleteInstanceRequest)(nil),          // 34: dicerd.v1.DeleteInstanceRequest
-	(*GetInstanceRequest)(nil),             // 35: dicerd.v1.GetInstanceRequest
-	(*WaitInstanceRequest)(nil),            // 36: dicerd.v1.WaitInstanceRequest
-	(*WaitInstanceResponse)(nil),           // 37: dicerd.v1.WaitInstanceResponse
-	(*ListInstancesRequest)(nil),           // 38: dicerd.v1.ListInstancesRequest
-	(*ListInstancesResponse)(nil),          // 39: dicerd.v1.ListInstancesResponse
-	(*ExecInstanceStart)(nil),              // 40: dicerd.v1.ExecInstanceStart
-	(*ExecInstanceResize)(nil),             // 41: dicerd.v1.ExecInstanceResize
-	(*ExecInstanceRequest)(nil),            // 42: dicerd.v1.ExecInstanceRequest
-	(*ExecInstanceResponse)(nil),           // 43: dicerd.v1.ExecInstanceResponse
-	(*CopyToInstanceStart)(nil),            // 44: dicerd.v1.CopyToInstanceStart
-	(*CopyToInstanceRequest)(nil),          // 45: dicerd.v1.CopyToInstanceRequest
-	(*CopyFromInstanceRequest)(nil),        // 46: dicerd.v1.CopyFromInstanceRequest
-	(*CopyFromInstanceResponse)(nil),       // 47: dicerd.v1.CopyFromInstanceResponse
-	(*GetInstanceLogsRequest)(nil),         // 48: dicerd.v1.GetInstanceLogsRequest
-	(*InstanceLogChunk)(nil),               // 49: dicerd.v1.InstanceLogChunk
-	(*GetInstanceStatsRequest)(nil),        // 50: dicerd.v1.GetInstanceStatsRequest
-	(*GetInstanceStatsResponse)(nil),       // 51: dicerd.v1.GetInstanceStatsResponse
-	(*InstanceStats)(nil),                  // 52: dicerd.v1.InstanceStats
-	(*ListInstanceProcessesRequest)(nil),   // 53: dicerd.v1.ListInstanceProcessesRequest
-	(*ListInstanceProcessesResponse)(nil),  // 54: dicerd.v1.ListInstanceProcessesResponse
-	(*Process)(nil),                        // 55: dicerd.v1.Process
-	(*Snapshot)(nil),                       // 56: dicerd.v1.Snapshot
-	(*CreateSnapshotRequest)(nil),          // 57: dicerd.v1.CreateSnapshotRequest
-	(*ListSnapshotsRequest)(nil),           // 58: dicerd.v1.ListSnapshotsRequest
-	(*ListSnapshotsResponse)(nil),          // 59: dicerd.v1.ListSnapshotsResponse
-	(*GetSnapshotRequest)(nil),             // 60: dicerd.v1.GetSnapshotRequest
-	(*DeleteSnapshotRequest)(nil),          // 61: dicerd.v1.DeleteSnapshotRequest
-	(*RestoreSnapshotRequest)(nil),         // 62: dicerd.v1.RestoreSnapshotRequest
-	(*ForkSnapshotRequest)(nil),            // 63: dicerd.v1.ForkSnapshotRequest
-	(*Network)(nil),                        // 64: dicerd.v1.Network
-	(*NetworkAllocation)(nil),              // 65: dicerd.v1.NetworkAllocation
-	(*CreateNetworkRequest)(nil),           // 66: dicerd.v1.CreateNetworkRequest
-	(*ListNetworksRequest)(nil),            // 67: dicerd.v1.ListNetworksRequest
-	(*ListNetworksResponse)(nil),           // 68: dicerd.v1.ListNetworksResponse
-	(*GetNetworkRequest)(nil),              // 69: dicerd.v1.GetNetworkRequest
-	(*DeleteNetworkRequest)(nil),           // 70: dicerd.v1.DeleteNetworkRequest
-	(*ListNetworkAllocationsRequest)(nil),  // 71: dicerd.v1.ListNetworkAllocationsRequest
-	(*ListNetworkAllocationsResponse)(nil), // 72: dicerd.v1.ListNetworkAllocationsResponse
-	(*Volume)(nil),                         // 73: dicerd.v1.Volume
-	(*CreateVolumeRequest)(nil),            // 74: dicerd.v1.CreateVolumeRequest
-	(*ListVolumesRequest)(nil),             // 75: dicerd.v1.ListVolumesRequest
-	(*ListVolumesResponse)(nil),            // 76: dicerd.v1.ListVolumesResponse
-	(*GetVolumeRequest)(nil),               // 77: dicerd.v1.GetVolumeRequest
-	(*DeleteVolumeRequest)(nil),            // 78: dicerd.v1.DeleteVolumeRequest
-	(*Image)(nil),                          // 79: dicerd.v1.Image
-	(*PullImageRequest)(nil),               // 80: dicerd.v1.PullImageRequest
-	(*PullImageProgress)(nil),              // 81: dicerd.v1.PullImageProgress
-	(*ListImagesRequest)(nil),              // 82: dicerd.v1.ListImagesRequest
-	(*ListImagesResponse)(nil),             // 83: dicerd.v1.ListImagesResponse
-	(*GetImageRequest)(nil),                // 84: dicerd.v1.GetImageRequest
-	(*DeleteImageRequest)(nil),             // 85: dicerd.v1.DeleteImageRequest
-	(*PruneImagesRequest)(nil),             // 86: dicerd.v1.PruneImagesRequest
-	(*PruneImagesResponse)(nil),            // 87: dicerd.v1.PruneImagesResponse
-	(*Kernel)(nil),                         // 88: dicerd.v1.Kernel
-	(*ImportKernelStart)(nil),              // 89: dicerd.v1.ImportKernelStart
-	(*ImportKernelRequest)(nil),            // 90: dicerd.v1.ImportKernelRequest
-	(*ListKernelsRequest)(nil),             // 91: dicerd.v1.ListKernelsRequest
-	(*ListKernelsResponse)(nil),            // 92: dicerd.v1.ListKernelsResponse
-	(*GetKernelRequest)(nil),               // 93: dicerd.v1.GetKernelRequest
-	(*DeleteKernelRequest)(nil),            // 94: dicerd.v1.DeleteKernelRequest
-	(*Token)(nil),                          // 95: dicerd.v1.Token
-	(*IssuedToken)(nil),                    // 96: dicerd.v1.IssuedToken
-	(*CreateTokenRequest)(nil),             // 97: dicerd.v1.CreateTokenRequest
-	(*ListTokensRequest)(nil),              // 98: dicerd.v1.ListTokensRequest
-	(*ListTokensResponse)(nil),             // 99: dicerd.v1.ListTokensResponse
-	(*GetTokenRequest)(nil),                // 100: dicerd.v1.GetTokenRequest
-	(*RotateTokenRequest)(nil),             // 101: dicerd.v1.RotateTokenRequest
-	(*DeleteTokenRequest)(nil),             // 102: dicerd.v1.DeleteTokenRequest
-	(*GetHostInfoRequest)(nil),             // 103: dicerd.v1.GetHostInfoRequest
-	(*GetHostInfoResponse)(nil),            // 104: dicerd.v1.GetHostInfoResponse
-	(*GetResourcesRequest)(nil),            // 105: dicerd.v1.GetResourcesRequest
-	(*GetResourcesResponse)(nil),           // 106: dicerd.v1.GetResourcesResponse
-	(*ResourceCapacity)(nil),               // 107: dicerd.v1.ResourceCapacity
-	(*DiskUsage)(nil),                      // 108: dicerd.v1.DiskUsage
-	(*InstanceResources)(nil),              // 109: dicerd.v1.InstanceResources
-	(*HypervisorInfo)(nil),                 // 110: dicerd.v1.HypervisorInfo
-	(*Event)(nil),                          // 111: dicerd.v1.Event
-	(*GetEventsRequest)(nil),               // 112: dicerd.v1.GetEventsRequest
-	(*GetEventsResponse)(nil),              // 113: dicerd.v1.GetEventsResponse
-	nil,                                    // 114: dicerd.v1.Instance.EnvEntry
-	nil,                                    // 115: dicerd.v1.Instance.LabelsEntry
-	nil,                                    // 116: dicerd.v1.CreateInstanceRequest.EnvEntry
-	nil,                                    // 117: dicerd.v1.CreateInstanceRequest.LabelsEntry
-	nil,                                    // 118: dicerd.v1.UpdateInstanceRequest.EnvEntry
-	nil,                                    // 119: dicerd.v1.UpdateInstanceRequest.LabelsEntry
-	nil,                                    // 120: dicerd.v1.ExecInstanceStart.EnvEntry
-	nil,                                    // 121: dicerd.v1.Event.AttributesEntry
-	(*durationpb.Duration)(nil),            // 122: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),          // 123: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),                  // 124: google.protobuf.Empty
+	(HostCheckGroup)(0),                    // 15: dicerd.v1.HostCheckGroup
+	(HostCheckStatus)(0),                   // 16: dicerd.v1.HostCheckStatus
+	(*Instance)(nil),                       // 17: dicerd.v1.Instance
+	(*HealthCheck)(nil),                    // 18: dicerd.v1.HealthCheck
+	(*HealthCheckExec)(nil),                // 19: dicerd.v1.HealthCheckExec
+	(*HealthCheckHTTP)(nil),                // 20: dicerd.v1.HealthCheckHTTP
+	(*HealthCheckTCP)(nil),                 // 21: dicerd.v1.HealthCheckTCP
+	(*Health)(nil),                         // 22: dicerd.v1.Health
+	(*RestartPolicy)(nil),                  // 23: dicerd.v1.RestartPolicy
+	(*Mount)(nil),                          // 24: dicerd.v1.Mount
+	(*PortMapping)(nil),                    // 25: dicerd.v1.PortMapping
+	(*CreateInstanceRequest)(nil),          // 26: dicerd.v1.CreateInstanceRequest
+	(*UpdateInstanceRequest)(nil),          // 27: dicerd.v1.UpdateInstanceRequest
+	(*StartInstanceRequest)(nil),           // 28: dicerd.v1.StartInstanceRequest
+	(*ResizeInstanceRequest)(nil),          // 29: dicerd.v1.ResizeInstanceRequest
+	(*StopInstanceRequest)(nil),            // 30: dicerd.v1.StopInstanceRequest
+	(*PauseInstanceRequest)(nil),           // 31: dicerd.v1.PauseInstanceRequest
+	(*ResumeInstanceRequest)(nil),          // 32: dicerd.v1.ResumeInstanceRequest
+	(*StandbyInstanceRequest)(nil),         // 33: dicerd.v1.StandbyInstanceRequest
+	(*ForkInstanceRequest)(nil),            // 34: dicerd.v1.ForkInstanceRequest
+	(*RenameInstanceRequest)(nil),          // 35: dicerd.v1.RenameInstanceRequest
+	(*DeleteInstanceRequest)(nil),          // 36: dicerd.v1.DeleteInstanceRequest
+	(*GetInstanceRequest)(nil),             // 37: dicerd.v1.GetInstanceRequest
+	(*WaitInstanceRequest)(nil),            // 38: dicerd.v1.WaitInstanceRequest
+	(*WaitInstanceResponse)(nil),           // 39: dicerd.v1.WaitInstanceResponse
+	(*ListInstancesRequest)(nil),           // 40: dicerd.v1.ListInstancesRequest
+	(*ListInstancesResponse)(nil),          // 41: dicerd.v1.ListInstancesResponse
+	(*ExecInstanceStart)(nil),              // 42: dicerd.v1.ExecInstanceStart
+	(*ExecInstanceResize)(nil),             // 43: dicerd.v1.ExecInstanceResize
+	(*ExecInstanceRequest)(nil),            // 44: dicerd.v1.ExecInstanceRequest
+	(*ExecInstanceResponse)(nil),           // 45: dicerd.v1.ExecInstanceResponse
+	(*CopyToInstanceStart)(nil),            // 46: dicerd.v1.CopyToInstanceStart
+	(*CopyToInstanceRequest)(nil),          // 47: dicerd.v1.CopyToInstanceRequest
+	(*CopyFromInstanceRequest)(nil),        // 48: dicerd.v1.CopyFromInstanceRequest
+	(*CopyFromInstanceResponse)(nil),       // 49: dicerd.v1.CopyFromInstanceResponse
+	(*GetInstanceLogsRequest)(nil),         // 50: dicerd.v1.GetInstanceLogsRequest
+	(*InstanceLogChunk)(nil),               // 51: dicerd.v1.InstanceLogChunk
+	(*GetInstanceStatsRequest)(nil),        // 52: dicerd.v1.GetInstanceStatsRequest
+	(*GetInstanceStatsResponse)(nil),       // 53: dicerd.v1.GetInstanceStatsResponse
+	(*InstanceStats)(nil),                  // 54: dicerd.v1.InstanceStats
+	(*ListInstanceProcessesRequest)(nil),   // 55: dicerd.v1.ListInstanceProcessesRequest
+	(*ListInstanceProcessesResponse)(nil),  // 56: dicerd.v1.ListInstanceProcessesResponse
+	(*Process)(nil),                        // 57: dicerd.v1.Process
+	(*Snapshot)(nil),                       // 58: dicerd.v1.Snapshot
+	(*CreateSnapshotRequest)(nil),          // 59: dicerd.v1.CreateSnapshotRequest
+	(*ListSnapshotsRequest)(nil),           // 60: dicerd.v1.ListSnapshotsRequest
+	(*ListSnapshotsResponse)(nil),          // 61: dicerd.v1.ListSnapshotsResponse
+	(*GetSnapshotRequest)(nil),             // 62: dicerd.v1.GetSnapshotRequest
+	(*DeleteSnapshotRequest)(nil),          // 63: dicerd.v1.DeleteSnapshotRequest
+	(*RestoreSnapshotRequest)(nil),         // 64: dicerd.v1.RestoreSnapshotRequest
+	(*ForkSnapshotRequest)(nil),            // 65: dicerd.v1.ForkSnapshotRequest
+	(*Network)(nil),                        // 66: dicerd.v1.Network
+	(*NetworkAllocation)(nil),              // 67: dicerd.v1.NetworkAllocation
+	(*CreateNetworkRequest)(nil),           // 68: dicerd.v1.CreateNetworkRequest
+	(*ListNetworksRequest)(nil),            // 69: dicerd.v1.ListNetworksRequest
+	(*ListNetworksResponse)(nil),           // 70: dicerd.v1.ListNetworksResponse
+	(*GetNetworkRequest)(nil),              // 71: dicerd.v1.GetNetworkRequest
+	(*DeleteNetworkRequest)(nil),           // 72: dicerd.v1.DeleteNetworkRequest
+	(*ListNetworkAllocationsRequest)(nil),  // 73: dicerd.v1.ListNetworkAllocationsRequest
+	(*ListNetworkAllocationsResponse)(nil), // 74: dicerd.v1.ListNetworkAllocationsResponse
+	(*Volume)(nil),                         // 75: dicerd.v1.Volume
+	(*CreateVolumeRequest)(nil),            // 76: dicerd.v1.CreateVolumeRequest
+	(*ListVolumesRequest)(nil),             // 77: dicerd.v1.ListVolumesRequest
+	(*ListVolumesResponse)(nil),            // 78: dicerd.v1.ListVolumesResponse
+	(*GetVolumeRequest)(nil),               // 79: dicerd.v1.GetVolumeRequest
+	(*DeleteVolumeRequest)(nil),            // 80: dicerd.v1.DeleteVolumeRequest
+	(*Image)(nil),                          // 81: dicerd.v1.Image
+	(*PullImageRequest)(nil),               // 82: dicerd.v1.PullImageRequest
+	(*PullImageProgress)(nil),              // 83: dicerd.v1.PullImageProgress
+	(*ListImagesRequest)(nil),              // 84: dicerd.v1.ListImagesRequest
+	(*ListImagesResponse)(nil),             // 85: dicerd.v1.ListImagesResponse
+	(*GetImageRequest)(nil),                // 86: dicerd.v1.GetImageRequest
+	(*DeleteImageRequest)(nil),             // 87: dicerd.v1.DeleteImageRequest
+	(*PruneImagesRequest)(nil),             // 88: dicerd.v1.PruneImagesRequest
+	(*PruneImagesResponse)(nil),            // 89: dicerd.v1.PruneImagesResponse
+	(*Kernel)(nil),                         // 90: dicerd.v1.Kernel
+	(*ImportKernelStart)(nil),              // 91: dicerd.v1.ImportKernelStart
+	(*ImportKernelRequest)(nil),            // 92: dicerd.v1.ImportKernelRequest
+	(*ListKernelsRequest)(nil),             // 93: dicerd.v1.ListKernelsRequest
+	(*ListKernelsResponse)(nil),            // 94: dicerd.v1.ListKernelsResponse
+	(*GetKernelRequest)(nil),               // 95: dicerd.v1.GetKernelRequest
+	(*DeleteKernelRequest)(nil),            // 96: dicerd.v1.DeleteKernelRequest
+	(*Token)(nil),                          // 97: dicerd.v1.Token
+	(*IssuedToken)(nil),                    // 98: dicerd.v1.IssuedToken
+	(*CreateTokenRequest)(nil),             // 99: dicerd.v1.CreateTokenRequest
+	(*ListTokensRequest)(nil),              // 100: dicerd.v1.ListTokensRequest
+	(*ListTokensResponse)(nil),             // 101: dicerd.v1.ListTokensResponse
+	(*GetTokenRequest)(nil),                // 102: dicerd.v1.GetTokenRequest
+	(*RotateTokenRequest)(nil),             // 103: dicerd.v1.RotateTokenRequest
+	(*DeleteTokenRequest)(nil),             // 104: dicerd.v1.DeleteTokenRequest
+	(*GetHostInfoRequest)(nil),             // 105: dicerd.v1.GetHostInfoRequest
+	(*GetHostInfoResponse)(nil),            // 106: dicerd.v1.GetHostInfoResponse
+	(*CheckHostRequest)(nil),               // 107: dicerd.v1.CheckHostRequest
+	(*HostCheckResult)(nil),                // 108: dicerd.v1.HostCheckResult
+	(*GetResourcesRequest)(nil),            // 109: dicerd.v1.GetResourcesRequest
+	(*GetResourcesResponse)(nil),           // 110: dicerd.v1.GetResourcesResponse
+	(*ResourceCapacity)(nil),               // 111: dicerd.v1.ResourceCapacity
+	(*DiskUsage)(nil),                      // 112: dicerd.v1.DiskUsage
+	(*InstanceResources)(nil),              // 113: dicerd.v1.InstanceResources
+	(*HypervisorInfo)(nil),                 // 114: dicerd.v1.HypervisorInfo
+	(*Event)(nil),                          // 115: dicerd.v1.Event
+	(*GetEventsRequest)(nil),               // 116: dicerd.v1.GetEventsRequest
+	(*GetEventsResponse)(nil),              // 117: dicerd.v1.GetEventsResponse
+	nil,                                    // 118: dicerd.v1.Instance.EnvEntry
+	nil,                                    // 119: dicerd.v1.Instance.LabelsEntry
+	nil,                                    // 120: dicerd.v1.CreateInstanceRequest.EnvEntry
+	nil,                                    // 121: dicerd.v1.CreateInstanceRequest.LabelsEntry
+	nil,                                    // 122: dicerd.v1.UpdateInstanceRequest.EnvEntry
+	nil,                                    // 123: dicerd.v1.UpdateInstanceRequest.LabelsEntry
+	nil,                                    // 124: dicerd.v1.ExecInstanceStart.EnvEntry
+	nil,                                    // 125: dicerd.v1.Event.AttributesEntry
+	(*durationpb.Duration)(nil),            // 126: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),          // 127: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),                  // 128: google.protobuf.Empty
 }
 var file_dicerd_v1_dicerd_proto_depIdxs = []int32{
 	0,   // 0: dicerd.v1.Instance.hypervisor_type:type_name -> dicerd.v1.HypervisorType
-	122, // 1: dicerd.v1.Instance.standby_after:type_name -> google.protobuf.Duration
-	22,  // 2: dicerd.v1.Instance.mounts:type_name -> dicerd.v1.Mount
-	114, // 3: dicerd.v1.Instance.env:type_name -> dicerd.v1.Instance.EnvEntry
-	115, // 4: dicerd.v1.Instance.labels:type_name -> dicerd.v1.Instance.LabelsEntry
-	21,  // 5: dicerd.v1.Instance.restart_policy:type_name -> dicerd.v1.RestartPolicy
-	123, // 6: dicerd.v1.Instance.create_time:type_name -> google.protobuf.Timestamp
-	123, // 7: dicerd.v1.Instance.update_time:type_name -> google.protobuf.Timestamp
+	126, // 1: dicerd.v1.Instance.standby_after:type_name -> google.protobuf.Duration
+	24,  // 2: dicerd.v1.Instance.mounts:type_name -> dicerd.v1.Mount
+	118, // 3: dicerd.v1.Instance.env:type_name -> dicerd.v1.Instance.EnvEntry
+	119, // 4: dicerd.v1.Instance.labels:type_name -> dicerd.v1.Instance.LabelsEntry
+	23,  // 5: dicerd.v1.Instance.restart_policy:type_name -> dicerd.v1.RestartPolicy
+	127, // 6: dicerd.v1.Instance.create_time:type_name -> google.protobuf.Timestamp
+	127, // 7: dicerd.v1.Instance.update_time:type_name -> google.protobuf.Timestamp
 	1,   // 8: dicerd.v1.Instance.state:type_name -> dicerd.v1.InstanceState
-	123, // 9: dicerd.v1.Instance.start_time:type_name -> google.protobuf.Timestamp
-	23,  // 10: dicerd.v1.Instance.ports:type_name -> dicerd.v1.PortMapping
-	123, // 11: dicerd.v1.Instance.finish_time:type_name -> google.protobuf.Timestamp
-	123, // 12: dicerd.v1.Instance.next_restart_time:type_name -> google.protobuf.Timestamp
-	16,  // 13: dicerd.v1.Instance.health_check:type_name -> dicerd.v1.HealthCheck
-	20,  // 14: dicerd.v1.Instance.health:type_name -> dicerd.v1.Health
+	127, // 9: dicerd.v1.Instance.start_time:type_name -> google.protobuf.Timestamp
+	25,  // 10: dicerd.v1.Instance.ports:type_name -> dicerd.v1.PortMapping
+	127, // 11: dicerd.v1.Instance.finish_time:type_name -> google.protobuf.Timestamp
+	127, // 12: dicerd.v1.Instance.next_restart_time:type_name -> google.protobuf.Timestamp
+	18,  // 13: dicerd.v1.Instance.health_check:type_name -> dicerd.v1.HealthCheck
+	22,  // 14: dicerd.v1.Instance.health:type_name -> dicerd.v1.Health
 	2,   // 15: dicerd.v1.Instance.init_mode:type_name -> dicerd.v1.InitMode
-	17,  // 16: dicerd.v1.HealthCheck.exec:type_name -> dicerd.v1.HealthCheckExec
-	18,  // 17: dicerd.v1.HealthCheck.http:type_name -> dicerd.v1.HealthCheckHTTP
-	19,  // 18: dicerd.v1.HealthCheck.tcp:type_name -> dicerd.v1.HealthCheckTCP
-	122, // 19: dicerd.v1.HealthCheck.interval:type_name -> google.protobuf.Duration
-	122, // 20: dicerd.v1.HealthCheck.timeout:type_name -> google.protobuf.Duration
-	122, // 21: dicerd.v1.HealthCheck.start_period:type_name -> google.protobuf.Duration
+	19,  // 16: dicerd.v1.HealthCheck.exec:type_name -> dicerd.v1.HealthCheckExec
+	20,  // 17: dicerd.v1.HealthCheck.http:type_name -> dicerd.v1.HealthCheckHTTP
+	21,  // 18: dicerd.v1.HealthCheck.tcp:type_name -> dicerd.v1.HealthCheckTCP
+	126, // 19: dicerd.v1.HealthCheck.interval:type_name -> google.protobuf.Duration
+	126, // 20: dicerd.v1.HealthCheck.timeout:type_name -> google.protobuf.Duration
+	126, // 21: dicerd.v1.HealthCheck.start_period:type_name -> google.protobuf.Duration
 	8,   // 22: dicerd.v1.Health.status:type_name -> dicerd.v1.HealthStatus
-	123, // 23: dicerd.v1.Health.last_check_time:type_name -> google.protobuf.Timestamp
-	16,  // 24: dicerd.v1.Health.check:type_name -> dicerd.v1.HealthCheck
+	127, // 23: dicerd.v1.Health.last_check_time:type_name -> google.protobuf.Timestamp
+	18,  // 24: dicerd.v1.Health.check:type_name -> dicerd.v1.HealthCheck
 	4,   // 25: dicerd.v1.RestartPolicy.mode:type_name -> dicerd.v1.RestartMode
 	6,   // 26: dicerd.v1.Mount.type:type_name -> dicerd.v1.MountType
 	7,   // 27: dicerd.v1.PortMapping.protocol:type_name -> dicerd.v1.Protocol
 	0,   // 28: dicerd.v1.CreateInstanceRequest.hypervisor_type:type_name -> dicerd.v1.HypervisorType
-	22,  // 29: dicerd.v1.CreateInstanceRequest.mounts:type_name -> dicerd.v1.Mount
-	116, // 30: dicerd.v1.CreateInstanceRequest.env:type_name -> dicerd.v1.CreateInstanceRequest.EnvEntry
-	117, // 31: dicerd.v1.CreateInstanceRequest.labels:type_name -> dicerd.v1.CreateInstanceRequest.LabelsEntry
-	21,  // 32: dicerd.v1.CreateInstanceRequest.restart_policy:type_name -> dicerd.v1.RestartPolicy
-	16,  // 33: dicerd.v1.CreateInstanceRequest.health_check:type_name -> dicerd.v1.HealthCheck
+	24,  // 29: dicerd.v1.CreateInstanceRequest.mounts:type_name -> dicerd.v1.Mount
+	120, // 30: dicerd.v1.CreateInstanceRequest.env:type_name -> dicerd.v1.CreateInstanceRequest.EnvEntry
+	121, // 31: dicerd.v1.CreateInstanceRequest.labels:type_name -> dicerd.v1.CreateInstanceRequest.LabelsEntry
+	23,  // 32: dicerd.v1.CreateInstanceRequest.restart_policy:type_name -> dicerd.v1.RestartPolicy
+	18,  // 33: dicerd.v1.CreateInstanceRequest.health_check:type_name -> dicerd.v1.HealthCheck
 	2,   // 34: dicerd.v1.CreateInstanceRequest.init_mode:type_name -> dicerd.v1.InitMode
 	3,   // 35: dicerd.v1.CreateInstanceRequest.pull_policy:type_name -> dicerd.v1.PullPolicy
-	23,  // 36: dicerd.v1.CreateInstanceRequest.ports:type_name -> dicerd.v1.PortMapping
-	122, // 37: dicerd.v1.CreateInstanceRequest.standby_after:type_name -> google.protobuf.Duration
+	25,  // 36: dicerd.v1.CreateInstanceRequest.ports:type_name -> dicerd.v1.PortMapping
+	126, // 37: dicerd.v1.CreateInstanceRequest.standby_after:type_name -> google.protobuf.Duration
 	0,   // 38: dicerd.v1.UpdateInstanceRequest.hypervisor_type:type_name -> dicerd.v1.HypervisorType
-	122, // 39: dicerd.v1.UpdateInstanceRequest.standby_after:type_name -> google.protobuf.Duration
-	21,  // 40: dicerd.v1.UpdateInstanceRequest.restart_policy:type_name -> dicerd.v1.RestartPolicy
-	16,  // 41: dicerd.v1.UpdateInstanceRequest.health_check:type_name -> dicerd.v1.HealthCheck
+	126, // 39: dicerd.v1.UpdateInstanceRequest.standby_after:type_name -> google.protobuf.Duration
+	23,  // 40: dicerd.v1.UpdateInstanceRequest.restart_policy:type_name -> dicerd.v1.RestartPolicy
+	18,  // 41: dicerd.v1.UpdateInstanceRequest.health_check:type_name -> dicerd.v1.HealthCheck
 	2,   // 42: dicerd.v1.UpdateInstanceRequest.init_mode:type_name -> dicerd.v1.InitMode
-	22,  // 43: dicerd.v1.UpdateInstanceRequest.mounts:type_name -> dicerd.v1.Mount
-	118, // 44: dicerd.v1.UpdateInstanceRequest.env:type_name -> dicerd.v1.UpdateInstanceRequest.EnvEntry
-	119, // 45: dicerd.v1.UpdateInstanceRequest.labels:type_name -> dicerd.v1.UpdateInstanceRequest.LabelsEntry
-	23,  // 46: dicerd.v1.UpdateInstanceRequest.ports:type_name -> dicerd.v1.PortMapping
-	23,  // 47: dicerd.v1.ForkInstanceRequest.ports:type_name -> dicerd.v1.PortMapping
+	24,  // 43: dicerd.v1.UpdateInstanceRequest.mounts:type_name -> dicerd.v1.Mount
+	122, // 44: dicerd.v1.UpdateInstanceRequest.env:type_name -> dicerd.v1.UpdateInstanceRequest.EnvEntry
+	123, // 45: dicerd.v1.UpdateInstanceRequest.labels:type_name -> dicerd.v1.UpdateInstanceRequest.LabelsEntry
+	25,  // 46: dicerd.v1.UpdateInstanceRequest.ports:type_name -> dicerd.v1.PortMapping
+	25,  // 47: dicerd.v1.ForkInstanceRequest.ports:type_name -> dicerd.v1.PortMapping
 	5,   // 48: dicerd.v1.WaitInstanceRequest.condition:type_name -> dicerd.v1.WaitCondition
 	1,   // 49: dicerd.v1.WaitInstanceResponse.state:type_name -> dicerd.v1.InstanceState
-	15,  // 50: dicerd.v1.ListInstancesResponse.instances:type_name -> dicerd.v1.Instance
-	120, // 51: dicerd.v1.ExecInstanceStart.env:type_name -> dicerd.v1.ExecInstanceStart.EnvEntry
-	40,  // 52: dicerd.v1.ExecInstanceRequest.start:type_name -> dicerd.v1.ExecInstanceStart
-	41,  // 53: dicerd.v1.ExecInstanceRequest.resize:type_name -> dicerd.v1.ExecInstanceResize
-	44,  // 54: dicerd.v1.CopyToInstanceRequest.start:type_name -> dicerd.v1.CopyToInstanceStart
+	17,  // 50: dicerd.v1.ListInstancesResponse.instances:type_name -> dicerd.v1.Instance
+	124, // 51: dicerd.v1.ExecInstanceStart.env:type_name -> dicerd.v1.ExecInstanceStart.EnvEntry
+	42,  // 52: dicerd.v1.ExecInstanceRequest.start:type_name -> dicerd.v1.ExecInstanceStart
+	43,  // 53: dicerd.v1.ExecInstanceRequest.resize:type_name -> dicerd.v1.ExecInstanceResize
+	46,  // 54: dicerd.v1.CopyToInstanceRequest.start:type_name -> dicerd.v1.CopyToInstanceStart
 	12,  // 55: dicerd.v1.GetInstanceLogsRequest.source:type_name -> dicerd.v1.LogSource
-	123, // 56: dicerd.v1.GetInstanceStatsResponse.read_time:type_name -> google.protobuf.Timestamp
-	52,  // 57: dicerd.v1.GetInstanceStatsResponse.instances:type_name -> dicerd.v1.InstanceStats
-	122, // 58: dicerd.v1.InstanceStats.cpu_time:type_name -> google.protobuf.Duration
-	55,  // 59: dicerd.v1.ListInstanceProcessesResponse.processes:type_name -> dicerd.v1.Process
-	123, // 60: dicerd.v1.Process.start_time:type_name -> google.protobuf.Timestamp
-	122, // 61: dicerd.v1.Process.cpu_time:type_name -> google.protobuf.Duration
+	127, // 56: dicerd.v1.GetInstanceStatsResponse.read_time:type_name -> google.protobuf.Timestamp
+	54,  // 57: dicerd.v1.GetInstanceStatsResponse.instances:type_name -> dicerd.v1.InstanceStats
+	126, // 58: dicerd.v1.InstanceStats.cpu_time:type_name -> google.protobuf.Duration
+	57,  // 59: dicerd.v1.ListInstanceProcessesResponse.processes:type_name -> dicerd.v1.Process
+	127, // 60: dicerd.v1.Process.start_time:type_name -> google.protobuf.Timestamp
+	126, // 61: dicerd.v1.Process.cpu_time:type_name -> google.protobuf.Duration
 	13,  // 62: dicerd.v1.Snapshot.kind:type_name -> dicerd.v1.SnapshotKind
 	0,   // 63: dicerd.v1.Snapshot.hypervisor_type:type_name -> dicerd.v1.HypervisorType
-	123, // 64: dicerd.v1.Snapshot.create_time:type_name -> google.protobuf.Timestamp
-	56,  // 65: dicerd.v1.ListSnapshotsResponse.snapshots:type_name -> dicerd.v1.Snapshot
-	23,  // 66: dicerd.v1.ForkSnapshotRequest.ports:type_name -> dicerd.v1.PortMapping
-	123, // 67: dicerd.v1.Network.create_time:type_name -> google.protobuf.Timestamp
-	123, // 68: dicerd.v1.Network.update_time:type_name -> google.protobuf.Timestamp
-	64,  // 69: dicerd.v1.ListNetworksResponse.networks:type_name -> dicerd.v1.Network
-	65,  // 70: dicerd.v1.ListNetworkAllocationsResponse.allocations:type_name -> dicerd.v1.NetworkAllocation
-	123, // 71: dicerd.v1.Volume.create_time:type_name -> google.protobuf.Timestamp
-	123, // 72: dicerd.v1.Volume.update_time:type_name -> google.protobuf.Timestamp
-	73,  // 73: dicerd.v1.ListVolumesResponse.volumes:type_name -> dicerd.v1.Volume
-	123, // 74: dicerd.v1.Image.create_time:type_name -> google.protobuf.Timestamp
-	123, // 75: dicerd.v1.Image.update_time:type_name -> google.protobuf.Timestamp
-	16,  // 76: dicerd.v1.Image.health_check:type_name -> dicerd.v1.HealthCheck
-	123, // 77: dicerd.v1.Image.last_used_time:type_name -> google.protobuf.Timestamp
+	127, // 64: dicerd.v1.Snapshot.create_time:type_name -> google.protobuf.Timestamp
+	58,  // 65: dicerd.v1.ListSnapshotsResponse.snapshots:type_name -> dicerd.v1.Snapshot
+	25,  // 66: dicerd.v1.ForkSnapshotRequest.ports:type_name -> dicerd.v1.PortMapping
+	127, // 67: dicerd.v1.Network.create_time:type_name -> google.protobuf.Timestamp
+	127, // 68: dicerd.v1.Network.update_time:type_name -> google.protobuf.Timestamp
+	66,  // 69: dicerd.v1.ListNetworksResponse.networks:type_name -> dicerd.v1.Network
+	67,  // 70: dicerd.v1.ListNetworkAllocationsResponse.allocations:type_name -> dicerd.v1.NetworkAllocation
+	127, // 71: dicerd.v1.Volume.create_time:type_name -> google.protobuf.Timestamp
+	127, // 72: dicerd.v1.Volume.update_time:type_name -> google.protobuf.Timestamp
+	75,  // 73: dicerd.v1.ListVolumesResponse.volumes:type_name -> dicerd.v1.Volume
+	127, // 74: dicerd.v1.Image.create_time:type_name -> google.protobuf.Timestamp
+	127, // 75: dicerd.v1.Image.update_time:type_name -> google.protobuf.Timestamp
+	18,  // 76: dicerd.v1.Image.health_check:type_name -> dicerd.v1.HealthCheck
+	127, // 77: dicerd.v1.Image.last_used_time:type_name -> google.protobuf.Timestamp
 	14,  // 78: dicerd.v1.PullImageProgress.stage:type_name -> dicerd.v1.PullStage
-	79,  // 79: dicerd.v1.PullImageProgress.image:type_name -> dicerd.v1.Image
-	79,  // 80: dicerd.v1.ListImagesResponse.images:type_name -> dicerd.v1.Image
-	79,  // 81: dicerd.v1.PruneImagesResponse.images:type_name -> dicerd.v1.Image
+	81,  // 79: dicerd.v1.PullImageProgress.image:type_name -> dicerd.v1.Image
+	81,  // 80: dicerd.v1.ListImagesResponse.images:type_name -> dicerd.v1.Image
+	81,  // 81: dicerd.v1.PruneImagesResponse.images:type_name -> dicerd.v1.Image
 	9,   // 82: dicerd.v1.Kernel.arch:type_name -> dicerd.v1.Architecture
-	123, // 83: dicerd.v1.Kernel.create_time:type_name -> google.protobuf.Timestamp
-	123, // 84: dicerd.v1.Kernel.update_time:type_name -> google.protobuf.Timestamp
+	127, // 83: dicerd.v1.Kernel.create_time:type_name -> google.protobuf.Timestamp
+	127, // 84: dicerd.v1.Kernel.update_time:type_name -> google.protobuf.Timestamp
 	9,   // 85: dicerd.v1.ImportKernelStart.arch:type_name -> dicerd.v1.Architecture
-	89,  // 86: dicerd.v1.ImportKernelRequest.start:type_name -> dicerd.v1.ImportKernelStart
-	88,  // 87: dicerd.v1.ListKernelsResponse.kernels:type_name -> dicerd.v1.Kernel
-	123, // 88: dicerd.v1.Token.create_time:type_name -> google.protobuf.Timestamp
-	123, // 89: dicerd.v1.Token.update_time:type_name -> google.protobuf.Timestamp
-	123, // 90: dicerd.v1.Token.last_use_time:type_name -> google.protobuf.Timestamp
-	95,  // 91: dicerd.v1.IssuedToken.token:type_name -> dicerd.v1.Token
-	95,  // 92: dicerd.v1.ListTokensResponse.tokens:type_name -> dicerd.v1.Token
-	110, // 93: dicerd.v1.GetHostInfoResponse.hypervisors:type_name -> dicerd.v1.HypervisorInfo
-	107, // 94: dicerd.v1.GetResourcesResponse.cpu:type_name -> dicerd.v1.ResourceCapacity
-	107, // 95: dicerd.v1.GetResourcesResponse.memory:type_name -> dicerd.v1.ResourceCapacity
-	108, // 96: dicerd.v1.GetResourcesResponse.disk:type_name -> dicerd.v1.DiskUsage
-	109, // 97: dicerd.v1.GetResourcesResponse.instances:type_name -> dicerd.v1.InstanceResources
-	1,   // 98: dicerd.v1.InstanceResources.state:type_name -> dicerd.v1.InstanceState
-	0,   // 99: dicerd.v1.HypervisorInfo.type:type_name -> dicerd.v1.HypervisorType
-	123, // 100: dicerd.v1.Event.time:type_name -> google.protobuf.Timestamp
-	10,  // 101: dicerd.v1.Event.kind:type_name -> dicerd.v1.EventKind
-	11,  // 102: dicerd.v1.Event.action:type_name -> dicerd.v1.EventAction
-	121, // 103: dicerd.v1.Event.attributes:type_name -> dicerd.v1.Event.AttributesEntry
-	10,  // 104: dicerd.v1.GetEventsRequest.kind:type_name -> dicerd.v1.EventKind
-	123, // 105: dicerd.v1.GetEventsRequest.since:type_name -> google.protobuf.Timestamp
-	111, // 106: dicerd.v1.GetEventsResponse.events:type_name -> dicerd.v1.Event
-	24,  // 107: dicerd.v1.DaemonService.CreateInstance:input_type -> dicerd.v1.CreateInstanceRequest
-	25,  // 108: dicerd.v1.DaemonService.UpdateInstance:input_type -> dicerd.v1.UpdateInstanceRequest
-	33,  // 109: dicerd.v1.DaemonService.RenameInstance:input_type -> dicerd.v1.RenameInstanceRequest
-	26,  // 110: dicerd.v1.DaemonService.StartInstance:input_type -> dicerd.v1.StartInstanceRequest
-	28,  // 111: dicerd.v1.DaemonService.StopInstance:input_type -> dicerd.v1.StopInstanceRequest
-	29,  // 112: dicerd.v1.DaemonService.PauseInstance:input_type -> dicerd.v1.PauseInstanceRequest
-	30,  // 113: dicerd.v1.DaemonService.ResumeInstance:input_type -> dicerd.v1.ResumeInstanceRequest
-	31,  // 114: dicerd.v1.DaemonService.StandbyInstance:input_type -> dicerd.v1.StandbyInstanceRequest
-	32,  // 115: dicerd.v1.DaemonService.ForkInstance:input_type -> dicerd.v1.ForkInstanceRequest
-	27,  // 116: dicerd.v1.DaemonService.ResizeInstance:input_type -> dicerd.v1.ResizeInstanceRequest
-	34,  // 117: dicerd.v1.DaemonService.DeleteInstance:input_type -> dicerd.v1.DeleteInstanceRequest
-	38,  // 118: dicerd.v1.DaemonService.ListInstances:input_type -> dicerd.v1.ListInstancesRequest
-	35,  // 119: dicerd.v1.DaemonService.GetInstance:input_type -> dicerd.v1.GetInstanceRequest
-	36,  // 120: dicerd.v1.DaemonService.WaitInstance:input_type -> dicerd.v1.WaitInstanceRequest
-	48,  // 121: dicerd.v1.DaemonService.GetInstanceLogs:input_type -> dicerd.v1.GetInstanceLogsRequest
-	50,  // 122: dicerd.v1.DaemonService.GetInstanceStats:input_type -> dicerd.v1.GetInstanceStatsRequest
-	53,  // 123: dicerd.v1.DaemonService.ListInstanceProcesses:input_type -> dicerd.v1.ListInstanceProcessesRequest
-	57,  // 124: dicerd.v1.DaemonService.CreateSnapshot:input_type -> dicerd.v1.CreateSnapshotRequest
-	58,  // 125: dicerd.v1.DaemonService.ListSnapshots:input_type -> dicerd.v1.ListSnapshotsRequest
-	60,  // 126: dicerd.v1.DaemonService.GetSnapshot:input_type -> dicerd.v1.GetSnapshotRequest
-	61,  // 127: dicerd.v1.DaemonService.DeleteSnapshot:input_type -> dicerd.v1.DeleteSnapshotRequest
-	62,  // 128: dicerd.v1.DaemonService.RestoreSnapshot:input_type -> dicerd.v1.RestoreSnapshotRequest
-	63,  // 129: dicerd.v1.DaemonService.ForkSnapshot:input_type -> dicerd.v1.ForkSnapshotRequest
-	42,  // 130: dicerd.v1.DaemonService.ExecInstance:input_type -> dicerd.v1.ExecInstanceRequest
-	45,  // 131: dicerd.v1.DaemonService.CopyToInstance:input_type -> dicerd.v1.CopyToInstanceRequest
-	46,  // 132: dicerd.v1.DaemonService.CopyFromInstance:input_type -> dicerd.v1.CopyFromInstanceRequest
-	66,  // 133: dicerd.v1.DaemonService.CreateNetwork:input_type -> dicerd.v1.CreateNetworkRequest
-	67,  // 134: dicerd.v1.DaemonService.ListNetworks:input_type -> dicerd.v1.ListNetworksRequest
-	69,  // 135: dicerd.v1.DaemonService.GetNetwork:input_type -> dicerd.v1.GetNetworkRequest
-	70,  // 136: dicerd.v1.DaemonService.DeleteNetwork:input_type -> dicerd.v1.DeleteNetworkRequest
-	71,  // 137: dicerd.v1.DaemonService.ListNetworkAllocations:input_type -> dicerd.v1.ListNetworkAllocationsRequest
-	74,  // 138: dicerd.v1.DaemonService.CreateVolume:input_type -> dicerd.v1.CreateVolumeRequest
-	75,  // 139: dicerd.v1.DaemonService.ListVolumes:input_type -> dicerd.v1.ListVolumesRequest
-	77,  // 140: dicerd.v1.DaemonService.GetVolume:input_type -> dicerd.v1.GetVolumeRequest
-	78,  // 141: dicerd.v1.DaemonService.DeleteVolume:input_type -> dicerd.v1.DeleteVolumeRequest
-	80,  // 142: dicerd.v1.DaemonService.PullImage:input_type -> dicerd.v1.PullImageRequest
-	82,  // 143: dicerd.v1.DaemonService.ListImages:input_type -> dicerd.v1.ListImagesRequest
-	84,  // 144: dicerd.v1.DaemonService.GetImage:input_type -> dicerd.v1.GetImageRequest
-	85,  // 145: dicerd.v1.DaemonService.DeleteImage:input_type -> dicerd.v1.DeleteImageRequest
-	86,  // 146: dicerd.v1.DaemonService.PruneImages:input_type -> dicerd.v1.PruneImagesRequest
-	90,  // 147: dicerd.v1.DaemonService.ImportKernel:input_type -> dicerd.v1.ImportKernelRequest
-	91,  // 148: dicerd.v1.DaemonService.ListKernels:input_type -> dicerd.v1.ListKernelsRequest
-	93,  // 149: dicerd.v1.DaemonService.GetKernel:input_type -> dicerd.v1.GetKernelRequest
-	94,  // 150: dicerd.v1.DaemonService.DeleteKernel:input_type -> dicerd.v1.DeleteKernelRequest
-	97,  // 151: dicerd.v1.DaemonService.CreateToken:input_type -> dicerd.v1.CreateTokenRequest
-	98,  // 152: dicerd.v1.DaemonService.ListTokens:input_type -> dicerd.v1.ListTokensRequest
-	100, // 153: dicerd.v1.DaemonService.GetToken:input_type -> dicerd.v1.GetTokenRequest
-	101, // 154: dicerd.v1.DaemonService.RotateToken:input_type -> dicerd.v1.RotateTokenRequest
-	102, // 155: dicerd.v1.DaemonService.DeleteToken:input_type -> dicerd.v1.DeleteTokenRequest
-	103, // 156: dicerd.v1.DaemonService.GetHostInfo:input_type -> dicerd.v1.GetHostInfoRequest
-	105, // 157: dicerd.v1.DaemonService.GetResources:input_type -> dicerd.v1.GetResourcesRequest
-	112, // 158: dicerd.v1.DaemonService.GetEvents:input_type -> dicerd.v1.GetEventsRequest
-	15,  // 159: dicerd.v1.DaemonService.CreateInstance:output_type -> dicerd.v1.Instance
-	15,  // 160: dicerd.v1.DaemonService.UpdateInstance:output_type -> dicerd.v1.Instance
-	15,  // 161: dicerd.v1.DaemonService.RenameInstance:output_type -> dicerd.v1.Instance
-	15,  // 162: dicerd.v1.DaemonService.StartInstance:output_type -> dicerd.v1.Instance
-	15,  // 163: dicerd.v1.DaemonService.StopInstance:output_type -> dicerd.v1.Instance
-	15,  // 164: dicerd.v1.DaemonService.PauseInstance:output_type -> dicerd.v1.Instance
-	15,  // 165: dicerd.v1.DaemonService.ResumeInstance:output_type -> dicerd.v1.Instance
-	15,  // 166: dicerd.v1.DaemonService.StandbyInstance:output_type -> dicerd.v1.Instance
-	15,  // 167: dicerd.v1.DaemonService.ForkInstance:output_type -> dicerd.v1.Instance
-	15,  // 168: dicerd.v1.DaemonService.ResizeInstance:output_type -> dicerd.v1.Instance
-	124, // 169: dicerd.v1.DaemonService.DeleteInstance:output_type -> google.protobuf.Empty
-	39,  // 170: dicerd.v1.DaemonService.ListInstances:output_type -> dicerd.v1.ListInstancesResponse
-	15,  // 171: dicerd.v1.DaemonService.GetInstance:output_type -> dicerd.v1.Instance
-	37,  // 172: dicerd.v1.DaemonService.WaitInstance:output_type -> dicerd.v1.WaitInstanceResponse
-	49,  // 173: dicerd.v1.DaemonService.GetInstanceLogs:output_type -> dicerd.v1.InstanceLogChunk
-	51,  // 174: dicerd.v1.DaemonService.GetInstanceStats:output_type -> dicerd.v1.GetInstanceStatsResponse
-	54,  // 175: dicerd.v1.DaemonService.ListInstanceProcesses:output_type -> dicerd.v1.ListInstanceProcessesResponse
-	56,  // 176: dicerd.v1.DaemonService.CreateSnapshot:output_type -> dicerd.v1.Snapshot
-	59,  // 177: dicerd.v1.DaemonService.ListSnapshots:output_type -> dicerd.v1.ListSnapshotsResponse
-	56,  // 178: dicerd.v1.DaemonService.GetSnapshot:output_type -> dicerd.v1.Snapshot
-	124, // 179: dicerd.v1.DaemonService.DeleteSnapshot:output_type -> google.protobuf.Empty
-	15,  // 180: dicerd.v1.DaemonService.RestoreSnapshot:output_type -> dicerd.v1.Instance
-	15,  // 181: dicerd.v1.DaemonService.ForkSnapshot:output_type -> dicerd.v1.Instance
-	43,  // 182: dicerd.v1.DaemonService.ExecInstance:output_type -> dicerd.v1.ExecInstanceResponse
-	124, // 183: dicerd.v1.DaemonService.CopyToInstance:output_type -> google.protobuf.Empty
-	47,  // 184: dicerd.v1.DaemonService.CopyFromInstance:output_type -> dicerd.v1.CopyFromInstanceResponse
-	64,  // 185: dicerd.v1.DaemonService.CreateNetwork:output_type -> dicerd.v1.Network
-	68,  // 186: dicerd.v1.DaemonService.ListNetworks:output_type -> dicerd.v1.ListNetworksResponse
-	64,  // 187: dicerd.v1.DaemonService.GetNetwork:output_type -> dicerd.v1.Network
-	124, // 188: dicerd.v1.DaemonService.DeleteNetwork:output_type -> google.protobuf.Empty
-	72,  // 189: dicerd.v1.DaemonService.ListNetworkAllocations:output_type -> dicerd.v1.ListNetworkAllocationsResponse
-	73,  // 190: dicerd.v1.DaemonService.CreateVolume:output_type -> dicerd.v1.Volume
-	76,  // 191: dicerd.v1.DaemonService.ListVolumes:output_type -> dicerd.v1.ListVolumesResponse
-	73,  // 192: dicerd.v1.DaemonService.GetVolume:output_type -> dicerd.v1.Volume
-	124, // 193: dicerd.v1.DaemonService.DeleteVolume:output_type -> google.protobuf.Empty
-	81,  // 194: dicerd.v1.DaemonService.PullImage:output_type -> dicerd.v1.PullImageProgress
-	83,  // 195: dicerd.v1.DaemonService.ListImages:output_type -> dicerd.v1.ListImagesResponse
-	79,  // 196: dicerd.v1.DaemonService.GetImage:output_type -> dicerd.v1.Image
-	124, // 197: dicerd.v1.DaemonService.DeleteImage:output_type -> google.protobuf.Empty
-	87,  // 198: dicerd.v1.DaemonService.PruneImages:output_type -> dicerd.v1.PruneImagesResponse
-	88,  // 199: dicerd.v1.DaemonService.ImportKernel:output_type -> dicerd.v1.Kernel
-	92,  // 200: dicerd.v1.DaemonService.ListKernels:output_type -> dicerd.v1.ListKernelsResponse
-	88,  // 201: dicerd.v1.DaemonService.GetKernel:output_type -> dicerd.v1.Kernel
-	124, // 202: dicerd.v1.DaemonService.DeleteKernel:output_type -> google.protobuf.Empty
-	96,  // 203: dicerd.v1.DaemonService.CreateToken:output_type -> dicerd.v1.IssuedToken
-	99,  // 204: dicerd.v1.DaemonService.ListTokens:output_type -> dicerd.v1.ListTokensResponse
-	95,  // 205: dicerd.v1.DaemonService.GetToken:output_type -> dicerd.v1.Token
-	96,  // 206: dicerd.v1.DaemonService.RotateToken:output_type -> dicerd.v1.IssuedToken
-	124, // 207: dicerd.v1.DaemonService.DeleteToken:output_type -> google.protobuf.Empty
-	104, // 208: dicerd.v1.DaemonService.GetHostInfo:output_type -> dicerd.v1.GetHostInfoResponse
-	106, // 209: dicerd.v1.DaemonService.GetResources:output_type -> dicerd.v1.GetResourcesResponse
-	113, // 210: dicerd.v1.DaemonService.GetEvents:output_type -> dicerd.v1.GetEventsResponse
-	159, // [159:211] is the sub-list for method output_type
-	107, // [107:159] is the sub-list for method input_type
-	107, // [107:107] is the sub-list for extension type_name
-	107, // [107:107] is the sub-list for extension extendee
-	0,   // [0:107] is the sub-list for field type_name
+	91,  // 86: dicerd.v1.ImportKernelRequest.start:type_name -> dicerd.v1.ImportKernelStart
+	90,  // 87: dicerd.v1.ListKernelsResponse.kernels:type_name -> dicerd.v1.Kernel
+	127, // 88: dicerd.v1.Token.create_time:type_name -> google.protobuf.Timestamp
+	127, // 89: dicerd.v1.Token.update_time:type_name -> google.protobuf.Timestamp
+	127, // 90: dicerd.v1.Token.last_use_time:type_name -> google.protobuf.Timestamp
+	97,  // 91: dicerd.v1.IssuedToken.token:type_name -> dicerd.v1.Token
+	97,  // 92: dicerd.v1.ListTokensResponse.tokens:type_name -> dicerd.v1.Token
+	114, // 93: dicerd.v1.GetHostInfoResponse.hypervisors:type_name -> dicerd.v1.HypervisorInfo
+	0,   // 94: dicerd.v1.CheckHostRequest.test_instance_hypervisor:type_name -> dicerd.v1.HypervisorType
+	126, // 95: dicerd.v1.CheckHostRequest.test_instance_timeout:type_name -> google.protobuf.Duration
+	15,  // 96: dicerd.v1.HostCheckResult.group:type_name -> dicerd.v1.HostCheckGroup
+	16,  // 97: dicerd.v1.HostCheckResult.status:type_name -> dicerd.v1.HostCheckStatus
+	111, // 98: dicerd.v1.GetResourcesResponse.cpu:type_name -> dicerd.v1.ResourceCapacity
+	111, // 99: dicerd.v1.GetResourcesResponse.memory:type_name -> dicerd.v1.ResourceCapacity
+	112, // 100: dicerd.v1.GetResourcesResponse.disk:type_name -> dicerd.v1.DiskUsage
+	113, // 101: dicerd.v1.GetResourcesResponse.instances:type_name -> dicerd.v1.InstanceResources
+	1,   // 102: dicerd.v1.InstanceResources.state:type_name -> dicerd.v1.InstanceState
+	0,   // 103: dicerd.v1.HypervisorInfo.type:type_name -> dicerd.v1.HypervisorType
+	127, // 104: dicerd.v1.Event.time:type_name -> google.protobuf.Timestamp
+	10,  // 105: dicerd.v1.Event.kind:type_name -> dicerd.v1.EventKind
+	11,  // 106: dicerd.v1.Event.action:type_name -> dicerd.v1.EventAction
+	125, // 107: dicerd.v1.Event.attributes:type_name -> dicerd.v1.Event.AttributesEntry
+	10,  // 108: dicerd.v1.GetEventsRequest.kind:type_name -> dicerd.v1.EventKind
+	127, // 109: dicerd.v1.GetEventsRequest.since:type_name -> google.protobuf.Timestamp
+	115, // 110: dicerd.v1.GetEventsResponse.events:type_name -> dicerd.v1.Event
+	26,  // 111: dicerd.v1.DaemonService.CreateInstance:input_type -> dicerd.v1.CreateInstanceRequest
+	27,  // 112: dicerd.v1.DaemonService.UpdateInstance:input_type -> dicerd.v1.UpdateInstanceRequest
+	35,  // 113: dicerd.v1.DaemonService.RenameInstance:input_type -> dicerd.v1.RenameInstanceRequest
+	28,  // 114: dicerd.v1.DaemonService.StartInstance:input_type -> dicerd.v1.StartInstanceRequest
+	30,  // 115: dicerd.v1.DaemonService.StopInstance:input_type -> dicerd.v1.StopInstanceRequest
+	31,  // 116: dicerd.v1.DaemonService.PauseInstance:input_type -> dicerd.v1.PauseInstanceRequest
+	32,  // 117: dicerd.v1.DaemonService.ResumeInstance:input_type -> dicerd.v1.ResumeInstanceRequest
+	33,  // 118: dicerd.v1.DaemonService.StandbyInstance:input_type -> dicerd.v1.StandbyInstanceRequest
+	34,  // 119: dicerd.v1.DaemonService.ForkInstance:input_type -> dicerd.v1.ForkInstanceRequest
+	29,  // 120: dicerd.v1.DaemonService.ResizeInstance:input_type -> dicerd.v1.ResizeInstanceRequest
+	36,  // 121: dicerd.v1.DaemonService.DeleteInstance:input_type -> dicerd.v1.DeleteInstanceRequest
+	40,  // 122: dicerd.v1.DaemonService.ListInstances:input_type -> dicerd.v1.ListInstancesRequest
+	37,  // 123: dicerd.v1.DaemonService.GetInstance:input_type -> dicerd.v1.GetInstanceRequest
+	38,  // 124: dicerd.v1.DaemonService.WaitInstance:input_type -> dicerd.v1.WaitInstanceRequest
+	50,  // 125: dicerd.v1.DaemonService.GetInstanceLogs:input_type -> dicerd.v1.GetInstanceLogsRequest
+	52,  // 126: dicerd.v1.DaemonService.GetInstanceStats:input_type -> dicerd.v1.GetInstanceStatsRequest
+	55,  // 127: dicerd.v1.DaemonService.ListInstanceProcesses:input_type -> dicerd.v1.ListInstanceProcessesRequest
+	59,  // 128: dicerd.v1.DaemonService.CreateSnapshot:input_type -> dicerd.v1.CreateSnapshotRequest
+	60,  // 129: dicerd.v1.DaemonService.ListSnapshots:input_type -> dicerd.v1.ListSnapshotsRequest
+	62,  // 130: dicerd.v1.DaemonService.GetSnapshot:input_type -> dicerd.v1.GetSnapshotRequest
+	63,  // 131: dicerd.v1.DaemonService.DeleteSnapshot:input_type -> dicerd.v1.DeleteSnapshotRequest
+	64,  // 132: dicerd.v1.DaemonService.RestoreSnapshot:input_type -> dicerd.v1.RestoreSnapshotRequest
+	65,  // 133: dicerd.v1.DaemonService.ForkSnapshot:input_type -> dicerd.v1.ForkSnapshotRequest
+	44,  // 134: dicerd.v1.DaemonService.ExecInstance:input_type -> dicerd.v1.ExecInstanceRequest
+	47,  // 135: dicerd.v1.DaemonService.CopyToInstance:input_type -> dicerd.v1.CopyToInstanceRequest
+	48,  // 136: dicerd.v1.DaemonService.CopyFromInstance:input_type -> dicerd.v1.CopyFromInstanceRequest
+	68,  // 137: dicerd.v1.DaemonService.CreateNetwork:input_type -> dicerd.v1.CreateNetworkRequest
+	69,  // 138: dicerd.v1.DaemonService.ListNetworks:input_type -> dicerd.v1.ListNetworksRequest
+	71,  // 139: dicerd.v1.DaemonService.GetNetwork:input_type -> dicerd.v1.GetNetworkRequest
+	72,  // 140: dicerd.v1.DaemonService.DeleteNetwork:input_type -> dicerd.v1.DeleteNetworkRequest
+	73,  // 141: dicerd.v1.DaemonService.ListNetworkAllocations:input_type -> dicerd.v1.ListNetworkAllocationsRequest
+	76,  // 142: dicerd.v1.DaemonService.CreateVolume:input_type -> dicerd.v1.CreateVolumeRequest
+	77,  // 143: dicerd.v1.DaemonService.ListVolumes:input_type -> dicerd.v1.ListVolumesRequest
+	79,  // 144: dicerd.v1.DaemonService.GetVolume:input_type -> dicerd.v1.GetVolumeRequest
+	80,  // 145: dicerd.v1.DaemonService.DeleteVolume:input_type -> dicerd.v1.DeleteVolumeRequest
+	82,  // 146: dicerd.v1.DaemonService.PullImage:input_type -> dicerd.v1.PullImageRequest
+	84,  // 147: dicerd.v1.DaemonService.ListImages:input_type -> dicerd.v1.ListImagesRequest
+	86,  // 148: dicerd.v1.DaemonService.GetImage:input_type -> dicerd.v1.GetImageRequest
+	87,  // 149: dicerd.v1.DaemonService.DeleteImage:input_type -> dicerd.v1.DeleteImageRequest
+	88,  // 150: dicerd.v1.DaemonService.PruneImages:input_type -> dicerd.v1.PruneImagesRequest
+	92,  // 151: dicerd.v1.DaemonService.ImportKernel:input_type -> dicerd.v1.ImportKernelRequest
+	93,  // 152: dicerd.v1.DaemonService.ListKernels:input_type -> dicerd.v1.ListKernelsRequest
+	95,  // 153: dicerd.v1.DaemonService.GetKernel:input_type -> dicerd.v1.GetKernelRequest
+	96,  // 154: dicerd.v1.DaemonService.DeleteKernel:input_type -> dicerd.v1.DeleteKernelRequest
+	99,  // 155: dicerd.v1.DaemonService.CreateToken:input_type -> dicerd.v1.CreateTokenRequest
+	100, // 156: dicerd.v1.DaemonService.ListTokens:input_type -> dicerd.v1.ListTokensRequest
+	102, // 157: dicerd.v1.DaemonService.GetToken:input_type -> dicerd.v1.GetTokenRequest
+	103, // 158: dicerd.v1.DaemonService.RotateToken:input_type -> dicerd.v1.RotateTokenRequest
+	104, // 159: dicerd.v1.DaemonService.DeleteToken:input_type -> dicerd.v1.DeleteTokenRequest
+	105, // 160: dicerd.v1.DaemonService.GetHostInfo:input_type -> dicerd.v1.GetHostInfoRequest
+	109, // 161: dicerd.v1.DaemonService.GetResources:input_type -> dicerd.v1.GetResourcesRequest
+	107, // 162: dicerd.v1.DaemonService.CheckHost:input_type -> dicerd.v1.CheckHostRequest
+	116, // 163: dicerd.v1.DaemonService.GetEvents:input_type -> dicerd.v1.GetEventsRequest
+	17,  // 164: dicerd.v1.DaemonService.CreateInstance:output_type -> dicerd.v1.Instance
+	17,  // 165: dicerd.v1.DaemonService.UpdateInstance:output_type -> dicerd.v1.Instance
+	17,  // 166: dicerd.v1.DaemonService.RenameInstance:output_type -> dicerd.v1.Instance
+	17,  // 167: dicerd.v1.DaemonService.StartInstance:output_type -> dicerd.v1.Instance
+	17,  // 168: dicerd.v1.DaemonService.StopInstance:output_type -> dicerd.v1.Instance
+	17,  // 169: dicerd.v1.DaemonService.PauseInstance:output_type -> dicerd.v1.Instance
+	17,  // 170: dicerd.v1.DaemonService.ResumeInstance:output_type -> dicerd.v1.Instance
+	17,  // 171: dicerd.v1.DaemonService.StandbyInstance:output_type -> dicerd.v1.Instance
+	17,  // 172: dicerd.v1.DaemonService.ForkInstance:output_type -> dicerd.v1.Instance
+	17,  // 173: dicerd.v1.DaemonService.ResizeInstance:output_type -> dicerd.v1.Instance
+	128, // 174: dicerd.v1.DaemonService.DeleteInstance:output_type -> google.protobuf.Empty
+	41,  // 175: dicerd.v1.DaemonService.ListInstances:output_type -> dicerd.v1.ListInstancesResponse
+	17,  // 176: dicerd.v1.DaemonService.GetInstance:output_type -> dicerd.v1.Instance
+	39,  // 177: dicerd.v1.DaemonService.WaitInstance:output_type -> dicerd.v1.WaitInstanceResponse
+	51,  // 178: dicerd.v1.DaemonService.GetInstanceLogs:output_type -> dicerd.v1.InstanceLogChunk
+	53,  // 179: dicerd.v1.DaemonService.GetInstanceStats:output_type -> dicerd.v1.GetInstanceStatsResponse
+	56,  // 180: dicerd.v1.DaemonService.ListInstanceProcesses:output_type -> dicerd.v1.ListInstanceProcessesResponse
+	58,  // 181: dicerd.v1.DaemonService.CreateSnapshot:output_type -> dicerd.v1.Snapshot
+	61,  // 182: dicerd.v1.DaemonService.ListSnapshots:output_type -> dicerd.v1.ListSnapshotsResponse
+	58,  // 183: dicerd.v1.DaemonService.GetSnapshot:output_type -> dicerd.v1.Snapshot
+	128, // 184: dicerd.v1.DaemonService.DeleteSnapshot:output_type -> google.protobuf.Empty
+	17,  // 185: dicerd.v1.DaemonService.RestoreSnapshot:output_type -> dicerd.v1.Instance
+	17,  // 186: dicerd.v1.DaemonService.ForkSnapshot:output_type -> dicerd.v1.Instance
+	45,  // 187: dicerd.v1.DaemonService.ExecInstance:output_type -> dicerd.v1.ExecInstanceResponse
+	128, // 188: dicerd.v1.DaemonService.CopyToInstance:output_type -> google.protobuf.Empty
+	49,  // 189: dicerd.v1.DaemonService.CopyFromInstance:output_type -> dicerd.v1.CopyFromInstanceResponse
+	66,  // 190: dicerd.v1.DaemonService.CreateNetwork:output_type -> dicerd.v1.Network
+	70,  // 191: dicerd.v1.DaemonService.ListNetworks:output_type -> dicerd.v1.ListNetworksResponse
+	66,  // 192: dicerd.v1.DaemonService.GetNetwork:output_type -> dicerd.v1.Network
+	128, // 193: dicerd.v1.DaemonService.DeleteNetwork:output_type -> google.protobuf.Empty
+	74,  // 194: dicerd.v1.DaemonService.ListNetworkAllocations:output_type -> dicerd.v1.ListNetworkAllocationsResponse
+	75,  // 195: dicerd.v1.DaemonService.CreateVolume:output_type -> dicerd.v1.Volume
+	78,  // 196: dicerd.v1.DaemonService.ListVolumes:output_type -> dicerd.v1.ListVolumesResponse
+	75,  // 197: dicerd.v1.DaemonService.GetVolume:output_type -> dicerd.v1.Volume
+	128, // 198: dicerd.v1.DaemonService.DeleteVolume:output_type -> google.protobuf.Empty
+	83,  // 199: dicerd.v1.DaemonService.PullImage:output_type -> dicerd.v1.PullImageProgress
+	85,  // 200: dicerd.v1.DaemonService.ListImages:output_type -> dicerd.v1.ListImagesResponse
+	81,  // 201: dicerd.v1.DaemonService.GetImage:output_type -> dicerd.v1.Image
+	128, // 202: dicerd.v1.DaemonService.DeleteImage:output_type -> google.protobuf.Empty
+	89,  // 203: dicerd.v1.DaemonService.PruneImages:output_type -> dicerd.v1.PruneImagesResponse
+	90,  // 204: dicerd.v1.DaemonService.ImportKernel:output_type -> dicerd.v1.Kernel
+	94,  // 205: dicerd.v1.DaemonService.ListKernels:output_type -> dicerd.v1.ListKernelsResponse
+	90,  // 206: dicerd.v1.DaemonService.GetKernel:output_type -> dicerd.v1.Kernel
+	128, // 207: dicerd.v1.DaemonService.DeleteKernel:output_type -> google.protobuf.Empty
+	98,  // 208: dicerd.v1.DaemonService.CreateToken:output_type -> dicerd.v1.IssuedToken
+	101, // 209: dicerd.v1.DaemonService.ListTokens:output_type -> dicerd.v1.ListTokensResponse
+	97,  // 210: dicerd.v1.DaemonService.GetToken:output_type -> dicerd.v1.Token
+	98,  // 211: dicerd.v1.DaemonService.RotateToken:output_type -> dicerd.v1.IssuedToken
+	128, // 212: dicerd.v1.DaemonService.DeleteToken:output_type -> google.protobuf.Empty
+	106, // 213: dicerd.v1.DaemonService.GetHostInfo:output_type -> dicerd.v1.GetHostInfoResponse
+	110, // 214: dicerd.v1.DaemonService.GetResources:output_type -> dicerd.v1.GetResourcesResponse
+	108, // 215: dicerd.v1.DaemonService.CheckHost:output_type -> dicerd.v1.HostCheckResult
+	117, // 216: dicerd.v1.DaemonService.GetEvents:output_type -> dicerd.v1.GetEventsResponse
+	164, // [164:217] is the sub-list for method output_type
+	111, // [111:164] is the sub-list for method input_type
+	111, // [111:111] is the sub-list for extension type_name
+	111, // [111:111] is the sub-list for extension extendee
+	0,   // [0:111] is the sub-list for field type_name
 }
 
 func init() { file_dicerd_v1_dicerd_proto_init() }
@@ -9171,8 +9499,8 @@ func file_dicerd_v1_dicerd_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_dicerd_v1_dicerd_proto_rawDesc), len(file_dicerd_v1_dicerd_proto_rawDesc)),
-			NumEnums:      15,
-			NumMessages:   107,
+			NumEnums:      17,
+			NumMessages:   109,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

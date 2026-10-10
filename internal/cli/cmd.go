@@ -134,6 +134,7 @@ func NewCommand() *cobra.Command {
 	)
 	inGroup(groupSystem, cmd,
 		newInfoCommand(),
+		newDoctorCommand(),
 		newEventsCommand(),
 		newVersionCommand(),
 	)

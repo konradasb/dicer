@@ -237,6 +237,14 @@ service DaemonService {
   // how much is committed to them, and how full the data directory's disk
   // is.
   rpc GetResources(GetResourcesRequest) returns (GetResourcesResponse);
+  // CheckHost checks that the host can run instances and reach them: KVM,
+  // IPv4 forwarding, the firewall, the tools the daemon runs, its uplink and
+  // its free disk. Those checks change nothing. With test_instance, it then
+  // boots a small test instance, has it run a command and reach the
+  // internet, and deletes it, which needs instances:write. It sends each
+  // result as it is found: the host's first, then the test instance's, then
+  // whether it reached the internet.
+  rpc CheckHost(CheckHostRequest) returns (stream HostCheckResult);
 
   // GetEvents streams what has happened to the resources on this host: the
   // history kept, oldest first, in batches, then, with follow, each new
@@ -1394,6 +1402,62 @@ message GetHostInfoResponse {
   string fingerprint = 8;
   // The name of the token this call was made with. Empty over the socket.
   string token = 9;
+}
+
+message CheckHostRequest {
+  // Boot a test instance after checking the host. It creates and deletes an
+  // instance, and pulls its image if the host does not have it.
+  bool test_instance = 1;
+  // The test instance's image: one with sh and wget, such as busybox. Empty
+  // is docker.io/library/busybox:1.37.
+  string test_instance_image = 2;
+  // The hypervisor the test instance boots on. Unset is cloud-hypervisor.
+  HypervisorType test_instance_hypervisor = 3;
+  // The version of the hypervisor the test instance boots on. Empty is the
+  // hypervisor's default version.
+  string test_instance_hypervisor_version = 4;
+  // How long a test instance may take to run its command. Unset is 2 minutes.
+  google.protobuf.Duration test_instance_timeout = 5;
+  // Keep a test instance that failed, to look into, rather than delete it.
+  bool keep_failed_test_instance = 6;
+}
+
+// HostCheckResult is what one check of the host found.
+message HostCheckResult {
+  // Which part of the checks the result belongs to.
+  HostCheckGroup group = 1;
+  // What was checked. For the host it is kvm, ip_forwarding, firewall,
+  // tools, uplink or disk. For the test instance it is its hypervisor's
+  // type, or internet.
+  string name = 2;
+  // What the check found.
+  HostCheckStatus status = 3;
+  // What was found, in a line, for a person.
+  string detail = 4;
+  // What to do about it. Empty for a check that passed.
+  string hint = 5;
+  // A failed test instance's last console lines, which say why it failed.
+  repeated string console = 6;
+}
+
+// HostCheckGroup is which part of CheckHost's checks a result belongs to.
+enum HostCheckGroup {
+  HOST_CHECK_GROUP_UNSPECIFIED = 0;
+  // The checks of the host itself.
+  HOST_CHECK_GROUP_HOST = 1;
+  // What the test instance showed, and whether it reached the internet.
+  HOST_CHECK_GROUP_INSTANCES = 2;
+}
+
+// HostCheckStatus is what a HostCheckResult found.
+enum HostCheckStatus {
+  HOST_CHECK_STATUS_UNSPECIFIED = 0;
+  // All is well.
+  HOST_CHECK_STATUS_OK = 1;
+  // Something may go wrong, such as little free disk.
+  HOST_CHECK_STATUS_WARNING = 2;
+  // Instances cannot boot, or cannot be reached, until it is fixed.
+  HOST_CHECK_STATUS_FAILED = 3;
 }
 
 message GetResourcesRequest {}

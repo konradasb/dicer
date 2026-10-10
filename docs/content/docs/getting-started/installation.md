@@ -248,12 +248,41 @@ The rest of these docs assume you are in the group. If you are not, run each
 $ systemctl status dicerd
 $ dicer version
 $ dicer info
+$ dicer doctor
 ```
 
 The service should be `active (running)`. `dicer version` shows the
 command line's version and the daemon's. `dicer info` shows the daemon, the
 hypervisors it carries, its default kernel and network, and how much of the
 host's CPU, memory and disk it may give instances.
+
+`dicer doctor` checks that the host can run instances: KVM, IPv4
+forwarding, the firewall, the tools the daemon needs, its uplink and its
+free disk. It then boots a small test instance, on cloud-hypervisor unless
+`--hypervisor-type` names another, and has it run a command and reach the
+internet:
+
+```console
+$ dicer doctor
+compute-1 (dicer 0.4.0)
+
+Host
+  ✓ KVM                              /dev/kvm is usable
+  ✓ IP forwarding                    IPv4 forwarding is on
+  ✓ Firewall                         iptables (nf_tables) works
+  ✓ Tools                            mkfs.erofs and mke2fs are installed
+  ✓ Uplink                           eth0, by the default route
+  ✓ Disk                             212 GiB free in /var/lib/dicer
+
+Instances
+  ✓ Boot (cloud-hypervisor v53.0.0)  booted, ran a command and stopped in 1.1s
+  ✓ Internet access                  a test instance reached the internet
+
+No problems found.
+```
+
+Each problem comes with what to do about it, and `dicer doctor` then exits
+with an error.
 
 To manage the host from another machine, see
 [Remote access](../../guides/remote-access).
